@@ -1,0 +1,19 @@
+{
+  "name": "karaokeproject",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,worker,frontend -c cyan,green,yellow \"./scripts/run-python.sh -m uvicorn backend.api.main:app --reload --host 127.0.0.1 --port 8000\" \"./scripts/run-python.sh -m backend.workers.runner\" \"npm run dev --workspace frontend -- --host 127.0.0.1 --port 5173\"",
+    "dev:api": "./scripts/run-python.sh -m uvicorn backend.api.main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:worker": "./scripts/run-python.sh -m backend.workers.runner",
+    "dev:frontend": "npm run dev --workspace frontend -- --host 127.0.0.1 --port 5173",
+    "build": "npm run build --workspace frontend",
+    "lint:frontend": "npm run lint --workspace frontend",
+    "typecheck:frontend": "npm run typecheck --workspace frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

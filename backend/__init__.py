@@ -1,0 +1,1 @@
+"""Karaoke project backend package."""

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "karaokeproject"
+version = "0.1.0"
+description = "Local-first karaoke generator web app"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.116,<1.0",
+  "pydantic-settings>=2.10,<3.0",
+  "python-multipart>=0.0.20,<1.0",
+  "sqlalchemy>=2.0,<3.0",
+  "uvicorn[standard]>=0.35,<1.0",
+]
+
+[project.optional-dependencies]
+processing = [
+  "audio-separator[cpu]>=0.35,<1.0",
+]
+lyrics = [
+  "openai-whisper>=20250625",
+]
+
+[tool.setuptools.packages.find]
+include = ["backend*"]
