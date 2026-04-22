@@ -17,6 +17,7 @@ class ProcessingProfileResponse(BaseModel):
     model_filename: str
     quality_tier: int
     speed_tier: int
+    stems: list[str] = []
 
 
 class RunProcessingConfigRequest(BaseModel):

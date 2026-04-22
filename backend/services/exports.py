@@ -9,9 +9,15 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from backend.core.config import RuntimeSettings
+from backend.core.stems import (
+    export_stem_kind,
+    parse_export_stem_kind,
+    stem_display_label,
+    stem_display_order,
+    stem_name_from_kind,
+)
 from backend.db.models import Run, RunStatus, Track
 from backend.schemas.exports import (
-    ExportArtifactKind,
     ExportBundleRequest,
     ExportBundleResponse,
     ExportBundleSkip,
@@ -21,6 +27,9 @@ from backend.schemas.exports import (
     ExportPlanResponse,
     ExportPlanTrack,
     ExportRunSelector,
+    ExportStemOption,
+    ExportStemsRequest,
+    ExportStemsResponse,
 )
 from backend.services.mixing import MIX_MP3_KIND, MIX_WAV_KIND, ensure_mix_render
 from backend.services.settings import get_or_create_settings
@@ -28,21 +37,17 @@ from backend.services.storage import apply_storage_retention, resolve_storage_pa
 from backend.services.tracks import get_track, mixable_artifacts
 
 
-# Maps request artifact kind to the RunArtifact.kind stored in the DB.
-_RUN_ARTIFACT_KIND = {
-    ExportArtifactKind.instrumental_wav: "export-audio-wav",
-    ExportArtifactKind.instrumental_mp3: "export-audio-mp3",
-    ExportArtifactKind.vocals_wav: "export-vocals",
-    ExportArtifactKind.mix_wav: MIX_WAV_KIND,
-    ExportArtifactKind.mix_mp3: MIX_MP3_KIND,
-    ExportArtifactKind.metadata: "metadata",
+_STATIC_RUN_ARTIFACT_KIND = {
+    "mix-wav": MIX_WAV_KIND,
+    "mix-mp3": MIX_MP3_KIND,
+    "metadata": "metadata",
 }
 
-_MIX_KINDS = {ExportArtifactKind.mix_wav, ExportArtifactKind.mix_mp3}
+_MIX_KINDS = frozenset({"mix-wav", "mix-mp3"})
 
 
-def _mix_format(kind: ExportArtifactKind) -> str:
-    return "wav" if kind == ExportArtifactKind.mix_wav else "mp3"
+def _mix_format(kind: str) -> str:
+    return "wav" if kind == "mix-wav" else "mp3"
 
 
 @dataclass(frozen=True)
@@ -89,21 +94,25 @@ def _select_run(
 
 @dataclass(frozen=True)
 class _ResolvedArtifact:
-    kind: ExportArtifactKind
+    kind: str
     file: _ResolvedFile | None
     present: bool
     size_bytes: int | None
     missing_reason: str | None
 
 
+def _stem_arcname(stem_name: str, fmt: str) -> str:
+    return f"{stem_name}.{fmt}"
+
+
 def _resolve_artifact(
     track: Track,
     run: Run,
-    kind: ExportArtifactKind,
+    kind: str,
     *,
-    mix_errors: dict[ExportArtifactKind, str] | None = None,
+    mix_errors: dict[str, str] | None = None,
 ) -> _ResolvedArtifact:
-    if kind == ExportArtifactKind.source:
+    if kind == "source":
         source_path = Path(track.source_path)
         if not source_path.is_file():
             return _ResolvedArtifact(kind, None, False, None, "source file is not on disk")
@@ -122,7 +131,15 @@ def _resolve_artifact(
             render_error=(mix_errors or {}).get(kind),
         )
 
-    artifact_kind = _RUN_ARTIFACT_KIND[kind]
+    stem_parsed = parse_export_stem_kind(kind)
+    if stem_parsed is not None:
+        fmt, stem_name = stem_parsed
+        return _resolve_stem_artifact(run, kind, stem_name=stem_name, fmt=fmt)
+
+    artifact_kind = _STATIC_RUN_ARTIFACT_KIND.get(kind)
+    if artifact_kind is None:
+        return _ResolvedArtifact(kind, None, False, None, f"unknown artifact kind: {kind}")
+
     artifact = next((a for a in run.artifacts if a.kind == artifact_kind), None)
     if artifact is None:
         return _ResolvedArtifact(kind, None, False, None, "not produced by this run")
@@ -133,7 +150,30 @@ def _resolve_artifact(
 
     return _ResolvedArtifact(
         kind,
-        _ResolvedFile(arcname=f"{kind.value}{artifact_path.suffix}", path=artifact_path),
+        _ResolvedFile(arcname=f"{kind}{artifact_path.suffix}", path=artifact_path),
+        True,
+        artifact_path.stat().st_size,
+        None,
+    )
+
+
+def _resolve_stem_artifact(
+    run: Run,
+    kind: str,
+    *,
+    stem_name: str,
+    fmt: str,
+) -> _ResolvedArtifact:
+    target_kind = export_stem_kind(stem_name, fmt=fmt)
+    artifact = next((a for a in run.artifacts if a.kind == target_kind), None)
+    if artifact is None:
+        return _ResolvedArtifact(kind, None, False, None, f"run has no {stem_name} stem")
+    artifact_path = Path(artifact.path)
+    if not artifact_path.is_file():
+        return _ResolvedArtifact(kind, None, False, None, "file missing on disk")
+    return _ResolvedArtifact(
+        kind,
+        _ResolvedFile(arcname=_stem_arcname(stem_name, fmt), path=artifact_path),
         True,
         artifact_path.stat().st_size,
         None,
@@ -142,7 +182,7 @@ def _resolve_artifact(
 
 def _resolve_mix_artifact(
     run: Run,
-    kind: ExportArtifactKind,
+    kind: str,
     *,
     render_error: str | None = None,
 ) -> _ResolvedArtifact:
@@ -158,7 +198,7 @@ def _resolve_mix_artifact(
     if render_error:
         return _ResolvedArtifact(kind, None, False, None, f"mix render failed: {render_error}")
 
-    artifact_kind = _RUN_ARTIFACT_KIND[kind]
+    artifact_kind = _STATIC_RUN_ARTIFACT_KIND[kind]
     existing = next((a for a in run.artifacts if a.kind == artifact_kind), None)
     existing_path = Path(existing.path) if existing is not None else None
     file_ready = existing_path is not None and existing_path.is_file()
@@ -171,7 +211,7 @@ def _resolve_mix_artifact(
     assert existing_path is not None
     return _ResolvedArtifact(
         kind,
-        _ResolvedFile(arcname=f"{kind.value}{existing_path.suffix}", path=existing_path),
+        _ResolvedFile(arcname=f"{kind}{existing_path.suffix}", path=existing_path),
         True,
         existing_path.stat().st_size,
         None,
@@ -182,15 +222,10 @@ def _render_requested_mixes(
     session: Session,
     runtime_settings: RuntimeSettings,
     run: Run,
-    requested: list[ExportArtifactKind],
-) -> dict[ExportArtifactKind, str]:
-    """Render any requested mix artifacts and collect per-kind failures.
-
-    Returns a map of mix kind to error message; absent kinds rendered
-    successfully. Callers thread this into `_resolve_artifact` so the user
-    sees a real reason rather than a generic "missing" when ffmpeg fails.
-    """
-    errors: dict[ExportArtifactKind, str] = {}
+    requested: list[str],
+) -> dict[str, str]:
+    """Render any requested mix artifacts and collect per-kind failures."""
+    errors: dict[str, str] = {}
     for kind in requested:
         if kind not in _MIX_KINDS:
             continue
@@ -204,9 +239,9 @@ def _render_requested_mixes(
 def _resolve_track_files(
     track: Track,
     run: Run,
-    requested: list[ExportArtifactKind],
+    requested: list[str],
     *,
-    mix_errors: dict[ExportArtifactKind, str] | None = None,
+    mix_errors: dict[str, str] | None = None,
 ) -> tuple[list[_ResolvedFile], list[str]]:
     """Return (files_to_include, missing_artifact_reasons) for one track."""
     files: list[_ResolvedFile] = []
@@ -338,11 +373,7 @@ def plan_export_bundle(
     session: Session,
     payload: ExportPlanRequest,
 ) -> ExportPlanResponse:
-    """Return a read-only manifest of what an export would produce.
-
-    Surfaces per-track / per-artifact presence so the user can see what they
-    will actually get before committing to the zip.
-    """
+    """Return a read-only manifest of what an export would produce."""
     tracks: list[ExportPlanTrack] = []
     total_bytes = 0
     included = 0
@@ -441,6 +472,45 @@ def plan_export_bundle(
         skipped_track_count=skipped,
         tracks_using_keeper=using_keeper,
         tracks_using_latest_fallback=using_latest_fallback,
+    )
+
+
+def list_export_stems(
+    session: Session,
+    payload: ExportStemsRequest,
+) -> ExportStemsResponse:
+    """Union of stem names available across the selected tracks' resolved runs.
+
+    Powers the export modal's per-stem checkbox list — the UI only offers
+    stems that actually exist, so it stays honest with whatever the models
+    actually produced.
+    """
+    counts: dict[str, int] = {}
+    for track_id in payload.track_ids:
+        track = get_track(session, track_id)
+        if track is None:
+            continue
+        run, _fell_back = _select_run(track, payload.run_selector)
+        if run is None:
+            continue
+        seen_in_run: set[str] = set()
+        for artifact in run.artifacts:
+            stem_name = stem_name_from_kind(artifact.kind)
+            if stem_name is None or stem_name in seen_in_run:
+                continue
+            seen_in_run.add(stem_name)
+            counts[stem_name] = counts.get(stem_name, 0) + 1
+
+    ordered = sorted(counts.items(), key=lambda pair: (stem_display_order(pair[0]), pair[0]))
+    return ExportStemsResponse(
+        stems=[
+            ExportStemOption(
+                name=name,
+                label=stem_display_label(name),
+                track_count=count,
+            )
+            for name, count in ordered
+        ]
     )
 
 

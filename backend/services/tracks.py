@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.core.config import RuntimeSettings
 from backend.core.constants import CUSTOM_PRESET_KEY
+from backend.core.stems import is_stem_kind
 from backend.db.models import (
     IN_PROGRESS_RUN_STATUSES,
     TERMINAL_RUN_STATUSES,
@@ -147,11 +148,8 @@ def serialize_run_summary(run: Run) -> RunSummaryResponse:
     )
 
 
-MIXABLE_ARTIFACT_KINDS: frozenset[str] = frozenset({"instrumental", "vocals", "extra-stem"})
-
-
 def mixable_artifacts(run: Run) -> list[RunArtifact]:
-    return [artifact for artifact in run.artifacts if artifact.kind in MIXABLE_ARTIFACT_KINDS]
+    return [artifact for artifact in run.artifacts if is_stem_kind(artifact.kind)]
 
 
 def _is_default_stem(entry: dict[str, Any] | RunMixStemEntry) -> bool:

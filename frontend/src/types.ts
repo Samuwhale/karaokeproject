@@ -8,6 +8,7 @@ export type ProcessingProfile = {
   model_filename: string
   quality_tier: number
   speed_tier: number
+  stems: string[]
 }
 
 export type CachedModel = {
@@ -148,13 +149,6 @@ export type RunMixState = {
 
 export const MIX_GAIN_DB_MIN = -24
 export const MIX_GAIN_DB_MAX = 12
-
-export const MIXABLE_ARTIFACT_KINDS = ['instrumental', 'vocals', 'extra-stem'] as const
-export type MixableArtifactKind = (typeof MIXABLE_ARTIFACT_KINDS)[number]
-
-export function isMixableArtifactKind(kind: string): kind is MixableArtifactKind {
-  return (MIXABLE_ARTIFACT_KINDS as readonly string[]).includes(kind)
-}
 
 export type RunDetail = RunSummary & {
   metadata_json: Record<string, unknown>
@@ -345,14 +339,24 @@ export type NonKeeperCleanupResponse = {
 
 export type ExportRunSelector = 'keeper' | 'latest'
 export type ExportOutputMode = 'single-bundle' | 'zip-per-track'
-export type ExportArtifactKind =
-  | 'instrumental-wav'
-  | 'instrumental-mp3'
-  | 'vocals-wav'
-  | 'mix-wav'
-  | 'mix-mp3'
-  | 'source'
-  | 'metadata'
+export type StaticExportArtifactKind = 'source' | 'metadata' | 'mix-wav' | 'mix-mp3'
+export type StemExportArtifactKind = `stem-wav:${string}` | `stem-mp3:${string}`
+export type ExportArtifactKind = StaticExportArtifactKind | StemExportArtifactKind
+
+export type ExportStemOption = {
+  name: string
+  label: string
+  track_count: number
+}
+
+export type ExportStemsInput = {
+  track_ids: string[]
+  run_selector: ExportRunSelector
+}
+
+export type ExportStemsResponse = {
+  stems: ExportStemOption[]
+}
 
 export type ExportBundleInput = {
   track_ids: string[]

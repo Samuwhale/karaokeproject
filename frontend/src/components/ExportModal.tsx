@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { createExportBundle, planExportBundle } from '../api'
+import { createExportBundle, listExportStems, planExportBundle } from '../api'
 import type {
   ExportArtifactKind,
   ExportBundleResponse,
@@ -8,9 +8,11 @@ import type {
   ExportPlanResponse,
   ExportPlanTrack,
   ExportRunSelector,
+  ExportStemOption,
   RevealFolderInput,
   TrackSummary,
 } from '../types'
+import { exportStemKind, stemLabel } from '../stems'
 import { Spinner } from './feedback/Spinner'
 
 type ExportModalProps = {
@@ -22,19 +24,57 @@ type ExportModalProps = {
   onReveal: (payload: RevealFolderInput) => void | Promise<void>
 }
 
-const ARTIFACT_OPTIONS: { value: ExportArtifactKind; label: string; description: string }[] = [
+type ArtifactOption = {
+  value: ExportArtifactKind
+  label: string
+  description: string
+}
+
+const MIX_OPTIONS: ArtifactOption[] = [
   { value: 'mix-mp3', label: 'Mix MP3', description: 'Final mix with your balance applied' },
   { value: 'mix-wav', label: 'Mix WAV', description: 'Lossless final mix with your balance applied' },
-  { value: 'instrumental-mp3', label: 'Instrumental MP3', description: 'Compressed vocals-removed mix' },
-  { value: 'instrumental-wav', label: 'Instrumental WAV', description: 'Lossless vocals-removed mix' },
-  { value: 'vocals-wav', label: 'Vocals WAV', description: 'Separated lead vocal' },
+]
+
+const EXTRA_OPTIONS: ArtifactOption[] = [
   { value: 'source', label: 'Source audio', description: 'Original imported file' },
   { value: 'metadata', label: 'Metadata JSON', description: 'Run + track metadata' },
 ]
 
-const ARTIFACT_LABELS: Record<ExportArtifactKind, string> = Object.fromEntries(
-  ARTIFACT_OPTIONS.map((option) => [option.value, option.label]),
-) as Record<ExportArtifactKind, string>
+function stemArtifactOptions(stems: ExportStemOption[], totalTracks: number): ArtifactOption[] {
+  return stems.flatMap((stem) => {
+    const coverageSuffix =
+      totalTracks > 0 && stem.track_count < totalTracks
+        ? ` · ${stem.track_count}/${totalTracks} tracks`
+        : ''
+    return [
+      {
+        value: exportStemKind(stem.name, 'mp3') as ExportArtifactKind,
+        label: `${stem.label} MP3`,
+        description: `Separated ${stem.label.toLowerCase()} stem${coverageSuffix}`,
+      },
+      {
+        value: exportStemKind(stem.name, 'wav') as ExportArtifactKind,
+        label: `${stem.label} WAV`,
+        description: `Lossless ${stem.label.toLowerCase()} stem${coverageSuffix}`,
+      },
+    ]
+  })
+}
+
+function artifactLabel(value: ExportArtifactKind, stems: ExportStemOption[]): string {
+  const staticMatch = [...MIX_OPTIONS, ...EXTRA_OPTIONS].find((option) => option.value === value)
+  if (staticMatch) return staticMatch.label
+  const stemMatch = stems.find(
+    (stem) =>
+      value === exportStemKind(stem.name, 'wav') || value === exportStemKind(stem.name, 'mp3'),
+  )
+  if (stemMatch) {
+    return value.startsWith('stem-wav:') ? `${stemMatch.label} WAV` : `${stemMatch.label} MP3`
+  }
+  if (value.startsWith('stem-wav:')) return `${stemLabel(value.slice('stem-wav:'.length))} WAV`
+  if (value.startsWith('stem-mp3:')) return `${stemLabel(value.slice('stem-mp3:'.length))} MP3`
+  return value
+}
 
 function formatBytes(bytes: number) {
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
@@ -57,28 +97,55 @@ export function ExportModal({
       tracks.some((track) => selectedTrackIds.includes(track.id) && track.has_custom_mix),
     [tracks, selectedTrackIds],
   )
+  const [stemOptions, setStemOptions] = useState<ExportStemOption[]>([])
+  const [stemsLoading, setStemsLoading] = useState(false)
   const [artifacts, setArtifacts] = useState<Set<ExportArtifactKind>>(
-    () => new Set([anySelectedHasCustomMix ? 'mix-mp3' : 'instrumental-mp3']),
+    () => new Set(['mix-mp3']),
   )
 
   useEffect(() => {
-    // When the modal opens against a new selection, reset default artifact
-    // choice based on whether anything in the selection has a custom mix.
     if (!open) return
+    if (!selectedTrackIds.length) {
+      setStemOptions([])
+      return
+    }
+    let cancelled = false
+    setStemsLoading(true)
+    listExportStems({ track_ids: selectedTrackIds, run_selector: runSelector })
+      .then((response) => {
+        if (!cancelled) setStemOptions(response.stems)
+      })
+      .catch(() => {
+        if (!cancelled) setStemOptions([])
+      })
+      .finally(() => {
+        if (!cancelled) setStemsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, selectedTrackIds, runSelector])
+
+  useEffect(() => {
+    // When the modal opens against a new selection, reset default artifact
+    // choice. Prefer the custom mix MP3 when someone has already shaped a mix;
+    // otherwise drop to the first available stem (usually instrumental).
+    if (!open) return
+    const fallbackStem = stemOptions[0]
     setArtifacts((current) => {
       if (current.size !== 1) return current
       const [only] = Array.from(current)
-      if (anySelectedHasCustomMix && only === 'instrumental-mp3') {
+      if (anySelectedHasCustomMix && only !== 'mix-mp3') {
         return new Set(['mix-mp3'])
       }
-      if (!anySelectedHasCustomMix && only === 'mix-mp3') {
-        return new Set(['instrumental-mp3'])
+      if (!anySelectedHasCustomMix && only === 'mix-mp3' && fallbackStem) {
+        return new Set<ExportArtifactKind>([
+          exportStemKind(fallbackStem.name, 'mp3') as ExportArtifactKind,
+        ])
       }
       return current
     })
-    // Intentionally only react when the modal opens or the selection's mix
-    // state changes, not on every user edit.
-  }, [open, anySelectedHasCustomMix])
+  }, [open, anySelectedHasCustomMix, stemOptions])
   const [mode, setMode] = useState<ExportOutputMode>('single-bundle')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ExportBundleResponse | null>(null)
@@ -287,21 +354,29 @@ export function ExportModal({
 
               <section className="export-section">
                 <h3>Artifacts to include</h3>
-                <div className="export-artifacts">
-                  {ARTIFACT_OPTIONS.map((option) => (
-                    <label key={option.value} className="export-artifact-row">
-                      <input
-                        type="checkbox"
-                        checked={artifacts.has(option.value)}
-                        onChange={() => toggleArtifact(option.value)}
-                      />
-                      <div>
-                        <strong>{option.label}</strong>
-                        <span>{option.description}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
+                <ArtifactGroup
+                  heading="Mix"
+                  options={MIX_OPTIONS}
+                  selected={artifacts}
+                  onToggle={toggleArtifact}
+                />
+                <ArtifactGroup
+                  heading="Stems"
+                  options={stemArtifactOptions(stemOptions, selectedTracks.length)}
+                  selected={artifacts}
+                  onToggle={toggleArtifact}
+                  empty={
+                    stemsLoading
+                      ? 'Looking up available stems…'
+                      : 'No stems on the selected runs yet.'
+                  }
+                />
+                <ArtifactGroup
+                  heading="Other"
+                  options={EXTRA_OPTIONS}
+                  selected={artifacts}
+                  onToggle={toggleArtifact}
+                />
               </section>
 
               <section className="export-section">
@@ -331,7 +406,11 @@ export function ExportModal({
                     <Spinner /> Checking which artifacts are available…
                   </p>
                 ) : plan ? (
-                  <ExportManifest plan={plan} artifactList={artifactList} />
+                  <ExportManifest
+                    plan={plan}
+                    artifactList={artifactList}
+                    stemOptions={stemOptions}
+                  />
                 ) : (
                   <p className="inline-hint">
                     Pick at least one track and one artifact to see what will be included.
@@ -372,12 +451,53 @@ export function ExportModal({
   )
 }
 
+type ArtifactGroupProps = {
+  heading: string
+  options: ArtifactOption[]
+  selected: Set<ExportArtifactKind>
+  onToggle: (kind: ExportArtifactKind) => void
+  empty?: string
+}
+
+function ArtifactGroup({ heading, options, selected, onToggle, empty }: ArtifactGroupProps) {
+  if (!options.length) {
+    if (!empty) return null
+    return (
+      <div className="export-artifact-group">
+        <h4>{heading}</h4>
+        <p className="inline-hint">{empty}</p>
+      </div>
+    )
+  }
+  return (
+    <div className="export-artifact-group">
+      <h4>{heading}</h4>
+      <div className="export-artifacts">
+        {options.map((option) => (
+          <label key={option.value} className="export-artifact-row">
+            <input
+              type="checkbox"
+              checked={selected.has(option.value)}
+              onChange={() => onToggle(option.value)}
+            />
+            <div>
+              <strong>{option.label}</strong>
+              <span>{option.description}</span>
+            </div>
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 type ExportManifestProps = {
   plan: ExportPlanResponse
   artifactList: ExportArtifactKind[]
+  stemOptions: ExportStemOption[]
 }
 
-function ExportManifest({ plan, artifactList }: ExportManifestProps) {
+function ExportManifest({ plan, artifactList, stemOptions }: ExportManifestProps) {
   if (!plan.tracks.length) {
     return <p className="inline-hint">No tracks selected.</p>
   }
@@ -385,7 +505,12 @@ function ExportManifest({ plan, artifactList }: ExportManifestProps) {
   return (
     <ul className="export-manifest">
       {plan.tracks.map((track) => (
-        <ManifestRow key={track.track_id} track={track} artifactList={artifactList} />
+        <ManifestRow
+          key={track.track_id}
+          track={track}
+          artifactList={artifactList}
+          stemOptions={stemOptions}
+        />
       ))}
     </ul>
   )
@@ -394,9 +519,11 @@ function ExportManifest({ plan, artifactList }: ExportManifestProps) {
 function ManifestRow({
   track,
   artifactList,
+  stemOptions,
 }: {
   track: ExportPlanTrack
   artifactList: ExportArtifactKind[]
+  stemOptions: ExportStemOption[]
 }) {
   const presentMap = new Map(track.artifacts.map((a) => [a.kind, a]))
 
@@ -422,7 +549,7 @@ function ManifestRow({
                 title={match?.missing_reason ?? undefined}
               >
                 <span aria-hidden>{present ? '✓' : '—'}</span>
-                <span>{ARTIFACT_LABELS[kind]}</span>
+                <span>{artifactLabel(kind, stemOptions)}</span>
                 {present && match?.size_bytes != null ? (
                   <span className="export-manifest-size">{formatBytes(match.size_bytes)}</span>
                 ) : null}

@@ -11,7 +11,8 @@ import type {
   RunProcessingConfigInput,
   TrackDetail,
 } from '../types'
-import { CUSTOM_PROFILE_KEY, isMixableArtifactKind } from '../types'
+import { CUSTOM_PROFILE_KEY } from '../types'
+import { compareStemKinds, isStemKind, stemLabel } from '../stems'
 import { ProfileTierBadge } from './ProfileTierBadge'
 import { CompareView } from './CompareView'
 import { ConfirmInline } from './feedback/ConfirmInline'
@@ -94,7 +95,7 @@ function statusLabel(status: string) {
 }
 
 function canPreview(kind: string) {
-  return ['instrumental', 'export-audio-mp3', 'source', 'vocals'].includes(kind)
+  return isStemKind(kind) || kind === 'source' || kind === 'export-mix-mp3'
 }
 
 function resolveSelectedRun(track: TrackDetail, selectedRunId: string | null) {
@@ -113,10 +114,14 @@ function resolveSelectedRun(track: TrackDetail, selectedRunId: string | null) {
 }
 
 function getPreviewArtifacts(run: RunDetail | null) {
-  const artifactOrder = ['instrumental', 'export-audio-mp3', 'source', 'vocals']
-  return [...(run?.artifacts.filter((artifact) => canPreview(artifact.kind)) ?? [])].sort(
-    (left, right) => artifactOrder.indexOf(left.kind) - artifactOrder.indexOf(right.kind),
-  )
+  const previewable = run?.artifacts.filter((artifact) => canPreview(artifact.kind)) ?? []
+  const stems = previewable.filter((artifact) => isStemKind(artifact.kind))
+  const mix = previewable.find((artifact) => artifact.kind === 'export-mix-mp3')
+  const source = previewable.find((artifact) => artifact.kind === 'source')
+  const ordered = [...stems].sort((left, right) => compareStemKinds(left.kind, right.kind))
+  if (mix) ordered.unshift(mix)
+  if (source) ordered.push(source)
+  return ordered
 }
 
 function getPackageArtifact(run: RunDetail | null): RunArtifact | null {
@@ -254,7 +259,7 @@ export function TrackDetailPanel({
   const keeperLabel = resolveKeeperLabel(track)
   const keeperRun = keeperRunId ? track.runs.find((run) => run.id === keeperRunId) ?? null : null
   const keeperHasMixableStems = keeperRun
-    ? keeperRun.artifacts.some((artifact) => isMixableArtifactKind(artifact.kind))
+    ? keeperRun.artifacts.some((artifact) => isStemKind(artifact.kind))
     : false
   const alternativePresets =
     selectedRun && selectedRun.status === 'completed' && !track.keeper_run_id
@@ -445,6 +450,12 @@ export function TrackDetailPanel({
             <div className="profile-meta-lines">
               <span><strong>Best for:</strong> {nextProfile.best_for}</span>
               <span><strong>Tradeoff:</strong> {nextProfile.tradeoff}</span>
+              {nextProfile.stems.length ? (
+                <span>
+                  <strong>Produces:</strong>{' '}
+                  {nextProfile.stems.map(stemLabel).join(', ')}
+                </span>
+              ) : null}
               <ProfileTierBadge profile={nextProfile} />
             </div>
           ) : isCustomProfile ? (

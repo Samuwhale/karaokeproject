@@ -9,8 +9,15 @@ from backend.schemas.exports import (
     ExportBundleResponse,
     ExportPlanRequest,
     ExportPlanResponse,
+    ExportStemsRequest,
+    ExportStemsResponse,
 )
-from backend.services.exports import build_export_bundle, bundle_path, plan_export_bundle
+from backend.services.exports import (
+    build_export_bundle,
+    bundle_path,
+    list_export_stems,
+    plan_export_bundle,
+)
 
 router = APIRouter(tags=["exports"])
 
@@ -33,6 +40,14 @@ def create_export_plan(
     session: Session = Depends(get_db_session),
 ) -> ExportPlanResponse:
     return plan_export_bundle(session, payload)
+
+
+@router.post("/exports/stems", response_model=ExportStemsResponse)
+def discover_export_stems(
+    payload: ExportStemsRequest,
+    session: Session = Depends(get_db_session),
+) -> ExportStemsResponse:
+    return list_export_stems(session, payload)
 
 
 @router.get("/exports/bundle/{job_id}")

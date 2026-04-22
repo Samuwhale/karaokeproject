@@ -8,6 +8,12 @@ from sqlalchemy.orm import Session, selectinload
 from backend.adapters.ffmpeg import FfmpegAdapter
 from backend.adapters.separator import AudioSeparatorAdapter, SeparationError
 from backend.core.config import RuntimeSettings
+from backend.core.stems import (
+    export_stem_kind,
+    stem_display_label,
+    stem_display_order,
+    stem_kind,
+)
 from backend.db.models import Run, RunStatus
 from backend.services.exporters import bundle_files
 from backend.services.metrics import populate_run_metrics
@@ -125,36 +131,24 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             model_filename=processing["model_filename"],
         )
         stems_directory.mkdir(parents=True, exist_ok=True)
-        instrumental_path = stems_directory / "instrumental.wav"
-        vocals_path = stems_directory / "vocals.wav"
-        shutil.move(separation.instrumental_path, instrumental_path)
-        shutil.move(separation.vocals_path, vocals_path)
 
-        add_run_artifact(
-            run,
-            kind="instrumental",
-            label="Instrumental stem",
-            format_name="WAV",
-            path=instrumental_path,
+        ordered_stem_names = sorted(
+            separation.stems.keys(),
+            key=lambda name: (stem_display_order(name), name),
         )
-        add_run_artifact(
-            run,
-            kind="vocals",
-            label="Vocal stem",
-            format_name="WAV",
-            path=vocals_path,
-        )
-
-        for index, extra_path in enumerate(separation.extra_paths, start=1):
-            extra_label = extra_path.stem.replace("_", " ").strip() or f"Extra stem {index}"
-            stable_extra_path = stems_directory / f"extra-{index:02d}{extra_path.suffix.lower() or '.wav'}"
-            shutil.move(extra_path, stable_extra_path)
+        stem_wav_paths: dict[str, Path] = {}
+        for name in ordered_stem_names:
+            raw_path = separation.stems[name]
+            suffix = raw_path.suffix.lower() or ".wav"
+            stable_path = stems_directory / f"{name}{suffix}"
+            shutil.move(raw_path, stable_path)
+            stem_wav_paths[name] = stable_path
             add_run_artifact(
                 run,
-                kind="extra-stem",
-                label=extra_label,
-                format_name=stable_extra_path.suffix.lstrip(".").upper() or "WAV",
-                path=stable_extra_path,
+                kind=stem_kind(name),
+                label=stem_display_label(name),
+                format_name=suffix.lstrip(".").upper() or "WAV",
+                path=stable_path,
             )
         session.commit()
 
@@ -168,10 +162,18 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         session.commit()
 
         export_directory.mkdir(parents=True, exist_ok=True)
-        instrumental_wav_export = export_directory / "instrumental.wav"
-        vocals_wav_export = export_directory / "vocals.wav"
-        shutil.copy2(instrumental_path, instrumental_wav_export)
-        shutil.copy2(vocals_path, vocals_wav_export)
+        stem_export_wavs: dict[str, Path] = {}
+        for name, stem_path in stem_wav_paths.items():
+            export_wav = export_directory / f"{name}.wav"
+            shutil.copy2(stem_path, export_wav)
+            stem_export_wavs[name] = export_wav
+            add_run_artifact(
+                run,
+                kind=export_stem_kind(name, fmt="wav"),
+                label=f"{stem_display_label(name)} WAV export",
+                format_name="WAV",
+                path=export_wav,
+            )
 
         _check_cancellation(session, run)
         bitrate = processing["export_mp3_bitrate"]
@@ -183,12 +185,19 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         )
         session.commit()
 
-        instrumental_mp3_export = export_directory / "instrumental.mp3"
-        ffmpeg_adapter.convert_to_mp3(
-            instrumental_wav_export,
-            instrumental_mp3_export,
-            bitrate,
-        )
+        stem_export_mp3s: dict[str, Path] = {}
+        for name, export_wav in stem_export_wavs.items():
+            export_mp3 = export_directory / f"{name}.mp3"
+            ffmpeg_adapter.convert_to_mp3(export_wav, export_mp3, bitrate)
+            stem_export_mp3s[name] = export_mp3
+            add_run_artifact(
+                run,
+                kind=export_stem_kind(name, fmt="mp3"),
+                label=f"{stem_display_label(name)} MP3 export",
+                format_name="MP3",
+                path=export_mp3,
+            )
+
         metadata_path = export_directory / "metadata.json"
         write_metadata_file(track, run, metadata_path)
 
@@ -202,36 +211,12 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         session.commit()
 
         bundle_path = storage_paths.exports_dir / f"{source_slug}-{run.id}.zip"
-        bundle_files(
-            bundle_path,
-            [
-                instrumental_wav_export,
-                instrumental_mp3_export,
-                vocals_wav_export,
-                metadata_path,
-            ],
-        )
-        add_run_artifact(
-            run,
-            kind="export-audio-wav",
-            label="Instrumental WAV export",
-            format_name="WAV",
-            path=instrumental_wav_export,
-        )
-        add_run_artifact(
-            run,
-            kind="export-audio-mp3",
-            label="Instrumental MP3 export",
-            format_name="MP3",
-            path=instrumental_mp3_export,
-        )
-        add_run_artifact(
-            run,
-            kind="export-vocals",
-            label="Vocal WAV export",
-            format_name="WAV",
-            path=vocals_wav_export,
-        )
+        bundle_entries: list[Path] = []
+        for name in ordered_stem_names:
+            bundle_entries.append(stem_export_wavs[name])
+            bundle_entries.append(stem_export_mp3s[name])
+        bundle_entries.append(metadata_path)
+        bundle_files(bundle_path, bundle_entries)
         add_run_artifact(
             run,
             kind="metadata",

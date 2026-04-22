@@ -107,6 +107,7 @@ def serialize_processing_profiles() -> list[ProcessingProfileResponse]:
             model_filename=profile.model_filename,
             quality_tier=profile.quality_tier,
             speed_tier=profile.speed_tier,
+            stems=list(profile.stems),
         )
         for profile in PRESET_DEFINITIONS
     ]

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { RunArtifact, RunDetail, RunMixStemEntry } from '../../types'
-import { MIX_GAIN_DB_MAX, MIX_GAIN_DB_MIN, isMixableArtifactKind } from '../../types'
+import { MIX_GAIN_DB_MAX, MIX_GAIN_DB_MIN } from '../../types'
+import { compareStemKinds, isStemKind, stemNameFromKind } from '../../stems'
 import { Spinner } from '../feedback/Spinner'
 import { MixScrubber } from './MixScrubber'
 import { useStemMixer } from './useStemMixer'
@@ -21,25 +22,25 @@ type StemRow = {
   soloed: boolean
 }
 
-const STEM_KIND_ORDER = ['vocals', 'instrumental', 'extra-stem']
 const SAVE_DEBOUNCE_MS = 400
-const SCRUBBER_REFERENCE_ORDER = ['instrumental', 'vocals', 'extra-stem']
+// Instrumental first so the default scrubber peaks match what a two-stem run
+// used to show; then vocals, then every other canonical stem by display order.
+const SCRUBBER_REFERENCE_STEMS = ['instrumental', 'vocals', 'drums', 'bass', 'other']
 
 function mixableArtifacts(run: RunDetail): RunArtifact[] {
   return run.artifacts
-    .filter((artifact) => isMixableArtifactKind(artifact.kind))
+    .filter((artifact) => isStemKind(artifact.kind))
     .sort((a, b) => {
-      const orderA = STEM_KIND_ORDER.indexOf(a.kind)
-      const orderB = STEM_KIND_ORDER.indexOf(b.kind)
-      if (orderA !== orderB) return orderA - orderB
+      const kindOrder = compareStemKinds(a.kind, b.kind)
+      if (kindOrder !== 0) return kindOrder
       return a.label.localeCompare(b.label)
     })
 }
 
 function referenceArtifact(run: RunDetail): RunArtifact | null {
   const mixable = mixableArtifacts(run)
-  for (const kind of SCRUBBER_REFERENCE_ORDER) {
-    const found = mixable.find((artifact) => artifact.kind === kind)
+  for (const stemName of SCRUBBER_REFERENCE_STEMS) {
+    const found = mixable.find((artifact) => stemNameFromKind(artifact.kind) === stemName)
     if (found) return found
   }
   return mixable[0] ?? null

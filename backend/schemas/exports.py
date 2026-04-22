@@ -1,6 +1,12 @@
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from backend.core.stems import (
+    EXPORT_STEM_MP3_PREFIX,
+    EXPORT_STEM_WAV_PREFIX,
+    STEM_NAME_PATTERN,
+)
 
 
 class ExportRunSelector(StrEnum):
@@ -8,14 +14,27 @@ class ExportRunSelector(StrEnum):
     latest = "latest"
 
 
-class ExportArtifactKind(StrEnum):
-    instrumental_wav = "instrumental-wav"
-    instrumental_mp3 = "instrumental-mp3"
-    vocals_wav = "vocals-wav"
-    mix_wav = "mix-wav"
-    mix_mp3 = "mix-mp3"
-    source = "source"
-    metadata = "metadata"
+STATIC_ARTIFACT_KINDS: frozenset[str] = frozenset({
+    "source",
+    "metadata",
+    "mix-wav",
+    "mix-mp3",
+})
+
+
+def validate_export_artifact_kind(value: str) -> str:
+    if value in STATIC_ARTIFACT_KINDS:
+        return value
+    for prefix in (EXPORT_STEM_WAV_PREFIX, EXPORT_STEM_MP3_PREFIX):
+        if value.startswith(prefix):
+            stem_name = value[len(prefix):]
+            if not STEM_NAME_PATTERN.match(stem_name):
+                raise ValueError(f"Invalid stem name in export artifact kind: {value!r}")
+            return value
+    raise ValueError(f"Unsupported export artifact kind: {value!r}")
+
+
+ExportArtifactKind = str
 
 
 class ExportOutputMode(StrEnum):
@@ -26,8 +45,13 @@ class ExportOutputMode(StrEnum):
 class ExportBundleRequest(BaseModel):
     track_ids: list[str] = Field(min_length=1)
     run_selector: ExportRunSelector = ExportRunSelector.keeper
-    artifacts: list[ExportArtifactKind] = Field(min_length=1)
+    artifacts: list[str] = Field(min_length=1)
     mode: ExportOutputMode = ExportOutputMode.single_bundle
+
+    @field_validator("artifacts")
+    @classmethod
+    def _validate_artifacts(cls, value: list[str]) -> list[str]:
+        return [validate_export_artifact_kind(item) for item in value]
 
 
 class ExportBundleSkip(BaseModel):
@@ -48,12 +72,17 @@ class ExportBundleResponse(BaseModel):
 class ExportPlanRequest(BaseModel):
     track_ids: list[str] = Field(min_length=1)
     run_selector: ExportRunSelector = ExportRunSelector.keeper
-    artifacts: list[ExportArtifactKind] = Field(min_length=1)
+    artifacts: list[str] = Field(min_length=1)
     mode: ExportOutputMode = ExportOutputMode.single_bundle
+
+    @field_validator("artifacts")
+    @classmethod
+    def _validate_artifacts(cls, value: list[str]) -> list[str]:
+        return [validate_export_artifact_kind(item) for item in value]
 
 
 class ExportPlanArtifact(BaseModel):
-    kind: ExportArtifactKind
+    kind: str
     present: bool
     size_bytes: int | None = None
     missing_reason: str | None = None
@@ -76,3 +105,18 @@ class ExportPlanResponse(BaseModel):
     skipped_track_count: int
     tracks_using_keeper: int
     tracks_using_latest_fallback: int
+
+
+class ExportStemsRequest(BaseModel):
+    track_ids: list[str] = Field(min_length=1)
+    run_selector: ExportRunSelector = ExportRunSelector.keeper
+
+
+class ExportStemOption(BaseModel):
+    name: str
+    label: str
+    track_count: int
+
+
+class ExportStemsResponse(BaseModel):
+    stems: list[ExportStemOption]

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from backend.core.binaries import resolve_binary
 from backend.core.config import RuntimeSettings
+from backend.core.stems import detect_stem_name
 
 
 class SeparationError(RuntimeError):
@@ -14,9 +15,7 @@ class SeparationError(RuntimeError):
 
 @dataclass(frozen=True)
 class SeparationResult:
-    instrumental_path: Path
-    vocals_path: Path
-    extra_paths: tuple[Path, ...]
+    stems: dict[str, Path]
 
 
 class AudioSeparatorAdapter:
@@ -63,32 +62,22 @@ class AudioSeparatorAdapter:
         if not generated_audio:
             raise SeparationError("audio-separator completed without writing any output stems.")
 
-        instrumental_path = self._find_stem(generated_audio, ("instrumental", "karaoke", "other"))
-        vocals_path = self._find_stem(generated_audio, ("vocals", "voice"))
-        extra_paths = tuple(
-            path
-            for path in generated_audio
-            if path not in {instrumental_path, vocals_path}
-        )
+        stems: dict[str, Path] = {}
+        fallback_index = 1
+        for path in generated_audio:
+            name = detect_stem_name(path.name, fallback_index=fallback_index)
+            if name.startswith("stem-"):
+                fallback_index += 1
+            # Distinct files that resolve to the same canonical name (e.g. two
+            # "other" outputs) keep both by suffixing the second one.
+            if name in stems:
+                collision_index = 2
+                while f"{name}-{collision_index}" in stems:
+                    collision_index += 1
+                name = f"{name}-{collision_index}"
+            stems[name] = path
 
-        if instrumental_path is None or vocals_path is None:
-            raise SeparationError(
-                "audio-separator did not produce recognisable instrumental and vocal stem filenames."
-            )
-
-        return SeparationResult(
-            instrumental_path=instrumental_path,
-            vocals_path=vocals_path,
-            extra_paths=extra_paths,
-        )
-
-    @staticmethod
-    def _find_stem(paths: list[Path], keywords: tuple[str, ...]) -> Path | None:
-        for path in paths:
-            lower_name = path.name.lower()
-            if any(keyword in lower_name for keyword in keywords):
-                return path
-        return None
+        return SeparationResult(stems=stems)
 
     def env_info(self) -> str | None:
         try:

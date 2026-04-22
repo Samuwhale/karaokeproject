@@ -2837,6 +2837,23 @@ code {
   font-weight: 600;
 }
 
+.export-artifact-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.export-artifact-group + .export-artifact-group {
+  margin-top: 0.75rem;
+}
+
+.export-artifact-group h4 {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--text-dim);
+  margin: 0;
+}
+
 .export-artifacts {
   display: flex;
   flex-direction: column;

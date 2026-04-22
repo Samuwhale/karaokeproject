@@ -18,6 +18,8 @@ import type {
   ExportBundleResponse,
   ExportPlanInput,
   ExportPlanResponse,
+  ExportStemsInput,
+  ExportStemsResponse,
   ImportDraft,
   NonKeeperCleanupResponse,
   RevealFolderInput,
@@ -292,6 +294,10 @@ export function createExportBundle(payload: ExportBundleInput) {
 
 export function planExportBundle(payload: ExportPlanInput) {
   return postJson<ExportPlanResponse>('/api/exports/plan', payload)
+}
+
+export function listExportStems(payload: ExportStemsInput) {
+  return postJson<ExportStemsResponse>('/api/exports/stems', payload)
 }
 
 // --- System ---

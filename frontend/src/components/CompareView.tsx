@@ -1,4 +1,5 @@
 import type { RunDetail, RunArtifact, ArtifactMetrics } from '../types'
+import { compareStemKinds, isStemKind } from '../stems'
 import { WaveformOverlay } from './WaveformOverlay'
 import {
   formatChannels,
@@ -17,14 +18,30 @@ type CompareViewProps = {
   onSetKeeper: (runId: string) => void | Promise<void>
 }
 
-const OVERLAY_KIND_ORDER = ['instrumental', 'export-audio-mp3', 'vocals', 'source'] as const
+// Prefer the mix preview, then stems shared between both runs, then source.
+// Stems overlay dynamically: two 4-stem runs get four overlays; a 2-stem
+// vs 4-stem comparison gets only the stems both runs actually produced.
+const STATIC_OVERLAY_ORDER = ['export-mix-mp3', 'source'] as const
 
 function findArtifact(run: RunDetail, kind: string): RunArtifact | null {
   return run.artifacts.find((artifact) => artifact.kind === kind) ?? null
 }
 
 function pairedArtifacts(runA: RunDetail, runB: RunDetail) {
-  return OVERLAY_KIND_ORDER.flatMap((kind) => {
+  const kindsA = new Set(runA.artifacts.map((artifact) => artifact.kind))
+  const sharedStemKinds = runB.artifacts
+    .map((artifact) => artifact.kind)
+    .filter((kind) => isStemKind(kind) && kindsA.has(kind))
+    .sort(compareStemKinds)
+
+  const mix = STATIC_OVERLAY_ORDER[0]
+  const source = STATIC_OVERLAY_ORDER[1]
+  const orderedKinds: string[] = []
+  if (kindsA.has(mix) && findArtifact(runB, mix)) orderedKinds.push(mix)
+  orderedKinds.push(...sharedStemKinds)
+  if (kindsA.has(source) && findArtifact(runB, source)) orderedKinds.push(source)
+
+  return orderedKinds.flatMap((kind) => {
     const a = findArtifact(runA, kind)
     const b = findArtifact(runB, kind)
     if (!a || !b) return []
@@ -67,11 +84,10 @@ function matchedMetrics(runA: RunDetail, runB: RunDetail): {
   metricsA: ArtifactMetrics
   metricsB: ArtifactMetrics
 } | null {
-  for (const kind of OVERLAY_KIND_ORDER) {
-    const a = findArtifact(runA, kind)
-    const b = findArtifact(runB, kind)
-    if (a?.metrics && b?.metrics) {
-      return { kind, metricsA: a.metrics, metricsB: b.metrics }
+  const pairs = pairedArtifacts(runA, runB)
+  for (const pair of pairs) {
+    if (pair.a.metrics && pair.b.metrics) {
+      return { kind: pair.kind, metricsA: pair.a.metrics, metricsB: pair.b.metrics }
     }
   }
   return null

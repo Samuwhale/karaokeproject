@@ -8,23 +8,30 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.adapters.ffmpeg import FfmpegAdapter, FfmpegCommandError
 from backend.core.config import RuntimeSettings
+from backend.core.stems import (
+    EXPORT_STEM_MP3_PREFIX,
+    EXPORT_STEM_WAV_PREFIX,
+    is_stem_kind,
+)
 from backend.db.models import Run, RunArtifact, RunStatus
 
 
-AUDIO_ARTIFACT_KINDS: frozenset[str] = frozenset(
+_STATIC_AUDIO_KINDS: frozenset[str] = frozenset(
     {
         "source",
         "normalized",
-        "instrumental",
-        "vocals",
-        "extra-stem",
-        "export-audio-wav",
-        "export-audio-mp3",
-        "export-vocals",
         "export-mix-wav",
         "export-mix-mp3",
     }
 )
+
+
+def _is_audio_artifact_kind(kind: str) -> bool:
+    if kind in _STATIC_AUDIO_KINDS:
+        return True
+    if is_stem_kind(kind):
+        return True
+    return kind.startswith(EXPORT_STEM_WAV_PREFIX) or kind.startswith(EXPORT_STEM_MP3_PREFIX)
 
 PEAKS_BUCKET_COUNT = 512
 
@@ -44,7 +51,7 @@ def compute_artifact_metrics(ffmpeg: FfmpegAdapter, artifact: RunArtifact) -> di
 
     metrics: dict[str, Any] = _file_facts(path)
 
-    if artifact.kind not in AUDIO_ARTIFACT_KINDS:
+    if not _is_audio_artifact_kind(artifact.kind):
         return metrics
 
     try:

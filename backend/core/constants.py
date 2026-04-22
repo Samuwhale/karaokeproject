@@ -28,9 +28,13 @@ class PresetDefinition:
     model_filename: str
     quality_tier: int
     speed_tier: int
+    stems: tuple[str, ...]
 
 
 CUSTOM_PRESET_KEY = "custom"
+
+
+_VOCAL_INSTRUMENTAL_STEMS: tuple[str, ...] = ("vocals", "instrumental")
 
 
 PRESET_DEFINITIONS = (
@@ -44,6 +48,7 @@ PRESET_DEFINITIONS = (
         model_filename="UVR_MDXNET_KARA_2.onnx",
         quality_tier=0,
         speed_tier=3,
+        stems=_VOCAL_INSTRUMENTAL_STEMS,
     ),
     PresetDefinition(
         key="standard",
@@ -55,6 +60,7 @@ PRESET_DEFINITIONS = (
         model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt",
         quality_tier=1,
         speed_tier=2,
+        stems=_VOCAL_INSTRUMENTAL_STEMS,
     ),
     PresetDefinition(
         key="high",
@@ -66,6 +72,7 @@ PRESET_DEFINITIONS = (
         model_filename="model_bs_roformer_ep_368_sdr_12.9628.ckpt",
         quality_tier=2,
         speed_tier=1,
+        stems=_VOCAL_INSTRUMENTAL_STEMS,
     ),
     PresetDefinition(
         key="vocal-focus",
@@ -77,6 +84,7 @@ PRESET_DEFINITIONS = (
         model_filename="mel_band_roformer_vocals_fv4_gabox.ckpt",
         quality_tier=2,
         speed_tier=1,
+        stems=_VOCAL_INSTRUMENTAL_STEMS,
     ),
 )
 

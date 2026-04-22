@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import type { Settings, StorageBucket, StorageOverview } from '../types'
+import { stemLabel } from '../stems'
 import { formatSize } from './metrics'
 import { Skeleton } from './feedback/Skeleton'
 import { Spinner } from './feedback/Spinner'
@@ -168,6 +169,12 @@ export function SettingsPanel({
                 <div className="profile-meta-lines">
                   <span><strong>Best for:</strong> {current.best_for}</span>
                   <span><strong>Tradeoff:</strong> {current.tradeoff}</span>
+                  {current.stems.length ? (
+                    <span>
+                      <strong>Produces:</strong>{' '}
+                      {current.stems.map(stemLabel).join(', ')}
+                    </span>
+                  ) : null}
                   <ProfileTierBadge profile={current} />
                   <span className="field-hint">Used for new renders unless you change it per track.</span>
                 </div>
