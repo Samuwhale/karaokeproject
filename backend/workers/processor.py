@@ -15,8 +15,8 @@ from backend.core.stems import (
     stem_kind,
 )
 from backend.db.models import Run, RunStatus
-from backend.services.exporters import bundle_files
 from backend.services.metrics import populate_run_metrics
+from backend.services.mixing import ensure_worker_mix_wav
 from backend.services.processing import resolve_run_processing
 from backend.services.settings import get_or_create_settings
 from backend.services.storage import apply_storage_retention, resolve_storage_paths
@@ -116,29 +116,76 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
 
         _check_cancellation(session, run)
         profile_label = processing.get("profile_label") or processing.get("profile_key") or "stem model"
+        followup = processing.get("followup") if isinstance(processing.get("followup"), dict) else None
+
         set_run_state(
             run,
             status=RunStatus.separating,
             progress=0.4,
-            status_message=f"Running {profile_label}",
+            status_message=f"Running {profile_label}{' (1/2)' if followup else ''}",
         )
         session.commit()
 
-        separation = separator_adapter.run(
+        primary_separation = separator_adapter.run(
             source_path=normalized_path,
-            output_dir=raw_stems_directory,
+            output_dir=raw_stems_directory / "primary",
             model_cache_dir=storage_paths.model_cache_dir,
             model_filename=processing["model_filename"],
         )
+
+        # stem_name → raw WAV path. The followup pass (if any) replaces the
+        # input stem with two or more new stems; we keep a single flat map so
+        # the downstream "move into stems/ and register artifacts" loop stays
+        # model-agnostic.
+        raw_stems: dict[str, Path] = dict(primary_separation.stems)
+
+        if followup is not None:
+            input_stem = str(followup["input_stem"])
+            input_path = raw_stems.get(input_stem)
+            if input_path is None:
+                raise SeparationError(
+                    f"Primary separation did not produce a '{input_stem}' stem needed by the followup pass."
+                )
+
+            _check_cancellation(session, run)
+            set_run_state(
+                run,
+                status=RunStatus.separating,
+                progress=0.6,
+                status_message=f"Running {profile_label} (2/2)",
+            )
+            session.commit()
+
+            followup_separation = separator_adapter.run(
+                source_path=input_path,
+                output_dir=raw_stems_directory / "followup",
+                model_cache_dir=storage_paths.model_cache_dir,
+                model_filename=str(followup["model_filename"]),
+            )
+            if not followup_separation.stems:
+                raise SeparationError("Followup separation produced no stems.")
+
+            # Replace the consumed input stem with whatever the followup emitted.
+            del raw_stems[input_stem]
+            for name, path in followup_separation.stems.items():
+                if name in raw_stems:
+                    # Collision — followup emitted something sharing a name with
+                    # another primary stem. Suffix it so both survive.
+                    collision = 2
+                    while f"{name}-{collision}" in raw_stems:
+                        collision += 1
+                    name = f"{name}-{collision}"
+                raw_stems[name] = path
+
         stems_directory.mkdir(parents=True, exist_ok=True)
 
         ordered_stem_names = sorted(
-            separation.stems.keys(),
+            raw_stems.keys(),
             key=lambda name: (stem_display_order(name), name),
         )
         stem_wav_paths: dict[str, Path] = {}
         for name in ordered_stem_names:
-            raw_path = separation.stems[name]
+            raw_path = raw_stems[name]
             suffix = raw_path.suffix.lower() or ".wav"
             stable_path = stems_directory / f"{name}{suffix}"
             shutil.move(raw_path, stable_path)
@@ -156,17 +203,15 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         set_run_state(
             run,
             status=RunStatus.exporting,
-            progress=0.8,
+            progress=0.84,
             status_message="Copying stems",
         )
         session.commit()
 
         export_directory.mkdir(parents=True, exist_ok=True)
-        stem_export_wavs: dict[str, Path] = {}
         for name, stem_path in stem_wav_paths.items():
             export_wav = export_directory / f"{name}.wav"
             shutil.copy2(stem_path, export_wav)
-            stem_export_wavs[name] = export_wav
             add_run_artifact(
                 run,
                 kind=export_stem_kind(name, fmt="wav"),
@@ -174,49 +219,19 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
                 format_name="WAV",
                 path=export_wav,
             )
+        session.commit()
 
         _check_cancellation(session, run)
-        bitrate = processing["export_mp3_bitrate"]
         set_run_state(
             run,
             status=RunStatus.exporting,
-            progress=0.88,
-            status_message=f"Encoding MP3 at {bitrate}",
+            progress=0.9,
+            status_message="Writing metadata",
         )
         session.commit()
-
-        stem_export_mp3s: dict[str, Path] = {}
-        for name, export_wav in stem_export_wavs.items():
-            export_mp3 = export_directory / f"{name}.mp3"
-            ffmpeg_adapter.convert_to_mp3(export_wav, export_mp3, bitrate)
-            stem_export_mp3s[name] = export_mp3
-            add_run_artifact(
-                run,
-                kind=export_stem_kind(name, fmt="mp3"),
-                label=f"{stem_display_label(name)} MP3 export",
-                format_name="MP3",
-                path=export_mp3,
-            )
 
         metadata_path = export_directory / "metadata.json"
         write_metadata_file(track, run, metadata_path)
-
-        _check_cancellation(session, run)
-        set_run_state(
-            run,
-            status=RunStatus.exporting,
-            progress=0.94,
-            status_message="Writing bundle",
-        )
-        session.commit()
-
-        bundle_path = storage_paths.exports_dir / f"{source_slug}-{run.id}.zip"
-        bundle_entries: list[Path] = []
-        for name in ordered_stem_names:
-            bundle_entries.append(stem_export_wavs[name])
-            bundle_entries.append(stem_export_mp3s[name])
-        bundle_entries.append(metadata_path)
-        bundle_files(bundle_path, bundle_entries)
         add_run_artifact(
             run,
             kind="metadata",
@@ -224,13 +239,20 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             format_name="JSON",
             path=metadata_path,
         )
-        add_run_artifact(
+        session.commit()
+
+        _check_cancellation(session, run)
+        set_run_state(
             run,
-            kind="package",
-            label="Export package",
-            format_name="ZIP",
-            path=bundle_path,
+            status=RunStatus.exporting,
+            progress=0.96,
+            status_message="Rendering mixdown",
         )
+        session.commit()
+
+        # Keep a bitrate-free whole-run render around for compare/preview
+        # without reintroducing render-time MP3 work.
+        ensure_worker_mix_wav(session, runtime_settings, run)
 
         set_run_state(
             run,

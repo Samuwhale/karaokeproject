@@ -5,10 +5,8 @@ import {
   batchApplyTrackFields,
   batchCancelTrackRuns,
   batchDeleteTracks,
-  batchDiscardImportDrafts,
   batchPurgeNonKeepers,
   batchQueueRuns,
-  batchUpdateImportDrafts,
   cancelRun,
   cleanupExportBundles,
   cleanupNonKeeperRunsLibrary,
@@ -26,7 +24,6 @@ import {
   getTracks,
   listImportDrafts,
   purgeNonKeeperRuns,
-  rerunWithPreset,
   resolveLocalImport,
   resolveYouTubeImport,
   retryRun,
@@ -40,7 +37,6 @@ import {
 } from '../api'
 import type { Toast, ToastAction, ToastTone } from '../components/feedback/ToastStack'
 import type {
-  BatchUpdateImportDraftInput,
   CachedModel,
   ConfirmImportDraftsInput,
   Diagnostics,
@@ -48,7 +44,6 @@ import type {
   ImportDraft,
   NonKeeperCleanupResponse,
   QueueRunEntry,
-  RerunPresetOverride,
   RevealFolderInput,
   RunMixStemEntry,
   RunProcessingConfigInput,
@@ -69,7 +64,7 @@ const PURGE_UNDO_MS = 5000
 const ACTIVE_RUN_STATUSES = new Set(['queued', 'preparing', 'separating', 'exporting'])
 
 export type ConnectionState = 'ready' | 'syncing' | 'offline'
-export type DashboardSurface = 'inbox' | 'queue' | 'library'
+export type SelectionKey = 'library' | 'queue'
 
 export type Connection = {
   state: ConnectionState
@@ -126,7 +121,6 @@ function toggleInSet(set: Set<string>, id: string): Set<string> {
 }
 
 export function useDashboardData() {
-  const [activeSurface, setActiveSurface] = useState<DashboardSurface>('library')
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [storageOverview, setStorageOverview] = useState<StorageOverview | null>(null)
@@ -139,7 +133,6 @@ export function useDashboardData() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [selectedTrack, setSelectedTrack] = useState<TrackDetail | null>(null)
 
-  const [selectedDraftIds, setSelectedDraftIds] = useState<Set<string>>(new Set())
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<Set<string>>(new Set())
   const [selectedQueueRunIds, setSelectedQueueRunIds] = useState<Set<string>>(new Set())
 
@@ -150,7 +143,6 @@ export function useDashboardData() {
   const [creatingRun, setCreatingRun] = useState(false)
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null)
   const [retryingRunId, setRetryingRunId] = useState<string | null>(null)
-  const [rerunningRunId, setRerunningRunId] = useState<string | null>(null)
   const [savingSettings, setSavingSettings] = useState(false)
   const [cleaningTempStorage, setCleaningTempStorage] = useState(false)
   const [cleaningExportBundles, setCleaningExportBundles] = useState(false)
@@ -238,12 +230,6 @@ export function useDashboardData() {
       // Prune stale selections
       setSelectedLibraryIds((current) => {
         const valid = new Set(nextTracks.map((track) => track.id))
-        const next = new Set<string>()
-        for (const id of current) if (valid.has(id)) next.add(id)
-        return next.size === current.size ? current : next
-      })
-      setSelectedDraftIds((current) => {
-        const valid = new Set(nextDrafts.map((draft) => draft.id))
         const next = new Set<string>()
         for (const id of current) if (valid.has(id)) next.add(id)
         return next.size === current.size ? current : next
@@ -365,30 +351,21 @@ export function useDashboardData() {
     }
   }, [])
 
-  // ----- Surface + selection helpers -----
+  // ----- Selection helpers -----
 
-  function focusSurface(surface: DashboardSurface) {
-    setActiveSurface(surface)
-  }
-
-  function toggleDraftSelected(draftId: string) {
-    setSelectedDraftIds((current) => toggleInSet(current, draftId))
-  }
   function toggleLibrarySelected(trackId: string) {
     setSelectedLibraryIds((current) => toggleInSet(current, trackId))
   }
   function toggleQueueRunSelected(runId: string) {
     setSelectedQueueRunIds((current) => toggleInSet(current, runId))
   }
-  function clearSelection(surface: DashboardSurface) {
-    if (surface === 'inbox') setSelectedDraftIds(new Set())
-    if (surface === 'library') setSelectedLibraryIds(new Set())
-    if (surface === 'queue') setSelectedQueueRunIds(new Set())
+  function clearSelection(key: SelectionKey) {
+    if (key === 'library') setSelectedLibraryIds(new Set())
+    if (key === 'queue') setSelectedQueueRunIds(new Set())
   }
-  function selectAll(surface: DashboardSurface, ids: string[]) {
-    if (surface === 'inbox') setSelectedDraftIds(new Set(ids))
-    if (surface === 'library') setSelectedLibraryIds(new Set(ids))
-    if (surface === 'queue') setSelectedQueueRunIds(new Set(ids))
+  function selectAll(key: SelectionKey, ids: string[]) {
+    if (key === 'library') setSelectedLibraryIds(new Set(ids))
+    if (key === 'queue') setSelectedQueueRunIds(new Set(ids))
   }
 
   // ----- Import (Add Sources) -----
@@ -397,14 +374,16 @@ export function useDashboardData() {
     setResolvingYoutubeImport(true)
     try {
       const result = await resolveYouTubeImport(sourceUrl)
+      const count = result.drafts.length
       pushToast(
         'success',
-        result.source_kind === 'playlist'
-          ? `Added ${result.drafts.length} drafts to Inbox.`
-          : 'Added draft to Inbox.',
+        `Staged ${count} source${count === 1 ? '' : 's'}. Review settings before queueing.`,
       )
-      setActiveSurface('inbox')
       await refreshDashboard()
+      return result
+    } catch (error) {
+      pushToast('error', getErrorMessage(error))
+      throw error
     } finally {
       setResolvingYoutubeImport(false)
     }
@@ -414,18 +393,22 @@ export function useDashboardData() {
     setResolvingLocalImport(true)
     try {
       const result = await resolveLocalImport(files)
+      const count = result.drafts.length
       pushToast(
         'success',
-        `Staged ${result.drafts.length} draft${result.drafts.length === 1 ? '' : 's'} in Inbox.`,
+        `Staged ${count} source${count === 1 ? '' : 's'}. Review settings before queueing.`,
       )
-      setActiveSurface('inbox')
       await refreshDashboard()
+      return result
+    } catch (error) {
+      pushToast('error', getErrorMessage(error))
+      throw error
     } finally {
       setResolvingLocalImport(false)
     }
   }
 
-  // ----- Inbox (drafts) -----
+  // ----- Drafts -----
 
   async function handleUpdateDraft(draftId: string, payload: UpdateImportDraftInput) {
     try {
@@ -434,20 +417,6 @@ export function useDashboardData() {
     } catch (error) {
       pushToast('error', getErrorMessage(error))
       throw error
-    }
-  }
-
-  async function handleBatchUpdateDrafts(payload: BatchUpdateImportDraftInput) {
-    if (!payload.draft_ids.length) return
-    setBatching(true)
-    try {
-      await batchUpdateImportDrafts(payload)
-      await refreshDashboard()
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
-    } finally {
-      setBatching(false)
     }
   }
 
@@ -461,28 +430,11 @@ export function useDashboardData() {
     }
   }
 
-  async function handleBatchDiscardDrafts(draftIds: string[]) {
-    if (!draftIds.length) return
-    setBatching(true)
-    try {
-      await batchDiscardImportDrafts({ draft_ids: draftIds })
-      setSelectedDraftIds(new Set())
-      pushToast('success', `Discarded ${draftIds.length} draft${draftIds.length === 1 ? '' : 's'}.`)
-      await refreshDashboard()
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
-    } finally {
-      setBatching(false)
-    }
-  }
-
   async function handleConfirmDrafts(payload: ConfirmImportDraftsInput) {
     if (!payload.draft_ids.length) return
     setConfirmingDrafts(true)
     try {
       const result = await confirmImportDrafts(payload)
-      setSelectedDraftIds(new Set())
       const createdMsg = result.created_track_count
         ? `${result.created_track_count} new track${result.created_track_count === 1 ? '' : 's'}`
         : ''
@@ -490,13 +442,12 @@ export function useDashboardData() {
         ? `${result.reused_track_count} reused`
         : ''
       const queuedMsg = result.queued_run_count
-        ? `${result.queued_run_count} queued`
-        : 'no runs queued'
+        ? `${result.queued_run_count} render${result.queued_run_count === 1 ? '' : 's'} queued`
+        : 'imported without queueing'
       const parts = [createdMsg, reusedMsg, queuedMsg].filter(Boolean)
-      pushToast('success', `Confirmed: ${parts.join(' · ')}.`)
-      if (result.queued_run_count > 0) setActiveSurface('queue')
-      else setActiveSurface('library')
+      pushToast('success', `Imported: ${parts.join(' · ')}.`)
       await refreshDashboard()
+      return result
     } catch (error) {
       pushToast('error', getErrorMessage(error))
       throw error
@@ -574,27 +525,12 @@ export function useDashboardData() {
     }
   }
 
-  async function handleRerunWithPreset(runId: string, override: RerunPresetOverride) {
-    setRerunningRunId(runId)
-    try {
-      const result = await rerunWithPreset(runId, override)
-      pushToast('success', 'Queued another render.')
-      await refreshDashboard()
-      setSelectedRunId(result.run.id)
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
-    } finally {
-      setRerunningRunId(null)
-    }
-  }
-
   async function handleSetKeeper(trackId: string, runId: string | null) {
     setSettingKeeper(true)
     try {
       await setKeeperRun(trackId, runId)
       if (runId) setCompareRunId(null)
-      pushToast('success', runId ? 'Marked as final.' : 'Cleared final.')
+      pushToast('success', runId ? 'Bookmarked run.' : 'Cleared bookmark.')
       await refreshDashboard()
     } catch (error) {
       pushToast('error', getErrorMessage(error))
@@ -658,8 +594,8 @@ export function useDashboardData() {
     pushToast(
       'success',
       targetRunIds.length
-        ? `Deleted ${targetRunIds.length} other run${targetRunIds.length === 1 ? '' : 's'}.`
-        : 'Purged other runs.',
+        ? `Deleted ${targetRunIds.length} non-bookmarked run${targetRunIds.length === 1 ? '' : 's'}.`
+        : 'Purged non-bookmarked runs.',
       {
         autoDismissMs: PURGE_UNDO_MS,
         action: {
@@ -747,7 +683,6 @@ export function useDashboardData() {
         'success',
         `Queued ${result.queued_run_count} run${result.queued_run_count === 1 ? '' : 's'}.`,
       )
-      setActiveSurface('queue')
       await refreshDashboard()
     } catch (error) {
       pushToast('error', getErrorMessage(error))
@@ -964,7 +899,7 @@ export function useDashboardData() {
           : ''
       pushToast(
         'success',
-        `Purged ${result.deleted_run_count} non-final run${result.deleted_run_count === 1 ? '' : 's'} across ${result.purged_track_count} track${result.purged_track_count === 1 ? '' : 's'} · ${formatReclaimed(result.bytes_reclaimed)} reclaimed${skipped}.`,
+        `Purged ${result.deleted_run_count} non-bookmarked run${result.deleted_run_count === 1 ? '' : 's'} across ${result.purged_track_count} track${result.purged_track_count === 1 ? '' : 's'} · ${formatReclaimed(result.bytes_reclaimed)} reclaimed${skipped}.`,
       )
       await refreshDashboard()
     } catch (error) {
@@ -991,7 +926,7 @@ export function useDashboardData() {
     setCleaningLibraryRuns(true)
     pushToast(
       'success',
-      'Purging non-final runs across the library.',
+      'Purging non-bookmarked runs across the library.',
       {
         autoDismissMs: PURGE_UNDO_MS,
         action: {
@@ -1005,10 +940,6 @@ export function useDashboardData() {
       void commitLibraryCleanup()
     }, PURGE_UNDO_MS)
   }
-
-  const draftsNeedingAttention = drafts.filter(
-    (draft) => draft.duplicate_action === null,
-  ).length
 
   const visibleTracks = useMemo(
     () => (pendingDeleteIds.size ? tracks.filter((track) => !pendingDeleteIds.has(track.id)) : tracks),
@@ -1025,8 +956,6 @@ export function useDashboardData() {
   }, [selectedTrack, pendingPurge])
 
   return {
-    activeSurface,
-    focusSurface,
     diagnostics,
     settings,
     storageOverview,
@@ -1035,14 +964,11 @@ export function useDashboardData() {
     queueRuns,
     cachedModels,
     refreshCachedModels,
-    draftsNeedingAttention,
     selectedTrack: visibleSelectedTrack,
     selectedTrackId,
     selectedRunId,
-    selectedDraftIds,
     selectedLibraryIds,
     selectedQueueRunIds,
-    toggleDraftSelected,
     toggleLibrarySelected,
     toggleQueueRunSelected,
     clearSelection,
@@ -1057,7 +983,6 @@ export function useDashboardData() {
     creatingRun,
     cancellingRunId,
     retryingRunId,
-    rerunningRunId,
     savingSettings,
     cleaningTempStorage,
     cleaningExportBundles,
@@ -1074,14 +999,11 @@ export function useDashboardData() {
     handleResolveYouTube,
     handleResolveLocalImport,
     handleUpdateDraft,
-    handleBatchUpdateDrafts,
     handleDiscardDraft,
-    handleBatchDiscardDrafts,
     handleConfirmDrafts,
     handleCreateRun,
     handleCancelRun,
     handleRetryRun,
-    handleRerunWithPreset,
     handleDismissRun,
     handleRevealFolder,
     handleSaveSettings,

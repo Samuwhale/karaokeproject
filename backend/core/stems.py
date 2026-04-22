@@ -9,7 +9,9 @@ EXPORT_STEM_WAV_PREFIX = "stem-wav:"
 EXPORT_STEM_MP3_PREFIX = "stem-mp3:"
 
 # Stem names must be safe filenames, URL-safe, and stable DB identifiers.
-STEM_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,32}$")
+# Underscores allowed so compound roles like "lead_vocals" / "backing_vocals"
+# survive in stored kinds (stem:lead_vocals) and on the filesystem.
+STEM_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,32}$")
 
 
 @dataclass(frozen=True)
@@ -25,13 +27,20 @@ class StemRole:
 # for display and also drives preview / scrubber priority: instrumental first
 # so the default scrubber peaks still line up with what users expect today.
 CANONICAL_STEMS: tuple[StemRole, ...] = (
-    StemRole("instrumental", "Instrumental", ("instrumental", "karaoke", "accompaniment", "no_vocals", "novocals"), 0),
-    StemRole("vocals", "Vocals", ("vocals", "vocal", "voice", "lead_vocals"), 1),
-    StemRole("drums", "Drums", ("drums", "drum"), 2),
-    StemRole("bass", "Bass", ("bass",), 3),
-    StemRole("other", "Other", ("other", "others"), 4),
-    StemRole("piano", "Piano", ("piano", "keys"), 5),
-    StemRole("guitar", "Guitar", ("guitar", "guitars"), 6),
+    StemRole("instrumental", "Instrumental", ("instrumental", "karaoke", "accompaniment", "no_vocals", "no vocals", "novocals"), 0),
+    StemRole("vocals", "Vocals", ("vocals", "vocal", "voice"), 1),
+    # audio-separator's UVR-BVE model emits filenames containing "(Lead Vocals)"
+    # and "(Backing Vocals)" — spaces are preserved, not underscored — so the
+    # space-forms below are load-bearing for the karaoke-stems profile. The
+    # longer aliases (with spaces) must beat plain "vocals" during the
+    # longest-match sort in _ALIAS_LOOKUP.
+    StemRole("lead_vocals", "Lead vocals", ("lead vocals", "lead_vocals", "lead-vocals", "main vocals", "main_vocals", "leadvocals"), 2),
+    StemRole("backing_vocals", "Backing vocals", ("backing vocals", "backing_vocals", "backing-vocals", "backup vocals", "backup_vocals", "backingvocals"), 3),
+    StemRole("drums", "Drums", ("drums", "drum"), 4),
+    StemRole("bass", "Bass", ("bass",), 5),
+    StemRole("other", "Other", ("other", "others"), 6),
+    StemRole("piano", "Piano", ("piano", "keys"), 7),
+    StemRole("guitar", "Guitar", ("guitar", "guitars"), 8),
 )
 
 

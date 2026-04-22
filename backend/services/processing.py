@@ -3,14 +3,18 @@ from __future__ import annotations
 from typing import Any
 
 from backend.core.constants import (
-    CUSTOM_PRESET_KEY,
-    DEFAULT_PRESET_KEY,
+    CUSTOM_PROFILE_KEY,
+    DEFAULT_PROFILE_KEY,
     MODEL_FILENAME_SUFFIXES,
-    PRESET_DEFINITIONS,
-    PRESET_LOOKUP,
+    PROFILE_DEFINITIONS,
+    PROFILE_LOOKUP,
 )
 from backend.db.models import AppSettings, Run
-from backend.schemas.tracks import ProcessingProfileResponse, RunProcessingConfigRequest, RunProcessingConfigResponse
+from backend.schemas.tracks import (
+    ProcessingProfileResponse,
+    RunProcessingConfigRequest,
+    RunProcessingConfigResponse,
+)
 
 DEFAULT_MP3_BITRATE = "320k"
 
@@ -36,54 +40,67 @@ def _validate_custom_model_filename(value: str | None) -> str:
 
 def build_processing_config(
     profile_key: str,
-    export_mp3_bitrate: str | None,
     model_filename: str | None = None,
-) -> dict[str, str]:
-    bitrate = normalize_export_bitrate(export_mp3_bitrate)
-
-    if profile_key == CUSTOM_PRESET_KEY:
+) -> dict[str, Any]:
+    if profile_key == CUSTOM_PROFILE_KEY:
         resolved_model = _validate_custom_model_filename(model_filename)
         return {
-            "profile_key": CUSTOM_PRESET_KEY,
+            "profile_key": CUSTOM_PROFILE_KEY,
             "profile_label": CUSTOM_PROFILE_LABEL,
             "model_filename": resolved_model,
-            "export_mp3_bitrate": bitrate,
         }
 
-    if profile_key not in PRESET_LOOKUP:
+    if profile_key not in PROFILE_LOOKUP:
         raise ValueError(f"Unknown processing profile '{profile_key}'.")
 
-    profile = PRESET_LOOKUP[profile_key]
-    return {
+    profile = PROFILE_LOOKUP[profile_key]
+    config: dict[str, Any] = {
         "profile_key": profile.key,
         "profile_label": profile.label,
         "model_filename": profile.model_filename,
-        "export_mp3_bitrate": bitrate,
     }
+    if profile.followup is not None:
+        config["followup"] = {
+            "input_stem": profile.followup.input_stem,
+            "model_filename": profile.followup.model_filename,
+        }
+    return config
 
 
 def build_processing_from_request(
     request: RunProcessingConfigRequest | None,
     settings: AppSettings,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     if request is None:
-        return build_processing_config(settings.default_preset, settings.export_mp3_bitrate)
-    bitrate = request.export_mp3_bitrate or settings.export_mp3_bitrate
-    return build_processing_config(request.profile_key, bitrate, request.model_filename)
+        return build_processing_config(settings.default_profile)
+    return build_processing_config(request.profile_key, request.model_filename)
 
 
-def resolve_run_processing(run: Run) -> dict[str, str]:
+def resolve_run_processing(run: Run) -> dict[str, Any]:
+    """Reconstruct the run's processing config from stored metadata.
+
+    Live profiles are the source of truth for the `followup` chain — storing
+    it on the run as well would mean legacy runs could pin themselves to a
+    dropped followup model. Instead, look up the current profile and attach
+    its followup if present.
+    """
     metadata = run.metadata_json or {}
     processing = metadata.get("processing")
+    profile_key: str
+    model_filename: str | None
     if isinstance(processing, dict):
-        profile_key = str(processing.get("profile_key") or run.preset or DEFAULT_PRESET_KEY)
-        bitrate = str(processing.get("export_mp3_bitrate") or DEFAULT_MP3_BITRATE)
+        profile_key = str(processing.get("profile_key") or run.profile_key or DEFAULT_PROFILE_KEY)
         stored_model = processing.get("model_filename")
         model_filename = str(stored_model) if isinstance(stored_model, str) else None
-        return build_processing_config(profile_key, bitrate, model_filename)
+    else:
+        profile_key = run.profile_key or DEFAULT_PROFILE_KEY
+        model_filename = None
 
-    fallback_preset = run.preset or DEFAULT_PRESET_KEY
-    return build_processing_config(fallback_preset, DEFAULT_MP3_BITRATE)
+    config = build_processing_config(profile_key, model_filename)
+    # If metadata pinned a specific model filename (e.g. a custom profile), use
+    # it — build_processing_config already preserved it for custom; for known
+    # profiles we keep the profile's canonical filename.
+    return config
 
 
 def serialize_processing_config(config: dict[str, Any]) -> RunProcessingConfigResponse:
@@ -91,7 +108,6 @@ def serialize_processing_config(config: dict[str, Any]) -> RunProcessingConfigRe
         profile_key=str(config["profile_key"]),
         profile_label=str(config["profile_label"]),
         model_filename=str(config["model_filename"]),
-        export_mp3_bitrate=str(config["export_mp3_bitrate"]),
     )
 
 
@@ -103,11 +119,8 @@ def serialize_processing_profiles() -> list[ProcessingProfileResponse]:
             strength=profile.strength,
             best_for=profile.best_for,
             tradeoff=profile.tradeoff,
-            rerun_reason=profile.rerun_reason,
             model_filename=profile.model_filename,
-            quality_tier=profile.quality_tier,
-            speed_tier=profile.speed_tier,
             stems=list(profile.stems),
         )
-        for profile in PRESET_DEFINITIONS
+        for profile in PROFILE_DEFINITIONS
     ]

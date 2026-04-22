@@ -1,8 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-import type { ProcessingProfile, RunProcessingConfigInput } from '../types'
 import { Spinner } from './feedback/Spinner'
-import { ProfileTierBadge } from './ProfileTierBadge'
 
 type BatchActionBarProps = {
   selectedCount: number
@@ -33,6 +31,50 @@ type ApplyArtistPromptProps = {
   onApply: (artist: string | null) => void
   disabled?: boolean
   buttonLabel?: string
+}
+
+type OverflowMenuProps = {
+  label?: string
+  children: React.ReactNode
+}
+
+export function OverflowMenu({ label = 'More…', children }: OverflowMenuProps) {
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onClick(event: MouseEvent) {
+      if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div className="overflow-menu" ref={wrapperRef}>
+      <button
+        type="button"
+        className="button-secondary"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {label}
+      </button>
+      {open ? (
+        <div className="overflow-menu-panel" role="menu">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export function ApplyArtistPrompt({ onApply, disabled, buttonLabel = 'Set artist' }: ApplyArtistPromptProps) {
@@ -87,108 +129,3 @@ export function ApplyArtistPrompt({ onApply, disabled, buttonLabel = 'Set artist
   )
 }
 
-type ConfirmDraftsPromptProps = {
-  selectedCount: number
-  disabled: boolean
-  profiles: ProcessingProfile[]
-  defaultProcessing: RunProcessingConfigInput
-  onConfirm: (queue: boolean, processing: RunProcessingConfigInput) => void
-}
-
-export function ConfirmDraftsPrompt({
-  selectedCount,
-  disabled,
-  profiles,
-  defaultProcessing,
-  onConfirm,
-}: ConfirmDraftsPromptProps) {
-  const [open, setOpen] = useState(false)
-  const [processing, setProcessing] = useState<RunProcessingConfigInput>(defaultProcessing)
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        className="button-primary"
-        disabled={disabled}
-        onClick={() => {
-          setProcessing(defaultProcessing)
-          setOpen(true)
-        }}
-      >
-        Confirm {selectedCount}
-      </button>
-    )
-  }
-
-  const selectedProfile = profiles.find((profile) => profile.key === processing.profile_key) ?? null
-
-  return (
-    <div className="inline-popover">
-      <div className="inline-popover-row">
-        <label className="field field-compact">
-          <span>Profile (if queueing)</span>
-          <select
-            value={processing.profile_key}
-            onChange={(event) =>
-              setProcessing((current) => ({ ...current, profile_key: event.target.value }))
-            }
-          >
-            {profiles.map((profile) => (
-              <option key={profile.key} value={profile.key}>
-                {profile.label} — {profile.strength}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field field-compact">
-          <span>MP3 bitrate</span>
-          <input
-            type="text"
-            value={processing.export_mp3_bitrate}
-            onChange={(event) =>
-              setProcessing((current) => ({ ...current, export_mp3_bitrate: event.target.value }))
-            }
-          />
-        </label>
-      </div>
-      {selectedProfile ? (
-        <div className="profile-meta-lines">
-          <span><strong>Best for:</strong> {selectedProfile.best_for}</span>
-          <ProfileTierBadge profile={selectedProfile} />
-        </div>
-      ) : null}
-      <div className="inline-popover-actions">
-        <button
-          type="button"
-          className="button-secondary"
-          disabled={disabled}
-          onClick={() => {
-            onConfirm(false, processing)
-            setOpen(false)
-          }}
-        >
-          Create tracks only
-        </button>
-        <button
-          type="button"
-          className="button-primary"
-          disabled={disabled}
-          onClick={() => {
-            onConfirm(true, processing)
-            setOpen(false)
-          }}
-        >
-          Create + queue runs
-        </button>
-        <button
-          type="button"
-          className="button-link"
-          onClick={() => setOpen(false)}
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  )
-}

@@ -33,7 +33,7 @@ class RetentionSettingsUpdateRequest(BaseModel):
 class SettingsResponse(BaseModel):
     storage: StorageSettingsResponse
     retention: RetentionSettingsResponse
-    default_preset: str
+    default_profile: str
     export_mp3_bitrate: str
     profiles: list[ProcessingProfileResponse]
 
@@ -41,5 +41,5 @@ class SettingsResponse(BaseModel):
 class SettingsUpdateRequest(BaseModel):
     storage: StorageSettingsUpdateRequest
     retention: RetentionSettingsUpdateRequest
-    default_preset: str
+    default_profile: str
     export_mp3_bitrate: str

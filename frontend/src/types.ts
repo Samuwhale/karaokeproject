@@ -4,17 +4,14 @@ export type ProcessingProfile = {
   strength: string
   best_for: string
   tradeoff: string
-  rerun_reason: string
   model_filename: string
-  quality_tier: number
-  speed_tier: number
   stems: string[]
 }
 
 export type CachedModel = {
   filename: string
   size_bytes: number
-  is_preset: boolean
+  is_profile: boolean
 }
 
 export type CachedModelsResponse = {
@@ -28,16 +25,9 @@ export type RunProcessingConfig = {
   profile_key: string
   profile_label: string
   model_filename: string
-  export_mp3_bitrate: string
 }
 
 export type RunProcessingConfigInput = {
-  profile_key: string
-  export_mp3_bitrate: string
-  model_filename?: string | null
-}
-
-export type RerunPresetOverride = {
   profile_key: string
   model_filename?: string | null
 }
@@ -55,7 +45,7 @@ export type Settings = {
     temp_max_age_hours: number
     export_bundle_max_age_days: number
   }
-  default_preset: string
+  default_profile: string
   export_mp3_bitrate: string
   profiles: ProcessingProfile[]
 }
@@ -101,7 +91,6 @@ export type Diagnostics = {
 
 export type RunSummary = {
   id: string
-  preset: string
   processing: RunProcessingConfig
   status: string
   progress: number
@@ -230,6 +219,8 @@ export type ImportDraft = {
   duplicate_tracks: ExistingTrackDuplicate[]
 }
 
+export type StagedImport = ImportDraft
+
 export type ResolveYouTubeImportResponse = {
   source_kind: string
   source_title: string
@@ -266,6 +257,7 @@ export type ConfirmImportDraftsInput = {
   draft_ids: string[]
   queue: boolean
   processing?: RunProcessingConfigInput
+  processing_overrides?: Record<string, RunProcessingConfigInput>
 }
 
 export type ConfirmImportDraftsResponse = {
@@ -337,7 +329,6 @@ export type NonKeeperCleanupResponse = {
   bytes_reclaimed: number
 }
 
-export type ExportRunSelector = 'keeper' | 'latest'
 export type ExportOutputMode = 'single-bundle' | 'zip-per-track'
 export type StaticExportArtifactKind = 'source' | 'metadata' | 'mix-wav' | 'mix-mp3'
 export type StemExportArtifactKind = `stem-wav:${string}` | `stem-mp3:${string}`
@@ -351,7 +342,7 @@ export type ExportStemOption = {
 
 export type ExportStemsInput = {
   track_ids: string[]
-  run_selector: ExportRunSelector
+  run_ids?: Record<string, string>
 }
 
 export type ExportStemsResponse = {
@@ -360,9 +351,10 @@ export type ExportStemsResponse = {
 
 export type ExportBundleInput = {
   track_ids: string[]
-  run_selector: ExportRunSelector
+  run_ids?: Record<string, string>
   artifacts: ExportArtifactKind[]
   mode: ExportOutputMode
+  bitrate: string
 }
 
 export type ExportBundleSkip = {
@@ -382,9 +374,10 @@ export type ExportBundleResponse = {
 
 export type ExportPlanInput = {
   track_ids: string[]
-  run_selector: ExportRunSelector
+  run_ids?: Record<string, string>
   artifacts: ExportArtifactKind[]
   mode: ExportOutputMode
+  bitrate: string
 }
 
 export type ExportPlanArtifact = {
@@ -398,8 +391,6 @@ export type ExportPlanTrack = {
   track_id: string
   track_title: string
   run_id: string | null
-  run_selector_used: ExportRunSelector | null
-  fallback_to_latest: boolean
   artifacts: ExportPlanArtifact[]
   skip_reason: string | null
 }
@@ -409,15 +400,14 @@ export type ExportPlanResponse = {
   included_track_count: number
   total_bytes: number
   skipped_track_count: number
-  tracks_using_keeper: number
-  tracks_using_latest_fallback: number
 }
 
-export type RevealFolderKind = 'exports' | 'outputs' | 'track-outputs'
+export type RevealFolderKind = 'exports' | 'outputs' | 'track-outputs' | 'bundle'
 
 export type RevealFolderInput = {
   kind: RevealFolderKind
   track_id?: string | null
+  job_id?: string | null
 }
 
 export type RevealFolderResponse = {

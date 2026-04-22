@@ -13,16 +13,12 @@ class ProcessingProfileResponse(BaseModel):
     strength: str
     best_for: str
     tradeoff: str
-    rerun_reason: str
     model_filename: str
-    quality_tier: int
-    speed_tier: int
     stems: list[str] = []
 
 
 class RunProcessingConfigRequest(BaseModel):
     profile_key: str
-    export_mp3_bitrate: str | None = None
     model_filename: str | None = None
 
 
@@ -30,7 +26,6 @@ class RunProcessingConfigResponse(BaseModel):
     profile_key: str
     profile_label: str
     model_filename: str
-    export_mp3_bitrate: str
 
 
 class ArtifactMetricsResponse(BaseModel):
@@ -58,7 +53,6 @@ class RunArtifactResponse(BaseModel):
 
 class RunSummaryResponse(BaseModel):
     id: str
-    preset: str
     processing: RunProcessingConfigResponse
     status: str
     progress: float
@@ -132,11 +126,6 @@ class TrackDetailResponse(BaseModel):
 
 class CreateRunRequest(BaseModel):
     processing: RunProcessingConfigRequest
-
-
-class RerunWithPresetRequest(BaseModel):
-    profile_key: str
-    model_filename: str | None = None
 
 
 class CreateRunResponse(BaseModel):

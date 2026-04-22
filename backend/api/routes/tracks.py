@@ -19,7 +19,6 @@ from backend.schemas.tracks import (
     CreateRunResponse,
     PurgeNonKeepersResponse,
     QueueRunResponse,
-    RerunWithPresetRequest,
     RunDetailResponse,
     RunMixInput,
     SetKeeperRequest,
@@ -40,7 +39,6 @@ from backend.services.tracks import (
     list_tracks,
     purge_non_keeper_runs,
     request_run_cancellation,
-    rerun_with_preset,
     retry_run,
     serialize_run_detail,
     serialize_run_summary,
@@ -169,26 +167,6 @@ def set_run_note_endpoint(
 def retry_run_endpoint(run_id: str, session: Session = Depends(get_db_session)) -> CreateRunResponse:
     try:
         run = retry_run(session, run_id)
-    except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return CreateRunResponse(run=serialize_run_summary(run))
-
-
-@router.post("/runs/{run_id}/rerun", response_model=CreateRunResponse)
-def rerun_with_preset_endpoint(
-    run_id: str,
-    payload: RerunWithPresetRequest,
-    session: Session = Depends(get_db_session),
-) -> CreateRunResponse:
-    try:
-        run = rerun_with_preset(
-            session,
-            run_id,
-            profile_key=payload.profile_key,
-            model_filename=payload.model_filename,
-        )
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:

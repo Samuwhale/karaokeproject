@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
 
 import type { Settings, StorageBucket, StorageOverview } from '../types'
-import { stemLabel } from '../stems'
 import { formatSize } from './metrics'
 import { Skeleton } from './feedback/Skeleton'
 import { Spinner } from './feedback/Spinner'
-import { ProfileTierBadge } from './ProfileTierBadge'
+import { ModelPicker } from './ModelPicker'
 
 type SettingsPanelProps = {
   settings: Settings | null
@@ -43,7 +42,7 @@ function createDraft(settings: Settings | null): SettingsDraft {
       temp_max_age_hours: settings?.retention.temp_max_age_hours ?? 24,
       export_bundle_max_age_days: settings?.retention.export_bundle_max_age_days ?? 7,
     },
-    default_preset: settings?.default_preset ?? 'standard',
+    default_profile: settings?.default_profile ?? 'standard',
     export_mp3_bitrate: settings?.export_mp3_bitrate ?? '320k',
   }
 }
@@ -78,7 +77,7 @@ export function SettingsPanel({
         settings.storage.model_cache_directory,
         settings.retention.temp_max_age_hours,
         settings.retention.export_bundle_max_age_days,
-        settings.default_preset,
+        settings.default_profile,
         settings.export_mp3_bitrate,
       ].join('|')
     : 'settings'
@@ -150,47 +149,30 @@ export function SettingsPanel({
 
       <form className="import-form" onSubmit={handleSubmit}>
         <div className="processing-grid">
-          <label className="field">
-            <span>Default profile</span>
-            <select
-              value={draft.default_preset}
-              onChange={(event) => updateDraft({ ...draft, default_preset: event.target.value })}
-            >
-              {settings.profiles.map((preset) => (
-                <option key={preset.key} value={preset.key}>
-                  {preset.label} — {preset.strength}
-                </option>
-              ))}
-            </select>
-            {(() => {
-              const current = settings.profiles.find((preset) => preset.key === draft.default_preset)
-              if (!current) return null
-              return (
-                <div className="profile-meta-lines">
-                  <span><strong>Best for:</strong> {current.best_for}</span>
-                  <span><strong>Tradeoff:</strong> {current.tradeoff}</span>
-                  {current.stems.length ? (
-                    <span>
-                      <strong>Produces:</strong>{' '}
-                      {current.stems.map(stemLabel).join(', ')}
-                    </span>
-                  ) : null}
-                  <ProfileTierBadge profile={current} />
-                  <span className="field-hint">Used for new renders unless you change it per track.</span>
-                </div>
-              )
-            })()}
-          </label>
+          <div className="field">
+            <ModelPicker
+              profileKey={draft.default_profile}
+              profiles={settings.profiles}
+              allowCustom={false}
+              labelId="default-model"
+              onProfileChange={(nextKey) => updateDraft({ ...draft, default_profile: nextKey })}
+            />
+            <span className="field-hint">Used for new renders unless you change it per track.</span>
+          </div>
 
           <label className="field">
-            <span>MP3 bitrate</span>
+            <span>Default MP3 bitrate</span>
             <input
               type="text"
               value={draft.export_mp3_bitrate}
               aria-invalid={!bitrateValid}
               onChange={(event) => updateDraft({ ...draft, export_mp3_bitrate: event.target.value })}
             />
-            {!bitrateValid ? <span className="field-error">{BITRATE_HINT}</span> : null}
+            {!bitrateValid ? (
+              <span className="field-error">{BITRATE_HINT}</span>
+            ) : (
+              <span className="field-hint">Used when exporting MP3 artifacts. Overridable per export.</span>
+            )}
           </label>
         </div>
 
@@ -369,7 +351,7 @@ export function SettingsPanel({
               disabled={cleaningLibraryRuns || (outputs?.reclaimable_bytes ?? 0) === 0}
               onClick={() => void onCleanupLibraryRuns()}
             >
-              <span>Purge non-final runs</span>
+              <span>Purge non-final renders</span>
               <span>{cleaningLibraryRuns ? <><Spinner /> Working</> : formatBytes(outputs?.reclaimable_bytes ?? 0)}</span>
             </button>
           </div>

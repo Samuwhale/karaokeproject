@@ -1,5 +1,8 @@
 import type { RunSummary } from '../types'
 
+// Detailed labels used where the user benefits from knowing the exact pipeline
+// stage (Queue dock / list / stepper). Kept fine-grained so a 90-second job
+// still feels alive.
 export const RUN_STATUS_LABELS: Record<string, string> = {
   queued: 'Queued',
   preparing: 'Preparing audio',
@@ -10,11 +13,24 @@ export const RUN_STATUS_LABELS: Record<string, string> = {
   cancelled: 'Cancelled',
 }
 
+// Short labels for compact surfaces (run chips, inline summaries). All active
+// pipeline stages collapse into 'Processing' — the stepper below still shows
+// which stage, so the chip doesn't need to repeat it.
+export const RUN_STATUS_SHORT_LABELS: Record<string, string> = {
+  queued: 'Queued',
+  preparing: 'Processing',
+  separating: 'Processing',
+  exporting: 'Processing',
+  completed: 'Ready',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+}
+
 export const RUN_STAGE_DESCRIPTIONS: Record<string, string> = {
   queued: 'waiting for a worker',
   preparing: 'decoding + normalising',
   separating: 'running the stem model',
-  exporting: 'rendering instrumental + bundle',
+  exporting: 'writing stem exports',
 }
 
 export function describeRun(run: RunSummary): string {

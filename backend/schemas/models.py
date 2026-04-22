@@ -4,7 +4,7 @@ from pydantic import BaseModel
 class CachedModelResponse(BaseModel):
     filename: str
     size_bytes: int
-    is_preset: bool
+    is_profile: bool
 
 
 class CachedModelsResponse(BaseModel):

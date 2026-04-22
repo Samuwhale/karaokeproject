@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from backend.core.config import RuntimeSettings
 from backend.core.stems import (
-    export_stem_kind,
     parse_export_stem_kind,
     stem_display_label,
     stem_display_order,
@@ -26,12 +25,16 @@ from backend.schemas.exports import (
     ExportPlanRequest,
     ExportPlanResponse,
     ExportPlanTrack,
-    ExportRunSelector,
     ExportStemOption,
     ExportStemsRequest,
     ExportStemsResponse,
 )
-from backend.services.mixing import MIX_MP3_KIND, MIX_WAV_KIND, ensure_mix_render
+from backend.services.mixing import (
+    MIX_MP3_KIND,
+    MIX_WAV_KIND,
+    ensure_mix_render,
+    ensure_stem_mp3,
+)
 from backend.services.settings import get_or_create_settings
 from backend.services.storage import apply_storage_retention, resolve_storage_paths
 from backend.services.tracks import get_track, mixable_artifacts
@@ -73,23 +76,22 @@ def bundle_path(session: Session, runtime_settings: RuntimeSettings, job_id: str
     return _bundle_root(storage_paths.exports_dir) / f"{job_id}.zip"
 
 
-def _select_run(
-    track: Track, selector: ExportRunSelector
-) -> tuple[Run | None, bool]:
-    """Return (run, fell_back_to_latest). fell_back_to_latest is True iff the
-    selector was 'keeper' but the track had no keeper set, so we used the
-    latest completed run instead.
+def _select_run(track: Track, override_run_id: str | None) -> Run | None:
+    """Pick which run to export for this track.
+
+    Caller-supplied override takes priority (lets the UI pin a specific run).
+    Otherwise use the most recent completed run — the keeper/Final star is
+    purely a cleanup bookmark and no longer gates export.
     """
-    if selector == ExportRunSelector.keeper and track.keeper_run_id:
+    if override_run_id:
         for run in track.runs:
-            if run.id == track.keeper_run_id:
-                return run, False
+            if run.id == override_run_id and run.status == RunStatus.completed.value:
+                return run
+        return None
     completed = [run for run in track.runs if run.status == RunStatus.completed.value]
     if not completed:
-        return None, False
-    latest = sorted(completed, key=lambda run: run.created_at, reverse=True)[0]
-    fell_back = selector == ExportRunSelector.keeper
-    return latest, fell_back
+        return None
+    return sorted(completed, key=lambda run: run.created_at, reverse=True)[0]
 
 
 @dataclass(frozen=True)
@@ -111,6 +113,7 @@ def _resolve_artifact(
     kind: str,
     *,
     mix_errors: dict[str, str] | None = None,
+    stem_mp3_errors: dict[str, str] | None = None,
 ) -> _ResolvedArtifact:
     if kind == "source":
         source_path = Path(track.source_path)
@@ -134,7 +137,13 @@ def _resolve_artifact(
     stem_parsed = parse_export_stem_kind(kind)
     if stem_parsed is not None:
         fmt, stem_name = stem_parsed
-        return _resolve_stem_artifact(run, kind, stem_name=stem_name, fmt=fmt)
+        return _resolve_stem_artifact(
+            run,
+            kind,
+            stem_name=stem_name,
+            fmt=fmt,
+            encode_error=(stem_mp3_errors or {}).get(stem_name) if fmt == "mp3" else None,
+        )
 
     artifact_kind = _STATIC_RUN_ARTIFACT_KIND.get(kind)
     if artifact_kind is None:
@@ -163,21 +172,55 @@ def _resolve_stem_artifact(
     *,
     stem_name: str,
     fmt: str,
+    encode_error: str | None = None,
 ) -> _ResolvedArtifact:
-    target_kind = export_stem_kind(stem_name, fmt=fmt)
-    artifact = next((a for a in run.artifacts if a.kind == target_kind), None)
-    if artifact is None:
+    if fmt == "wav":
+        from backend.core.stems import export_stem_kind
+
+        target_kind = export_stem_kind(stem_name, fmt="wav")
+        artifact = next((a for a in run.artifacts if a.kind == target_kind), None)
+        if artifact is None:
+            return _ResolvedArtifact(kind, None, False, None, f"run has no {stem_name} stem")
+        artifact_path = Path(artifact.path)
+        if not artifact_path.is_file():
+            return _ResolvedArtifact(kind, None, False, None, "file missing on disk")
+        return _ResolvedArtifact(
+            kind,
+            _ResolvedFile(arcname=_stem_arcname(stem_name, fmt), path=artifact_path),
+            True,
+            artifact_path.stat().st_size,
+            None,
+        )
+
+    # MP3 stems are encoded on demand during build; at plan time we just check
+    # that the underlying WAV stem exists so we can predict availability.
+    from backend.core.stems import export_stem_kind
+
+    wav_kind = export_stem_kind(stem_name, fmt="wav")
+    wav_artifact = next((a for a in run.artifacts if a.kind == wav_kind), None)
+    if wav_artifact is None:
         return _ResolvedArtifact(kind, None, False, None, f"run has no {stem_name} stem")
-    artifact_path = Path(artifact.path)
-    if not artifact_path.is_file():
-        return _ResolvedArtifact(kind, None, False, None, "file missing on disk")
-    return _ResolvedArtifact(
-        kind,
-        _ResolvedFile(arcname=_stem_arcname(stem_name, fmt), path=artifact_path),
-        True,
-        artifact_path.stat().st_size,
-        None,
-    )
+    if not Path(wav_artifact.path).is_file():
+        return _ResolvedArtifact(kind, None, False, None, "stem wav missing on disk")
+
+    if encode_error:
+        return _ResolvedArtifact(kind, None, False, None, f"mp3 encode failed: {encode_error}")
+
+    mp3_kind = export_stem_kind(stem_name, fmt="mp3")
+    mp3_artifact = next((a for a in run.artifacts if a.kind == mp3_kind), None)
+    mp3_path = Path(mp3_artifact.path) if mp3_artifact is not None else None
+    if mp3_path is not None and mp3_path.is_file():
+        return _ResolvedArtifact(
+            kind,
+            _ResolvedFile(arcname=_stem_arcname(stem_name, fmt), path=mp3_path),
+            True,
+            mp3_path.stat().st_size,
+            None,
+        )
+
+    # Plan time (no encode requested yet) — mp3 is achievable but not yet on
+    # disk. Size is unknown until build time encodes it.
+    return _ResolvedArtifact(kind, None, True, None, None)
 
 
 def _resolve_mix_artifact(
@@ -223,6 +266,7 @@ def _render_requested_mixes(
     runtime_settings: RuntimeSettings,
     run: Run,
     requested: list[str],
+    bitrate: str,
 ) -> dict[str, str]:
     """Render any requested mix artifacts and collect per-kind failures."""
     errors: dict[str, str] = {}
@@ -230,9 +274,37 @@ def _render_requested_mixes(
         if kind not in _MIX_KINDS:
             continue
         try:
-            ensure_mix_render(session, runtime_settings, run, _mix_format(kind))
+            fmt = _mix_format(kind)
+            ensure_mix_render(
+                session,
+                runtime_settings,
+                run,
+                fmt,
+                bitrate=bitrate if fmt == "mp3" else None,
+            )
         except Exception as error:  # noqa: BLE001 — surfaced back to user via resolver
             errors[kind] = str(error) or error.__class__.__name__
+    return errors
+
+
+def _encode_requested_stem_mp3s(
+    session: Session,
+    runtime_settings: RuntimeSettings,
+    run: Run,
+    requested: list[str],
+    bitrate: str,
+) -> dict[str, str]:
+    """Encode any requested stem mp3s on demand; collect per-stem failures."""
+    errors: dict[str, str] = {}
+    for kind in requested:
+        parsed = parse_export_stem_kind(kind)
+        if parsed is None or parsed[0] != "mp3":
+            continue
+        stem_name = parsed[1]
+        try:
+            ensure_stem_mp3(session, runtime_settings, run, stem_name, bitrate)
+        except Exception as error:  # noqa: BLE001 — surfaced back to user via resolver
+            errors[stem_name] = str(error) or error.__class__.__name__
     return errors
 
 
@@ -242,12 +314,19 @@ def _resolve_track_files(
     requested: list[str],
     *,
     mix_errors: dict[str, str] | None = None,
+    stem_mp3_errors: dict[str, str] | None = None,
 ) -> tuple[list[_ResolvedFile], list[str]]:
     """Return (files_to_include, missing_artifact_reasons) for one track."""
     files: list[_ResolvedFile] = []
     missing: list[str] = []
     for kind in requested:
-        resolved = _resolve_artifact(track, run, kind, mix_errors=mix_errors)
+        resolved = _resolve_artifact(
+            track,
+            run,
+            kind,
+            mix_errors=mix_errors,
+            stem_mp3_errors=stem_mp3_errors,
+        )
         if resolved.file is not None:
             files.append(resolved.file)
         else:
@@ -286,29 +365,32 @@ def build_export_bundle(
             )
             continue
 
-        run, _fallback = _select_run(track, payload.run_selector)
+        run = _select_run(track, payload.run_ids.get(track_id))
         if run is None:
             skipped.append(
                 ExportBundleSkip(
                     track_id=track_id,
                     track_title=track.title,
-                    reason=(
-                        "no keeper run set"
-                        if payload.run_selector == ExportRunSelector.keeper
-                        else "no completed run yet"
-                    ),
+                    reason="no completed run yet",
                 )
             )
             continue
 
         mix_errors = _render_requested_mixes(
-            session, runtime_settings, run, payload.artifacts
+            session, runtime_settings, run, payload.artifacts, payload.bitrate,
+        )
+        stem_mp3_errors = _encode_requested_stem_mp3s(
+            session, runtime_settings, run, payload.artifacts, payload.bitrate,
         )
 
         files, missing = _resolve_track_files(
-            track, run, payload.artifacts, mix_errors=mix_errors
+            track,
+            run,
+            payload.artifacts,
+            mix_errors=mix_errors,
+            stem_mp3_errors=stem_mp3_errors,
         )
-        if mix_errors or (missing and not files):
+        if missing and not files:
             skipped.append(
                 ExportBundleSkip(
                     track_id=track_id,
@@ -378,8 +460,6 @@ def plan_export_bundle(
     total_bytes = 0
     included = 0
     skipped = 0
-    using_keeper = 0
-    using_latest_fallback = 0
 
     for track_id in payload.track_ids:
         track = get_track(session, track_id)
@@ -389,8 +469,6 @@ def plan_export_bundle(
                     track_id=track_id,
                     track_title="(deleted)",
                     run_id=None,
-                    run_selector_used=None,
-                    fallback_to_latest=False,
                     artifacts=[],
                     skip_reason="track no longer exists",
                 )
@@ -398,34 +476,19 @@ def plan_export_bundle(
             skipped += 1
             continue
 
-        run, fell_back = _select_run(track, payload.run_selector)
+        run = _select_run(track, payload.run_ids.get(track_id))
         if run is None:
             tracks.append(
                 ExportPlanTrack(
                     track_id=track_id,
                     track_title=track.title,
                     run_id=None,
-                    run_selector_used=None,
-                    fallback_to_latest=False,
                     artifacts=[],
-                    skip_reason=(
-                        "no keeper run set"
-                        if payload.run_selector == ExportRunSelector.keeper
-                        else "no completed run yet"
-                    ),
+                    skip_reason="no completed run yet",
                 )
             )
             skipped += 1
             continue
-
-        selector_used = (
-            ExportRunSelector.latest if fell_back else payload.run_selector
-        )
-        if payload.run_selector == ExportRunSelector.keeper:
-            if fell_back:
-                using_latest_fallback += 1
-            else:
-                using_keeper += 1
 
         resolved_artifacts: list[ExportPlanArtifact] = []
         track_bytes = 0
@@ -458,8 +521,6 @@ def plan_export_bundle(
                 track_id=track_id,
                 track_title=track.title,
                 run_id=run.id,
-                run_selector_used=selector_used,
-                fallback_to_latest=fell_back,
                 artifacts=resolved_artifacts,
                 skip_reason=skip_reason,
             )
@@ -470,8 +531,6 @@ def plan_export_bundle(
         included_track_count=included,
         total_bytes=total_bytes,
         skipped_track_count=skipped,
-        tracks_using_keeper=using_keeper,
-        tracks_using_latest_fallback=using_latest_fallback,
     )
 
 
@@ -490,7 +549,7 @@ def list_export_stems(
         track = get_track(session, track_id)
         if track is None:
             continue
-        run, _fell_back = _select_run(track, payload.run_selector)
+        run = _select_run(track, payload.run_ids.get(track_id))
         if run is None:
             continue
         seen_in_run: set[str] = set()
@@ -517,5 +576,5 @@ def list_export_stems(
 def _default_filename(mode: ExportOutputMode, track_count: int) -> str:
     stamp = uuid4().hex[:8]
     if mode == ExportOutputMode.single_bundle:
-        return f"karaoke-bundle-{track_count}-{stamp}.zip"
-    return f"karaoke-zips-{track_count}-{stamp}.zip"
+        return f"stems-bundle-{track_count}-{stamp}.zip"
+    return f"stems-zips-{track_count}-{stamp}.zip"

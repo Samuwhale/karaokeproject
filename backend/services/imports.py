@@ -280,10 +280,25 @@ def confirm_import_drafts(
     drafts = _load_pending_drafts(session, payload.draft_ids)
     _validate_ready_for_confirm(drafts)
 
-    processing: dict[str, str] | None = None
+    processing_by_draft_id: dict[str, dict[str, str]] = {}
     if payload.queue:
         application_settings = get_or_create_settings(session, runtime_settings)
-        processing = build_processing_from_request(payload.processing, application_settings)
+        batch_processing = build_processing_from_request(payload.processing, application_settings)
+        override_ids = set(payload.processing_overrides.keys())
+        draft_ids = {draft.id for draft in drafts}
+        unknown_override_ids = sorted(override_ids - draft_ids)
+        if unknown_override_ids:
+            raise ValueError(
+                "Processing overrides were provided for unknown drafts: "
+                + ", ".join(unknown_override_ids)
+            )
+        for draft in drafts:
+            override = payload.processing_overrides.get(draft.id)
+            processing_by_draft_id[draft.id] = (
+                build_processing_from_request(override, application_settings)
+                if override is not None
+                else batch_processing
+            )
 
     adapter = YtDlpAdapter(runtime_settings)
 
@@ -310,8 +325,8 @@ def confirm_import_drafts(
                 track = _commit_draft_as_new_track(session, runtime_settings, adapter, draft)
                 created += 1
 
-            if payload.queue and processing is not None:
-                create_run(track, processing)
+            if payload.queue:
+                create_run(track, processing_by_draft_id[draft.id])
                 queued += 1
 
             draft.status = DraftStatus.confirmed.value

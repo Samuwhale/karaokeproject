@@ -18,111 +18,103 @@ SUPPORTED_IMPORT_EXTENSIONS = {
 
 
 @dataclass(frozen=True)
-class PresetDefinition:
+class FollowupDefinition:
+    """A second separation pass run on one of the primary model's stems.
+
+    The worker picks the primary stem whose canonical name matches `input_stem`
+    (e.g. "vocals"), feeds its WAV into the followup model, and replaces that
+    primary stem with the followup's outputs in the final stem map. See
+    workers/processor.py for the merge.
+    """
+    input_stem: str
+    model_filename: str
+
+
+@dataclass(frozen=True)
+class ProfileDefinition:
     key: str
     label: str
     strength: str
     best_for: str
     tradeoff: str
-    rerun_reason: str
     model_filename: str
-    quality_tier: int
-    speed_tier: int
     stems: tuple[str, ...]
+    followup: FollowupDefinition | None = None
 
 
-CUSTOM_PRESET_KEY = "custom"
+CUSTOM_PROFILE_KEY = "custom"
 
 
 _VOCAL_INSTRUMENTAL_STEMS: tuple[str, ...] = ("vocals", "instrumental")
+_FOUR_STEM_STEMS: tuple[str, ...] = ("vocals", "drums", "bass", "other")
+_KARAOKE_STEMS: tuple[str, ...] = ("lead_vocals", "backing_vocals", "instrumental")
 
 
-PRESET_DEFINITIONS = (
-    PresetDefinition(
+PROFILE_DEFINITIONS: tuple[ProfileDefinition, ...] = (
+    ProfileDefinition(
         key="preview",
         label="Preview",
         strength="Fastest",
-        best_for="Deciding whether a track is worth a full render.",
-        tradeoff="Lower separation quality. Vocal bleed and artefacts are expected.",
-        rerun_reason="Just want a quick triage pass before committing to a slower model.",
+        best_for="Quick triage — is this track worth a full render?",
+        tradeoff="Vocal bleed and artefacts are expected.",
         model_filename="UVR_MDXNET_KARA_2.onnx",
-        quality_tier=0,
-        speed_tier=3,
         stems=_VOCAL_INSTRUMENTAL_STEMS,
     ),
-    PresetDefinition(
+    ProfileDefinition(
         key="standard",
         label="Standard",
         strength="Balanced default",
-        best_for="Most modern pop, rock, and electronic tracks.",
+        best_for="Most pop, rock, and electronic tracks.",
         tradeoff="Not always clean on dense mixes with heavy vocal layering.",
-        rerun_reason="Balanced starting point when you are not sure what the track needs.",
         model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt",
-        quality_tier=1,
-        speed_tier=2,
         stems=_VOCAL_INSTRUMENTAL_STEMS,
     ),
-    PresetDefinition(
+    ProfileDefinition(
         key="high",
         label="High",
-        strength="Less vocal bleed",
-        best_for="Busy mixes where Standard leaves vocals bleeding into the instrumental.",
-        tradeoff="Noticeably slower to render than Standard.",
-        rerun_reason="Vocals are still audible in the instrumental.",
+        strength="Cleaner split",
+        best_for="Busy mixes where Standard leaves vocals bleeding.",
+        tradeoff="Noticeably slower.",
         model_filename="model_bs_roformer_ep_368_sdr_12.9628.ckpt",
-        quality_tier=2,
-        speed_tier=1,
         stems=_VOCAL_INSTRUMENTAL_STEMS,
     ),
-    PresetDefinition(
-        key="vocal-focus",
-        label="Vocal focus",
-        strength="Cleaner vocals",
-        best_for="Isolating a clean vocal when the vocal is the keeper stem.",
-        tradeoff="The instrumental may sound rougher than with High.",
-        rerun_reason="Vocals sound muddy, thin, or coloured on the previous run.",
-        model_filename="mel_band_roformer_vocals_fv4_gabox.ckpt",
-        quality_tier=2,
-        speed_tier=1,
-        stems=_VOCAL_INSTRUMENTAL_STEMS,
+    ProfileDefinition(
+        key="full-stems",
+        label="Full stems",
+        strength="Four-stem split",
+        best_for="Isolating or turning down drums, bass, or other instruments.",
+        tradeoff="Vocals are slightly less clean than a dedicated vocal model.",
+        model_filename="htdemucs_ft.yaml",
+        stems=_FOUR_STEM_STEMS,
+    ),
+    ProfileDefinition(
+        key="karaoke-stems",
+        label="Karaoke stems",
+        strength="Lead + backing vocals split",
+        best_for="Keeping backing vocals in the mix, or isolating just the lead.",
+        tradeoff="Runs two models back-to-back — roughly twice as slow as Standard.",
+        # Chained pipeline: Standard (bs_roformer) isolates vocals from the
+        # mix, then UVR-BVE-4B splits that vocal stem into lead + backing.
+        # Final output: {instrumental (from Standard), lead_vocals, backing_vocals}.
+        model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+        stems=_KARAOKE_STEMS,
+        followup=FollowupDefinition(
+            input_stem="vocals",
+            model_filename="UVR-BVE-4B_SN-44100-2.pth",
+        ),
     ),
 )
 
 
-PRESET_LOOKUP = {preset.key: preset for preset in PRESET_DEFINITIONS}
+PROFILE_LOOKUP: dict[str, ProfileDefinition] = {
+    profile.key: profile for profile in PROFILE_DEFINITIONS
+}
 
 
-# "standard" is the default because its quality/speed balance fits most imports
-# without the user having to think. Change deliberately — it ships as the starting
+# Standard is the default because its quality/speed balance fits most imports
+# without the user having to think. Change deliberately — it is the starting
 # point for every new track until the user picks something else.
-DEFAULT_PRESET_KEY = "standard"
+DEFAULT_PROFILE_KEY = "standard"
 
 
-MODEL_FILENAME_SUFFIXES = (".ckpt", ".onnx", ".pth")
-
-
-def next_quality_tier(profile_key: str) -> PresetDefinition | None:
-    current = PRESET_LOOKUP.get(profile_key)
-    if current is None:
-        return None
-    higher = [preset for preset in PRESET_DEFINITIONS if preset.quality_tier > current.quality_tier]
-    if not higher:
-        return None
-    return min(higher, key=lambda preset: preset.quality_tier)
-
-
-def alternative_presets(profile_key: str) -> list[PresetDefinition]:
-    """Curated presets the user might switch to after a disappointing run.
-
-    Returns presets with quality tier >= the current preset, excluding the current
-    preset itself. Sorted by quality tier ascending, then label alphabetically so
-    peers are grouped predictably.
-    """
-    current = PRESET_LOOKUP.get(profile_key)
-    threshold = current.quality_tier if current is not None else 0
-    candidates = [
-        preset
-        for preset in PRESET_DEFINITIONS
-        if preset.key != profile_key and preset.quality_tier >= threshold
-    ]
-    return sorted(candidates, key=lambda preset: (preset.quality_tier, preset.label))
+MODEL_FILENAME_SUFFIXES = (".ckpt", ".onnx", ".pth", ".yaml", ".yml")

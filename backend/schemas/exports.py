@@ -9,11 +9,6 @@ from backend.core.stems import (
 )
 
 
-class ExportRunSelector(StrEnum):
-    keeper = "keeper"
-    latest = "latest"
-
-
 STATIC_ARTIFACT_KINDS: frozenset[str] = frozenset({
     "source",
     "metadata",
@@ -42,16 +37,31 @@ class ExportOutputMode(StrEnum):
     zip_per_track = "zip-per-track"
 
 
+def _validate_bitrate(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("bitrate must be a value like '192k' or '320k'.")
+    return cleaned
+
+
 class ExportBundleRequest(BaseModel):
     track_ids: list[str] = Field(min_length=1)
-    run_selector: ExportRunSelector = ExportRunSelector.keeper
+    # Optional map {track_id: run_id} to override per-track run selection.
+    # Tracks not in the map use their latest completed run.
+    run_ids: dict[str, str] = Field(default_factory=dict)
     artifacts: list[str] = Field(min_length=1)
     mode: ExportOutputMode = ExportOutputMode.single_bundle
+    bitrate: str = "320k"
 
     @field_validator("artifacts")
     @classmethod
     def _validate_artifacts(cls, value: list[str]) -> list[str]:
         return [validate_export_artifact_kind(item) for item in value]
+
+    @field_validator("bitrate")
+    @classmethod
+    def _validate_bitrate_field(cls, value: str) -> str:
+        return _validate_bitrate(value)
 
 
 class ExportBundleSkip(BaseModel):
@@ -71,14 +81,20 @@ class ExportBundleResponse(BaseModel):
 
 class ExportPlanRequest(BaseModel):
     track_ids: list[str] = Field(min_length=1)
-    run_selector: ExportRunSelector = ExportRunSelector.keeper
+    run_ids: dict[str, str] = Field(default_factory=dict)
     artifacts: list[str] = Field(min_length=1)
     mode: ExportOutputMode = ExportOutputMode.single_bundle
+    bitrate: str = "320k"
 
     @field_validator("artifacts")
     @classmethod
     def _validate_artifacts(cls, value: list[str]) -> list[str]:
         return [validate_export_artifact_kind(item) for item in value]
+
+    @field_validator("bitrate")
+    @classmethod
+    def _validate_bitrate_field(cls, value: str) -> str:
+        return _validate_bitrate(value)
 
 
 class ExportPlanArtifact(BaseModel):
@@ -92,8 +108,6 @@ class ExportPlanTrack(BaseModel):
     track_id: str
     track_title: str
     run_id: str | None
-    run_selector_used: ExportRunSelector | None
-    fallback_to_latest: bool
     artifacts: list[ExportPlanArtifact]
     skip_reason: str | None = None
 
@@ -103,13 +117,11 @@ class ExportPlanResponse(BaseModel):
     included_track_count: int
     total_bytes: int
     skipped_track_count: int
-    tracks_using_keeper: int
-    tracks_using_latest_fallback: int
 
 
 class ExportStemsRequest(BaseModel):
     track_ids: list[str] = Field(min_length=1)
-    run_selector: ExportRunSelector = ExportRunSelector.keeper
+    run_ids: dict[str, str] = Field(default_factory=dict)
 
 
 class ExportStemOption(BaseModel):

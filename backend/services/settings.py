@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.core.config import RuntimeSettings
-from backend.core.constants import DEFAULT_PRESET_KEY, PRESET_LOOKUP
+from backend.core.constants import DEFAULT_PROFILE_KEY, PROFILE_LOOKUP
 from backend.db.models import AppSettings
 from backend.schemas.settings import (
     RetentionSettingsResponse,
@@ -31,7 +31,7 @@ def get_or_create_settings(session: Session, runtime_settings: RuntimeSettings) 
             model_cache_directory=str(runtime_settings.model_cache_dir.resolve()),
             temp_max_age_hours=DEFAULT_TEMP_MAX_AGE_HOURS,
             export_bundle_max_age_days=DEFAULT_EXPORT_BUNDLE_MAX_AGE_DAYS,
-            default_preset=DEFAULT_PRESET_KEY,
+            default_profile=DEFAULT_PROFILE_KEY,
             export_mp3_bitrate="320k",
         )
         session.add(settings)
@@ -66,6 +66,11 @@ def _backfill_settings(settings: AppSettings, runtime_settings: RuntimeSettings)
         if getattr(settings, field_name) is None:
             setattr(settings, field_name, value)
             changed = True
+    # Migrate default_profile out of any dropped profile key into the nearest
+    # surviving one. Today vocal-focus folds into high.
+    if settings.default_profile not in PROFILE_LOOKUP:
+        settings.default_profile = DEFAULT_PROFILE_KEY
+        changed = True
     return changed
 
 
@@ -84,7 +89,7 @@ def serialize_settings(settings: AppSettings, runtime_settings: RuntimeSettings)
             temp_max_age_hours=settings.temp_max_age_hours or DEFAULT_TEMP_MAX_AGE_HOURS,
             export_bundle_max_age_days=settings.export_bundle_max_age_days or DEFAULT_EXPORT_BUNDLE_MAX_AGE_DAYS,
         ),
-        default_preset=settings.default_preset,
+        default_profile=settings.default_profile,
         export_mp3_bitrate=settings.export_mp3_bitrate,
         profiles=serialize_processing_profiles(),
     )
@@ -95,8 +100,8 @@ def update_settings(
     runtime_settings: RuntimeSettings,
     payload: SettingsUpdateRequest,
 ) -> SettingsResponse:
-    if payload.default_preset not in PRESET_LOOKUP:
-        raise ValueError(f"Unknown preset '{payload.default_preset}'.")
+    if payload.default_profile not in PROFILE_LOOKUP:
+        raise ValueError(f"Unknown profile '{payload.default_profile}'.")
     if payload.retention.temp_max_age_hours < 1:
         raise ValueError("Temp retention must be at least 1 hour.")
     if payload.retention.export_bundle_max_age_days < 1:
@@ -110,7 +115,7 @@ def update_settings(
     settings.model_cache_directory = str(Path(payload.storage.model_cache_directory).expanduser().resolve())
     settings.temp_max_age_hours = payload.retention.temp_max_age_hours
     settings.export_bundle_max_age_days = payload.retention.export_bundle_max_age_days
-    settings.default_preset = payload.default_preset
+    settings.default_profile = payload.default_profile
     settings.export_mp3_bitrate = payload.export_mp3_bitrate.strip() or "320k"
 
     resolve_storage_paths(runtime_settings, settings)

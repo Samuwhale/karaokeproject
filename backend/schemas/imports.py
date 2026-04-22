@@ -103,6 +103,7 @@ class ConfirmImportDraftsRequest(BaseModel):
     draft_ids: list[str]
     queue: bool = False
     processing: RunProcessingConfigRequest | None = None
+    processing_overrides: dict[str, RunProcessingConfigRequest] = Field(default_factory=dict)
 
 
 class ConfirmImportDraftsResponse(BaseModel):

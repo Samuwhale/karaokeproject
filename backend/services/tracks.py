@@ -13,7 +13,6 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.core.config import RuntimeSettings
-from backend.core.constants import CUSTOM_PRESET_KEY
 from backend.core.stems import is_stem_kind
 from backend.db.models import (
     IN_PROGRESS_RUN_STATUSES,
@@ -133,7 +132,6 @@ def _run_note(run: Run) -> str:
 def serialize_run_summary(run: Run) -> RunSummaryResponse:
     return RunSummaryResponse(
         id=run.id,
-        preset=run.preset,
         processing=serialize_processing_config(resolve_run_processing(run)),
         status=run.status,
         progress=run.progress,
@@ -231,11 +229,17 @@ def set_run_mix(session: Session, track_id: str, run_id: str, payload: RunMixInp
 def serialize_track_summary(track: Track) -> TrackSummaryResponse:
     runs = _sorted_runs(track)
     latest_run = runs[0] if runs else None
-    has_custom_mix = False
-    if track.keeper_run_id:
-        keeper = next((run for run in runs if run.id == track.keeper_run_id), None)
-        if keeper is not None:
-            has_custom_mix = not serialize_run_mix(keeper).is_default
+    # Reflect the run the user is likely looking at — the latest completed run.
+    # Keeper is a cleanup bookmark now, not an export gate, so it no longer
+    # drives this flag.
+    latest_completed = next(
+        (run for run in runs if run.status == RunStatus.completed.value),
+        None,
+    )
+    has_custom_mix = (
+        latest_completed is not None
+        and not serialize_run_mix(latest_completed).is_default
+    )
     return TrackSummaryResponse(
         id=track.id,
         title=track.title,
@@ -340,7 +344,7 @@ def create_run(track: Track, processing: dict[str, str]) -> Run:
     track.updated_at = datetime.utcnow()
     run = Run(
         track_id=track.id,
-        preset=processing["profile_key"],
+        profile_key=processing["profile_key"],
         status=RunStatus.queued.value,
         progress=0.0,
         status_message="",
@@ -512,39 +516,6 @@ def retry_run(session: Session, run_id: str) -> Run:
     track = source_run.track
     processing: dict[str, str] = {str(key): str(value) for key, value in stored_processing.items()}
     new_run = create_run(track, processing)
-    session.commit()
-    session.refresh(new_run)
-    return new_run
-
-
-def rerun_with_preset(
-    session: Session,
-    run_id: str,
-    *,
-    profile_key: str,
-    model_filename: str | None = None,
-) -> Run:
-    source_run = session.get(Run, run_id, options=[selectinload(Run.track)])
-    if source_run is None:
-        raise LookupError(f"Run '{run_id}' does not exist.")
-    if source_run.status != RunStatus.completed.value:
-        raise ValueError("Only completed runs can be re-run with another preset.")
-
-    source_processing = resolve_run_processing(source_run)
-    if profile_key == CUSTOM_PRESET_KEY and model_filename is None:
-        raise ValueError("A model_filename is required when profile_key is 'custom'.")
-    if (
-        profile_key == source_processing["profile_key"]
-        and (profile_key != CUSTOM_PRESET_KEY or model_filename == source_processing["model_filename"])
-    ):
-        raise ValueError("Pick a different preset or model to re-run with.")
-
-    processing = build_processing_config(
-        profile_key,
-        source_processing["export_mp3_bitrate"],
-        model_filename,
-    )
-    new_run = create_run(source_run.track, processing)
     session.commit()
     session.refresh(new_run)
     return new_run
@@ -739,7 +710,7 @@ def write_metadata_file(track: Track, run: Run, target_path: Path) -> None:
                 },
                 "run": {
                     "id": run.id,
-                    "preset": run.preset,
+                    "profile_key": run.profile_key,
                     "status": run.status,
                     "progress": run.progress,
                     "status_message": run.status_message,

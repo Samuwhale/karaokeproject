@@ -2,9 +2,9 @@
 
 ## Objective
 
-Document the cheapest sensible way to host KaraokeProject online when the product is ready for a hosted alpha.
+This is currently a deferred task, but eventually we want to host this online publically.
 
-This document is about deployment shape, cost, and infrastructure boundaries. It is not the product roadmap. The roadmap lives in [ROADMAP.md](/Users/samuel/Documents/Projects/karaokeproject/ROADMAP.md).
+This document is about deployment shape, cost, and infrastructure boundaries. It is not the product roadmap.
 
 ## What This Project Needs From Hosting
 

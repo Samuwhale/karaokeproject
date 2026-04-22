@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -9,7 +8,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from backend.core.config import RuntimeSettings
-from backend.db.models import AppSettings, IN_PROGRESS_RUN_STATUSES, Run, Track
+from backend.db.models import AppSettings, IN_PROGRESS_RUN_STATUSES, Track
 from backend.schemas.storage import (
     ExportBundleCleanupResponse,
     NonKeeperCleanupResponse,
@@ -19,9 +18,6 @@ from backend.schemas.storage import (
     TempCleanupResponse,
 )
 from backend.services.tracks import list_tracks, purge_non_keeper_runs
-
-
-LEGACY_EXPORT_BUNDLE_PATTERN = re.compile(r".+-[0-9a-f]{32}\.zip$")
 
 
 @dataclass(frozen=True)
@@ -43,6 +39,7 @@ class StoragePaths:
             self.uploads_dir,
             self.outputs_dir,
             self.exports_dir,
+            self.export_bundles_dir,
             self.temp_dir,
             self.model_cache_dir,
         ):
@@ -96,19 +93,10 @@ def entry_count(path: Path) -> int:
 
 
 def _iter_export_bundle_files(paths: StoragePaths) -> list[Path]:
-    files: list[Path] = []
     bundle_dir = paths.export_bundles_dir
     if bundle_dir.is_dir():
-        files.extend(sorted(path for path in bundle_dir.iterdir() if path.is_file() and path.suffix == ".zip"))
-    if paths.exports_dir.is_dir():
-        files.extend(
-            sorted(
-                path
-                for path in paths.exports_dir.iterdir()
-                if path.is_file() and LEGACY_EXPORT_BUNDLE_PATTERN.fullmatch(path.name)
-            )
-        )
-    return files
+        return sorted(path for path in bundle_dir.iterdir() if path.is_file() and path.suffix == ".zip")
+    return []
 
 
 def _delete_path(path: Path) -> tuple[int, int]:
@@ -120,18 +108,6 @@ def _delete_path(path: Path) -> tuple[int, int]:
         shutil.rmtree(path, ignore_errors=True)
     else:
         path.unlink(missing_ok=True)
-    return deleted, reclaimed
-
-
-def _delete_children(directory: Path) -> tuple[int, int]:
-    if not directory.is_dir():
-        return 0, 0
-    deleted = 0
-    reclaimed = 0
-    for child in list(directory.iterdir()):
-        child_deleted, child_reclaimed = _delete_path(child)
-        deleted += child_deleted
-        reclaimed += child_reclaimed
     return deleted, reclaimed
 
 
@@ -238,8 +214,7 @@ def collect_storage_overview(
         if run.output_directory
     }
     non_keeper_reclaimable = sum(_non_keeper_reclaimable_bytes(track) for track in library_tracks)
-    export_bundle_paths = {Path(artifact.path) for track in library_tracks for run in track.runs for artifact in run.artifacts if artifact.kind == "package"}
-    export_bundle_paths.update(_iter_export_bundle_files(paths))
+    export_bundle_paths = set(_iter_export_bundle_files(paths))
 
     items = [
         StorageBucketResponse(
@@ -266,7 +241,7 @@ def collect_storage_overview(
         StorageBucketResponse(
             key=StorageBucketKey.export_bundles,
             label="Export bundles",
-            path=str(paths.exports_dir),
+            path=str(paths.export_bundles_dir),
             total_bytes=_sum_unique_paths(export_bundle_paths),
             reclaimable_bytes=_sum_unique_paths(export_bundle_paths),
         ),

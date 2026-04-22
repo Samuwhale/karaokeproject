@@ -14,11 +14,13 @@ type CanonicalStem = {
 const CANONICAL_STEMS: readonly CanonicalStem[] = [
   { name: 'instrumental', label: 'Instrumental', displayOrder: 0 },
   { name: 'vocals', label: 'Vocals', displayOrder: 1 },
-  { name: 'drums', label: 'Drums', displayOrder: 2 },
-  { name: 'bass', label: 'Bass', displayOrder: 3 },
-  { name: 'other', label: 'Other', displayOrder: 4 },
-  { name: 'piano', label: 'Piano', displayOrder: 5 },
-  { name: 'guitar', label: 'Guitar', displayOrder: 6 },
+  { name: 'lead_vocals', label: 'Lead vocals', displayOrder: 2 },
+  { name: 'backing_vocals', label: 'Backing vocals', displayOrder: 3 },
+  { name: 'drums', label: 'Drums', displayOrder: 4 },
+  { name: 'bass', label: 'Bass', displayOrder: 5 },
+  { name: 'other', label: 'Other', displayOrder: 6 },
+  { name: 'piano', label: 'Piano', displayOrder: 7 },
+  { name: 'guitar', label: 'Guitar', displayOrder: 8 },
 ]
 
 const BY_NAME = new Map(CANONICAL_STEMS.map((stem) => [stem.name, stem] as const))

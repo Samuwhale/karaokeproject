@@ -54,11 +54,10 @@ export function QueueList({
     return (
       <div className="track-list-wrap">
         <div className="section-head">
-          <h2>Queue</h2>
+          <h2>Activity</h2>
         </div>
         <p className="empty-state">
-          Nothing running. Confirm drafts in Inbox or queue a new render from the Library to see
-          live progress here.
+          Nothing active. Queue a render from staged imports or from a track to see progress here.
         </p>
       </div>
     )
@@ -67,10 +66,10 @@ export function QueueList({
   return (
     <div className="track-list-wrap">
       <div className="section-head">
-        <h2>Queue</h2>
+        <h2>Activity</h2>
       </div>
 
-      <div className="inbox-controls">
+      <div className="list-controls">
         <label className="checkbox-row">
           <input
             type="checkbox"
@@ -102,7 +101,7 @@ export function QueueList({
 
           return (
             <article key={run.id} className={rowClassName}>
-              <label className="inbox-row-check">
+              <label className="list-row-check">
                 <input
                   type="checkbox"
                   checked={selected}
@@ -145,7 +144,7 @@ export function QueueList({
                           <Spinner /> Retrying
                         </>
                       ) : run.status === 'cancelled' ? (
-                        'Run again'
+                        'Render Again'
                       ) : (
                         'Retry'
                       )}
@@ -165,7 +164,7 @@ export function QueueList({
                     disabled={cancelling}
                     onClick={() => void onCancelRun(run.id)}
                   >
-                    {cancelling ? 'Cancelling…' : 'Cancel'}
+                    {cancelling ? 'Cancelling…' : 'Cancel Render'}
                   </button>
                 )}
               </div>

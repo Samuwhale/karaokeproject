@@ -32,18 +32,22 @@ _COLUMN_ADDITIONS: tuple[tuple[str, str, str], ...] = (
 )
 
 
-_PRESET_KEY_RENAMES: dict[str, str] = {
+_PROFILE_KEY_RENAMES: dict[str, str] = {
     "fast-preview": "preview",
     "balanced": "standard",
     "clean-instrumental": "high",
     "maximum": "high",
+    # "vocal-focus" was dropped in favour of "high"; existing runs keep their
+    # original label in metadata but their key migrates so lookups still work.
+    "vocal-focus": "high",
 }
 
-_PRESET_LABEL_RENAMES: dict[str, str] = {
+_PROFILE_LABEL_RENAMES: dict[str, str] = {
     "Fast Preview": "Preview",
     "Balanced": "Standard",
     "Clean Instrumental": "High",
     "Maximum": "High",
+    "Vocal focus": "High",
 }
 
 
@@ -60,9 +64,9 @@ def _apply_schema_migrations(engine: Engine) -> None:
             connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
 
 
-def _migrate_preset_keys(engine: Engine) -> None:
+def _migrate_profile_keys(engine: Engine) -> None:
     with engine.begin() as connection:
-        for legacy, current in _PRESET_KEY_RENAMES.items():
+        for legacy, current in _PROFILE_KEY_RENAMES.items():
             connection.execute(
                 text("UPDATE runs SET preset = :current WHERE preset = :legacy"),
                 {"current": current, "legacy": legacy},
@@ -89,12 +93,16 @@ def _migrate_preset_keys(engine: Engine) -> None:
                 continue
             changed = False
             legacy_key = processing.get("profile_key")
-            if isinstance(legacy_key, str) and legacy_key in _PRESET_KEY_RENAMES:
-                processing["profile_key"] = _PRESET_KEY_RENAMES[legacy_key]
+            if isinstance(legacy_key, str) and legacy_key in _PROFILE_KEY_RENAMES:
+                processing["profile_key"] = _PROFILE_KEY_RENAMES[legacy_key]
                 changed = True
             legacy_label = processing.get("profile_label")
-            if isinstance(legacy_label, str) and legacy_label in _PRESET_LABEL_RENAMES:
-                processing["profile_label"] = _PRESET_LABEL_RENAMES[legacy_label]
+            if isinstance(legacy_label, str) and legacy_label in _PROFILE_LABEL_RENAMES:
+                processing["profile_label"] = _PROFILE_LABEL_RENAMES[legacy_label]
+                changed = True
+            # Stale export_mp3_bitrate is harmless but noise; strip it.
+            if "export_mp3_bitrate" in processing:
+                processing.pop("export_mp3_bitrate")
                 changed = True
             if not changed:
                 continue
@@ -110,4 +118,4 @@ def init_database() -> None:
 
     Base.metadata.create_all(bind=engine)
     _apply_schema_migrations(engine)
-    _migrate_preset_keys(engine)
+    _migrate_profile_keys(engine)

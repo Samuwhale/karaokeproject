@@ -25,11 +25,13 @@ class RevealFolderKind(StrEnum):
     exports = "exports"
     outputs = "outputs"
     track_outputs = "track-outputs"
+    bundle = "bundle"
 
 
 class RevealFolderRequest(BaseModel):
     kind: RevealFolderKind
     track_id: str | None = None
+    job_id: str | None = None
 
 
 class RevealFolderResponse(BaseModel):

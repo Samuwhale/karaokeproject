@@ -18,13 +18,20 @@ type CompareViewProps = {
   onSetKeeper: (runId: string) => void | Promise<void>
 }
 
-// Prefer the mix preview, then stems shared between both runs, then source.
-// Stems overlay dynamically: two 4-stem runs get four overlays; a 2-stem
-// vs 4-stem comparison gets only the stems both runs actually produced.
-const STATIC_OVERLAY_ORDER = ['export-mix-mp3', 'source'] as const
+// Prefer the canonical whole-run mix render, then stems shared between both
+// runs, then the source file.
+const PREFERRED_MIX_KIND = 'export-mix-wav'
+const STATIC_OVERLAY_ORDER = ['source'] as const
 
 function findArtifact(run: RunDetail, kind: string): RunArtifact | null {
   return run.artifacts.find((artifact) => artifact.kind === kind) ?? null
+}
+
+function sharedPreferredMixKind(runA: RunDetail, runB: RunDetail): string | null {
+  if (findArtifact(runA, PREFERRED_MIX_KIND) && findArtifact(runB, PREFERRED_MIX_KIND)) {
+    return PREFERRED_MIX_KIND
+  }
+  return null
 }
 
 function pairedArtifacts(runA: RunDetail, runB: RunDetail) {
@@ -34,12 +41,13 @@ function pairedArtifacts(runA: RunDetail, runB: RunDetail) {
     .filter((kind) => isStemKind(kind) && kindsA.has(kind))
     .sort(compareStemKinds)
 
-  const mix = STATIC_OVERLAY_ORDER[0]
-  const source = STATIC_OVERLAY_ORDER[1]
   const orderedKinds: string[] = []
-  if (kindsA.has(mix) && findArtifact(runB, mix)) orderedKinds.push(mix)
+  const mixKind = sharedPreferredMixKind(runA, runB)
+  if (mixKind) orderedKinds.push(mixKind)
   orderedKinds.push(...sharedStemKinds)
-  if (kindsA.has(source) && findArtifact(runB, source)) orderedKinds.push(source)
+  for (const kind of STATIC_OVERLAY_ORDER) {
+    if (kindsA.has(kind) && findArtifact(runB, kind)) orderedKinds.push(kind)
+  }
 
   return orderedKinds.flatMap((kind) => {
     const a = findArtifact(runA, kind)
@@ -84,10 +92,13 @@ function matchedMetrics(runA: RunDetail, runB: RunDetail): {
   metricsA: ArtifactMetrics
   metricsB: ArtifactMetrics
 } | null {
-  const pairs = pairedArtifacts(runA, runB)
-  for (const pair of pairs) {
-    if (pair.a.metrics && pair.b.metrics) {
-      return { kind: pair.kind, metricsA: pair.a.metrics, metricsB: pair.b.metrics }
+  const artifactA = findArtifact(runA, PREFERRED_MIX_KIND)
+  const artifactB = findArtifact(runB, PREFERRED_MIX_KIND)
+  if (artifactA?.metrics && artifactB?.metrics) {
+    return {
+      kind: PREFERRED_MIX_KIND,
+      metricsA: artifactA.metrics,
+      metricsB: artifactB.metrics,
     }
   }
   return null
@@ -103,9 +114,10 @@ export function CompareView({
   const matched = matchedMetrics(runA, runB)
   const metricsA = matched?.metricsA ?? null
   const metricsB = matched?.metricsB ?? null
+  const metricsUnavailable = !matched
   const pairs = pairedArtifacts(runA, runB)
 
-  function renderKeeperButton(run: RunDetail) {
+  function renderFinalRenderButton(run: RunDetail) {
     const isKeeper = keeperRunId === run.id
     return (
       <button
@@ -113,9 +125,9 @@ export function CompareView({
         className={`button-secondary compare-keeper-action ${isKeeper ? 'compare-keeper-active' : ''}`}
         disabled={settingKeeper}
         onClick={() => void onSetKeeper(run.id)}
-        title={isKeeper ? 'Already marked as final' : 'Mark this run as final'}
+        title={isKeeper ? 'Already marked as final' : 'Mark as final render'}
       >
-        {isKeeper ? '★ Final' : 'Set as final'}
+        {isKeeper ? 'Final Render' : 'Mark Final'}
       </button>
     )
   }
@@ -124,16 +136,19 @@ export function CompareView({
     <section className="compare-view">
       <header className="compare-view-head">
         <h3>Compare</h3>
+        <p className="compare-view-hint">
+          Render metrics are shown only when both renders have a rendered mixdown.
+        </p>
       </header>
 
       <div className="compare-pick">
         <div className="compare-pick-cell">
           <span>{runA.processing.profile_label}</span>
-          {renderKeeperButton(runA)}
+          {renderFinalRenderButton(runA)}
         </div>
         <div className="compare-pick-cell">
           <span>{runB.processing.profile_label}</span>
-          {renderKeeperButton(runB)}
+          {renderFinalRenderButton(runB)}
         </div>
       </div>
 
@@ -141,27 +156,21 @@ export function CompareView({
         <thead>
           <tr>
             <th scope="col"></th>
-            <th scope="col">This run</th>
-            <th scope="col">Compared run</th>
+            <th scope="col">Selected render</th>
+            <th scope="col">Compared render</th>
           </tr>
         </thead>
         <tbody>
           <CompareRow
-            label="Profile"
+            label="Model"
             valueA={runA.processing.profile_label}
             valueB={runB.processing.profile_label}
             compareAsValue
           />
           <CompareRow
-            label="Model"
+            label="Model file"
             valueA={runA.processing.model_filename}
             valueB={runB.processing.model_filename}
-            compareAsValue
-          />
-          <CompareRow
-            label="MP3 bitrate"
-            valueA={runA.processing.export_mp3_bitrate}
-            valueB={runB.processing.export_mp3_bitrate}
             compareAsValue
           />
           <tr className="compare-section-divider">
@@ -169,35 +178,35 @@ export function CompareView({
           </tr>
           <CompareRow
             label="Loudness"
-            valueA={formatLufs(metricsA?.integrated_lufs) ?? '—'}
-            valueB={formatLufs(metricsB?.integrated_lufs) ?? '—'}
-            delta={formatDelta(metricsA?.integrated_lufs, metricsB?.integrated_lufs, 'LU')}
+            valueA={metricsUnavailable ? '—' : formatLufs(metricsA?.integrated_lufs) ?? '—'}
+            valueB={metricsUnavailable ? '—' : formatLufs(metricsB?.integrated_lufs) ?? '—'}
+            delta={metricsUnavailable ? null : formatDelta(metricsA?.integrated_lufs, metricsB?.integrated_lufs, 'LU')}
           />
           <CompareRow
             label="True peak"
-            valueA={formatTruePeak(metricsA?.true_peak_dbfs) ?? '—'}
-            valueB={formatTruePeak(metricsB?.true_peak_dbfs) ?? '—'}
-            delta={formatDelta(metricsA?.true_peak_dbfs, metricsB?.true_peak_dbfs, 'dB')}
+            valueA={metricsUnavailable ? '—' : formatTruePeak(metricsA?.true_peak_dbfs) ?? '—'}
+            valueB={metricsUnavailable ? '—' : formatTruePeak(metricsB?.true_peak_dbfs) ?? '—'}
+            delta={metricsUnavailable ? null : formatDelta(metricsA?.true_peak_dbfs, metricsB?.true_peak_dbfs, 'dB')}
           />
           <CompareRow
             label="Duration"
-            valueA={formatDuration(metricsA?.duration_seconds) ?? '—'}
-            valueB={formatDuration(metricsB?.duration_seconds) ?? '—'}
+            valueA={metricsUnavailable ? '—' : formatDuration(metricsA?.duration_seconds) ?? '—'}
+            valueB={metricsUnavailable ? '—' : formatDuration(metricsB?.duration_seconds) ?? '—'}
           />
           <CompareRow
             label="Sample rate"
-            valueA={formatSampleRate(metricsA?.sample_rate) ?? '—'}
-            valueB={formatSampleRate(metricsB?.sample_rate) ?? '—'}
+            valueA={metricsUnavailable ? '—' : formatSampleRate(metricsA?.sample_rate) ?? '—'}
+            valueB={metricsUnavailable ? '—' : formatSampleRate(metricsB?.sample_rate) ?? '—'}
           />
           <CompareRow
             label="Channels"
-            valueA={formatChannels(metricsA?.channels) ?? '—'}
-            valueB={formatChannels(metricsB?.channels) ?? '—'}
+            valueA={metricsUnavailable ? '—' : formatChannels(metricsA?.channels) ?? '—'}
+            valueB={metricsUnavailable ? '—' : formatChannels(metricsB?.channels) ?? '—'}
           />
           <CompareRow
             label="Size"
-            valueA={formatSize(metricsA?.size_bytes) ?? '—'}
-            valueB={formatSize(metricsB?.size_bytes) ?? '—'}
+            valueA={metricsUnavailable ? '—' : formatSize(metricsA?.size_bytes) ?? '—'}
+            valueB={metricsUnavailable ? '—' : formatSize(metricsB?.size_bytes) ?? '—'}
           />
         </tbody>
       </table>

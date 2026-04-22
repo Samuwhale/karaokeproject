@@ -1,12 +1,11 @@
-import { startTransition, useEffect, useMemo, useState } from 'react'
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 
 import './App.css'
-import { ApplyArtistPrompt, BatchActionBar, ConfirmDraftsPrompt } from './components/BatchActionBar'
+import { ActivityPanel } from './components/ActivityPanel'
+import { ApplyArtistPrompt, BatchActionBar, OverflowMenu } from './components/BatchActionBar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ExportModal } from './components/ExportModal'
-import { ImportModal } from './components/ImportModal'
-import { InboxList } from './components/InboxList'
-import { QueueList } from './components/QueueList'
+import { ImportFlowDialog } from './components/ImportFlowDialog'
 import { SettingsDrawer } from './components/SettingsDrawer'
 import { TrackDetailPanel } from './components/TrackDetailPanel'
 import { DEFAULT_LIBRARY_VIEW, TrackList, applyLibraryView } from './components/TrackList'
@@ -14,14 +13,12 @@ import type { LibraryView } from './components/TrackList'
 import { ConfirmInline } from './components/feedback/ConfirmInline'
 import { ToastStack } from './components/feedback/ToastStack'
 import { useDashboardData } from './hooks/useDashboardData'
-import type { Connection, DashboardSurface } from './hooks/useDashboardData'
+import type { Connection } from './hooks/useDashboardData'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import type { RunProcessingConfigInput } from './types'
 
 function App() {
   const {
-    activeSurface,
-    focusSurface,
     diagnostics,
     settings,
     storageOverview,
@@ -29,14 +26,11 @@ function App() {
     drafts,
     queueRuns,
     cachedModels,
-    draftsNeedingAttention,
     selectedTrack,
     selectedTrackId,
     selectedRunId,
-    selectedDraftIds,
     selectedLibraryIds,
     selectedQueueRunIds,
-    toggleDraftSelected,
     toggleLibrarySelected,
     toggleQueueRunSelected,
     clearSelection,
@@ -51,7 +45,6 @@ function App() {
     creatingRun,
     cancellingRunId,
     retryingRunId,
-    rerunningRunId,
     savingSettings,
     cleaningTempStorage,
     cleaningExportBundles,
@@ -67,14 +60,11 @@ function App() {
     handleResolveYouTube,
     handleResolveLocalImport,
     handleUpdateDraft,
-    handleBatchUpdateDrafts,
     handleDiscardDraft,
-    handleBatchDiscardDrafts,
     handleConfirmDrafts,
     handleCreateRun,
     handleCancelRun,
     handleRetryRun,
-    handleRerunWithPreset,
     handleDismissRun,
     handleRevealFolder,
     handleSaveSettings,
@@ -100,15 +90,90 @@ function App() {
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [dragOverlayActive, setDragOverlayActive] = useState(false)
+  const dragCounterRef = useRef(0)
   const [exportTargetIds, setExportTargetIds] = useState<string[] | null>(null)
   const [libraryView, setLibraryView] = useState<LibraryView>(DEFAULT_LIBRARY_VIEW)
+  const [librarySelectionMode, setLibrarySelectionMode] = useState(false)
+
+  useEffect(() => {
+    if (importOpen) return
+
+    function hasFiles(event: DragEvent) {
+      return Array.from(event.dataTransfer?.types ?? []).includes('Files')
+    }
+
+    function onDragEnter(event: DragEvent) {
+      if (!hasFiles(event)) return
+      dragCounterRef.current += 1
+      if (dragCounterRef.current === 1) setDragOverlayActive(true)
+    }
+    function onDragLeave(event: DragEvent) {
+      if (!hasFiles(event)) return
+      dragCounterRef.current = Math.max(0, dragCounterRef.current - 1)
+      if (dragCounterRef.current === 0) setDragOverlayActive(false)
+    }
+    function onDragOver(event: DragEvent) {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+    }
+    function onDrop(event: DragEvent) {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      dragCounterRef.current = 0
+      setDragOverlayActive(false)
+      const files = Array.from(event.dataTransfer?.files ?? []).filter((file) =>
+        /^(audio|video)\//.test(file.type),
+      )
+      if (files.length) {
+        setImportOpen(true)
+        handleResolveLocalImport(files).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Drop import failed.'
+          pushToast('error', message)
+        })
+      }
+    }
+
+    window.addEventListener('dragenter', onDragEnter)
+    window.addEventListener('dragleave', onDragLeave)
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter)
+      window.removeEventListener('dragleave', onDragLeave)
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('drop', onDrop)
+      dragCounterRef.current = 0
+      setDragOverlayActive(false)
+    }
+  }, [handleResolveLocalImport, importOpen, pushToast])
+
+  useEffect(() => {
+    function onPaste(event: ClipboardEvent) {
+      const target = event.target as HTMLElement | null
+      if (target) {
+        const tag = target.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return
+      }
+      const text = event.clipboardData?.getData('text/plain').trim() ?? ''
+      if (!text || !/^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\b/i.test(text)) return
+      event.preventDefault()
+      setImportOpen(true)
+      handleResolveYouTube(text).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : 'Paste import failed.'
+        pushToast('error', message)
+      })
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, [handleResolveYouTube, pushToast])
 
   const visibleTracks = useMemo(() => applyLibraryView(tracks, libraryView), [tracks, libraryView])
 
   const defaultProcessing: RunProcessingConfigInput = {
-    profile_key: settings?.default_preset ?? 'standard',
-    export_mp3_bitrate: settings?.export_mp3_bitrate ?? '320k',
+    profile_key: settings?.default_profile ?? 'standard',
   }
+  const defaultBitrate = settings?.export_mp3_bitrate ?? '320k'
 
   function selectTrackAt(index: number) {
     if (index < 0 || index >= visibleTracks.length) return
@@ -125,23 +190,18 @@ function App() {
 
   useKeyboardShortcuts({
     onNavigateNext: () => {
-      if (activeSurface !== 'library' || !visibleTracks.length) return
+      if (!visibleTracks.length) return
       const idx = currentTrackIndex()
       selectTrackAt(idx < 0 ? 0 : Math.min(idx + 1, visibleTracks.length - 1))
     },
     onNavigatePrev: () => {
-      if (activeSurface !== 'library' || !visibleTracks.length) return
+      if (!visibleTracks.length) return
       const idx = currentTrackIndex()
       selectTrackAt(idx <= 0 ? 0 : idx - 1)
     },
     onRerun: () => {
       if (!selectedTrack || creatingRun || !settings) return
       void handleCreateRun(selectedTrack.id, defaultProcessing)
-    },
-    onSurfaceByIndex: (index) => {
-      if (index === 0) focusSurface('inbox')
-      else if (index === 1) focusSurface('queue')
-      else if (index === 2) focusSurface('library')
     },
     onSelectRunByIndex: (index) => {
       const run = selectedTrack?.runs[index]
@@ -163,22 +223,18 @@ function App() {
     onEscape: () => {
       if (settingsOpen) setSettingsOpen(false)
       else if (importOpen) setImportOpen(false)
-      else clearSelection(activeSurface)
+      else {
+        clearSelection('library')
+        setLibrarySelectionMode(false)
+      }
     },
   })
 
   const hasFirstSync = connection.lastSyncAt > 0
   const setupRequired = hasFirstSync && diagnostics ? !diagnostics.app_ready : false
 
-  const draftSelectionList = Array.from(selectedDraftIds)
   const librarySelectionList = Array.from(selectedLibraryIds)
   const queueSelectionList = Array.from(selectedQueueRunIds)
-
-  const selectedDrafts = drafts.filter((draft) => selectedDraftIds.has(draft.id))
-  const confirmDisabled =
-    !selectedDrafts.length ||
-    selectedDrafts.some((draft) => draft.duplicate_action === null) ||
-    confirmingDrafts
 
   return (
     <ErrorBoundary>
@@ -203,91 +259,51 @@ function App() {
           </div>
         </header>
 
-        <nav className="tab-strip" role="tablist" aria-label="Workspace">
-          <TabButton
-            surface="inbox"
-            active={activeSurface === 'inbox'}
-            label="Inbox"
-            count={drafts.length}
-            countTone={draftsNeedingAttention > 0 ? 'attention' : undefined}
-            countTitle={
-              draftsNeedingAttention > 0
-                ? `${draftsNeedingAttention} draft${draftsNeedingAttention === 1 ? '' : 's'} need an action before confirming`
-                : undefined
-            }
-            onSelect={focusSurface}
-          />
-          <TabButton
-            surface="queue"
-            active={activeSurface === 'queue'}
-            label="Queue"
-            count={queueRuns.length}
-            onSelect={focusSurface}
-          />
-          <TabButton
-            surface="library"
-            active={activeSurface === 'library'}
-            label="Library"
-            count={tracks.length}
-            onSelect={focusSurface}
-          />
-        </nav>
-
         <main className="workspace">
           <section className="column column-left">
-            {activeSurface === 'inbox' ? (
-              <InboxList
-                drafts={drafts}
-                selectedIds={selectedDraftIds}
-                onToggleSelect={toggleDraftSelected}
-                onSelectAll={(ids) => selectAll('inbox', ids)}
-                onClearSelection={() => clearSelection('inbox')}
-                onUpdateDraft={handleUpdateDraft}
-                onDiscardDraft={handleDiscardDraft}
-                onOpenImport={() => setImportOpen(true)}
-              />
-            ) : activeSurface === 'queue' ? (
-              <QueueList
-                entries={queueRuns}
-                selectedIds={selectedQueueRunIds}
-                onToggleSelect={toggleQueueRunSelected}
-                onSelectAll={(ids) => selectAll('queue', ids)}
-                onClearSelection={() => clearSelection('queue')}
-                onSelectTrack={(trackId) => {
-                  focusSurface('library')
-                  startTransition(() => {
-                    handleSelectTrack(trackId)
-                  })
-                }}
-                onCancelRun={handleCancelRun}
-                onRetryRun={handleRetryRun}
-                onDismissRun={handleDismissRun}
-                cancellingRunId={cancellingRunId}
-                retryingRunId={retryingRunId}
-              />
-            ) : (
-              <TrackList
-                tracks={visibleTracks}
-                totalCount={tracks.length}
-                selectedTrackId={selectedTrackId}
-                hasFirstSync={hasFirstSync}
-                view={libraryView}
-                onViewChange={setLibraryView}
-                onSelect={(trackId) => {
-                  startTransition(() => {
-                    handleSelectTrack(trackId)
-                  })
-                }}
-                onAddTracks={() => setImportOpen(true)}
-                selectedIds={selectedLibraryIds}
-                onToggleSelect={toggleLibrarySelected}
-                onSelectAll={(ids) => selectAll('library', ids)}
-                onClearSelection={() => clearSelection('library')}
-              />
-            )}
+            <TrackList
+              tracks={visibleTracks}
+              totalCount={tracks.length}
+              selectedTrackId={selectedTrackId}
+              hasFirstSync={hasFirstSync}
+              view={libraryView}
+              onViewChange={setLibraryView}
+              onSelect={(trackId) => {
+                startTransition(() => {
+                  handleSelectTrack(trackId)
+                })
+              }}
+              onAddTracks={() => setImportOpen(true)}
+              selectionMode={librarySelectionMode || librarySelectionList.length > 0}
+              onSelectionModeChange={setLibrarySelectionMode}
+              selectedIds={selectedLibraryIds}
+              onToggleSelect={toggleLibrarySelected}
+              onSelectAll={(ids) => selectAll('library', ids)}
+              onClearSelection={() => {
+                clearSelection('library')
+                setLibrarySelectionMode(false)
+              }}
+            />
           </section>
 
-          <section className="column column-right">
+          <section className="column column-right column-right-stack">
+            <ActivityPanel
+              entries={queueRuns}
+              selectedIds={selectedQueueRunIds}
+              onToggleSelect={toggleQueueRunSelected}
+              onSelectAll={(ids) => selectAll('queue', ids)}
+              onClearSelection={() => clearSelection('queue')}
+              onSelectTrack={(trackId) => {
+                startTransition(() => {
+                  handleSelectTrack(trackId)
+                })
+              }}
+              onCancelRun={handleCancelRun}
+              onRetryRun={handleRetryRun}
+              onDismissRun={handleDismissRun}
+              cancellingRunId={cancellingRunId}
+              retryingRunId={retryingRunId}
+            />
             <TrackDetailPanel
               track={selectedTrack}
               selectedRunId={selectedRunId}
@@ -295,13 +311,11 @@ function App() {
               profiles={settings?.profiles ?? []}
               cachedModels={cachedModels}
               defaultProfileKey={defaultProcessing.profile_key}
-              defaultMp3Bitrate={defaultProcessing.export_mp3_bitrate}
               hasFirstSync={hasFirstSync}
               tracksCount={tracks.length}
               creatingRun={creatingRun}
               cancellingRunId={cancellingRunId}
               retryingRunId={retryingRunId}
-              rerunningRunId={rerunningRunId}
               settingKeeper={settingKeeper}
               savingNoteRunId={savingNoteRunId}
               savingMixRunId={savingMixRunId}
@@ -314,7 +328,6 @@ function App() {
               onCreateRun={handleCreateRun}
               onCancelRun={handleCancelRun}
               onRetryRun={handleRetryRun}
-              onRerunWithPreset={handleRerunWithPreset}
               onSetKeeper={handleSetKeeper}
               onPurgeNonKeepers={handlePurgeNonKeepers}
               onSetRunNote={handleSetRunNote}
@@ -330,60 +343,13 @@ function App() {
           </section>
         </main>
 
-        {activeSurface === 'inbox' && draftSelectionList.length > 0 ? (
-          <BatchActionBar
-            selectedCount={draftSelectionList.length}
-            onClear={() => clearSelection('inbox')}
-            busy={batching || confirmingDrafts}
-          >
-            <ApplyArtistPrompt
-              disabled={batching}
-              buttonLabel="Set artist"
-              onApply={(artist) =>
-                void handleBatchUpdateDrafts({ draft_ids: draftSelectionList, artist })
-              }
-            />
-            <button
-              type="button"
-              className="button-secondary"
-              disabled={batching}
-              onClick={() =>
-                void handleBatchUpdateDrafts({
-                  draft_ids: draftSelectionList,
-                  duplicate_action: 'create-new',
-                })
-              }
-            >
-              Mark: create separate
-            </button>
-            <button
-              type="button"
-              className="button-secondary"
-              disabled={batching}
-              onClick={() => void handleBatchDiscardDrafts(draftSelectionList)}
-            >
-              Discard
-            </button>
-            <ConfirmDraftsPrompt
-              selectedCount={draftSelectionList.length}
-              disabled={confirmDisabled}
-              profiles={settings?.profiles ?? []}
-              defaultProcessing={defaultProcessing}
-              onConfirm={(queue, processing) =>
-                void handleConfirmDrafts({
-                  draft_ids: draftSelectionList,
-                  queue,
-                  processing: queue ? processing : undefined,
-                })
-              }
-            />
-          </BatchActionBar>
-        ) : null}
-
-        {activeSurface === 'library' && librarySelectionList.length > 0 ? (
+        {librarySelectionList.length > 0 ? (
           <BatchActionBar
             selectedCount={librarySelectionList.length}
-            onClear={() => clearSelection('library')}
+            onClear={() => {
+              clearSelection('library')
+              setLibrarySelectionMode(false)
+            }}
             busy={batching}
           >
             <button
@@ -394,33 +360,12 @@ function App() {
             >
               Queue renders
             </button>
-            <ApplyArtistPrompt
-              disabled={batching}
-              buttonLabel="Set artist"
-              onApply={(artist) => void handleBatchApplyArtist(librarySelectionList, artist)}
-            />
-            <button
-              type="button"
-              className="button-secondary"
-              disabled={batching}
-              onClick={() => void handleBatchCancelTrackRuns(librarySelectionList)}
-            >
-              Cancel runs
-            </button>
-            <button
-              type="button"
-              className="button-secondary"
-              disabled={batching}
-              onClick={() => void handleBatchPurgeNonKeepers(librarySelectionList)}
-            >
-              Purge non-final runs
-            </button>
             <button
               type="button"
               className="button-secondary"
               onClick={() => setExportTargetIds(librarySelectionList)}
             >
-              Export…
+              Export Files
             </button>
             <ConfirmInline
               label="Delete"
@@ -431,10 +376,33 @@ function App() {
               pending={batching}
               onConfirm={() => handleBatchDeleteTracks(librarySelectionList)}
             />
+            <OverflowMenu>
+              <ApplyArtistPrompt
+                disabled={batching}
+                buttonLabel="Set artist"
+                onApply={(artist) => void handleBatchApplyArtist(librarySelectionList, artist)}
+              />
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={batching}
+                onClick={() => void handleBatchCancelTrackRuns(librarySelectionList)}
+              >
+                Cancel renders
+              </button>
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={batching}
+                onClick={() => void handleBatchPurgeNonKeepers(librarySelectionList)}
+              >
+                Purge non-final renders
+              </button>
+            </OverflowMenu>
           </BatchActionBar>
         ) : null}
 
-        {activeSurface === 'queue' && queueSelectionList.length > 0 ? (
+        {queueSelectionList.length > 0 ? (
           <BatchActionBar
             selectedCount={queueSelectionList.length}
             onClear={() => clearSelection('queue')}
@@ -446,7 +414,7 @@ function App() {
               disabled={batching}
               onClick={() => void handleBatchCancelQueueRuns(queueSelectionList)}
             >
-              Cancel runs
+              Cancel renders
             </button>
           </BatchActionBar>
         ) : null}
@@ -469,13 +437,27 @@ function App() {
           onBackfillMetrics={handleBackfillMetrics}
         />
 
-        <ImportModal
+        <ImportFlowDialog
           open={importOpen}
+          stagedImports={drafts}
+          profiles={settings?.profiles ?? []}
+          cachedModels={cachedModels}
+          defaultProfileKey={defaultProcessing.profile_key}
           onClose={() => setImportOpen(false)}
           resolvingYoutubeImport={resolvingYoutubeImport}
           resolvingLocalImport={resolvingLocalImport}
-          onResolveYouTube={handleResolveYouTube}
-          onResolveLocalImport={handleResolveLocalImport}
+          confirming={confirmingDrafts}
+          onResolveYouTube={async (sourceUrl) => {
+            await handleResolveYouTube(sourceUrl)
+          }}
+          onResolveLocalImport={async (files) => {
+            await handleResolveLocalImport(files)
+          }}
+          onUpdateStagedImport={handleUpdateDraft}
+          onDiscardStagedImport={handleDiscardDraft}
+          onConfirmStagedImports={async (payload) => {
+            await handleConfirmDrafts(payload)
+          }}
         />
 
         <ExportModal
@@ -483,43 +465,24 @@ function App() {
           onClose={() => setExportTargetIds(null)}
           tracks={tracks}
           selectedTrackIds={exportTargetIds ?? []}
+          defaultBitrate={defaultBitrate}
+          selectedRunIdByTrack={selectedRunId && selectedTrack ? { [selectedTrack.id]: selectedRunId } : {}}
           onError={(message) => pushToast('error', message)}
           onReveal={handleRevealFolder}
         />
 
         <ToastStack toasts={toasts} onDismiss={dismissToast} />
+
+        {dragOverlayActive ? (
+          <div className="drop-overlay" role="presentation">
+            <div className="drop-overlay-panel">
+              <strong>Drop to import</strong>
+              <span>Audio or video files only.</span>
+            </div>
+          </div>
+        ) : null}
       </div>
     </ErrorBoundary>
-  )
-}
-
-type TabButtonProps = {
-  surface: DashboardSurface
-  active: boolean
-  label: string
-  count: number
-  countTone?: 'attention'
-  countTitle?: string
-  onSelect: (surface: DashboardSurface) => void
-}
-
-function TabButton({ surface, active, label, count, countTone, countTitle, onSelect }: TabButtonProps) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      className={`tab ${active ? 'tab-active' : ''}`}
-      onClick={() => onSelect(surface)}
-    >
-      <span>{label}</span>
-      <span
-        className={`tab-count ${countTone ? `tab-count-${countTone}` : ''}`}
-        title={countTitle}
-      >
-        {count}
-      </span>
-    </button>
   )
 }
 

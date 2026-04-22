@@ -29,8 +29,8 @@ const SORT_OPTIONS: { value: LibrarySort; label: string }[] = [
 const FILTER_OPTIONS: { value: LibraryFilter; label: string }[] = [
   { value: 'all', label: 'All tracks' },
   { value: 'failed', label: 'Failed' },
-  { value: 'has-keeper', label: 'With final' },
-  { value: 'no-keeper', label: 'No final' },
+  { value: 'has-keeper', label: 'With Final Render' },
+  { value: 'no-keeper', label: 'Without Final Render' },
 ]
 
 export function applyLibraryView(tracks: TrackSummary[], view: LibraryView): TrackSummary[] {
@@ -75,6 +75,8 @@ type TrackListProps = {
   onViewChange: (view: LibraryView) => void
   onSelect: (trackId: string) => void
   onAddTracks: () => void
+  selectionMode: boolean
+  onSelectionModeChange: (enabled: boolean) => void
   selectedIds: Set<string>
   onToggleSelect: (trackId: string) => void
   onSelectAll: (ids: string[]) => void
@@ -103,6 +105,8 @@ export function TrackList({
   onViewChange,
   onSelect,
   onAddTracks,
+  selectionMode,
+  onSelectionModeChange,
   selectedIds,
   onToggleSelect,
   onSelectAll,
@@ -128,9 +132,18 @@ export function TrackList({
     <div className="track-list-wrap">
       <div className="section-head">
         <h2>Library</h2>
-        <button type="button" className="button-primary" onClick={onAddTracks}>
-          Add sources
-        </button>
+        <div className="track-list-head-actions">
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => onSelectionModeChange(!selectionMode)}
+          >
+            {selectionMode ? 'Done' : 'Select'}
+          </button>
+          <button type="button" className="button-primary" onClick={onAddTracks}>
+            Add sources
+          </button>
+        </div>
       </div>
 
       {libraryEmpty ? null : (
@@ -167,8 +180,8 @@ export function TrackList({
             </select>
             {countLabel ? <span className="library-count">{countLabel}</span> : null}
           </div>
-          {tracks.length > 0 ? (
-            <div className="inbox-controls">
+          {selectionMode && tracks.length > 0 ? (
+            <div className="list-controls">
               <label className="checkbox-row">
                 <input type="checkbox" checked={allSelected} onChange={handleToggleAll} />
                 <span>{allSelected ? 'Clear all' : 'Select all'}</span>
@@ -189,8 +202,7 @@ export function TrackList({
         </div>
       ) : libraryEmpty ? (
         <p className="empty-state" style={{ padding: 'var(--space-md) var(--space-lg)' }}>
-          Library is empty. Add YouTube URLs or local files, confirm drafts in Inbox, then queued
-          renders land here.
+          Library is empty. Add files or paste a YouTube URL to stage sources, then choose how to render them.
         </p>
       ) : noMatches ? (
         <p className="empty-state" style={{ padding: 'var(--space-md) var(--space-lg)' }}>
@@ -207,16 +219,18 @@ export function TrackList({
             return (
               <div
                 key={track.id}
-                className={`track-card-shell ${selectedTrackId === track.id ? 'track-card-active' : ''} ${isSelected ? 'track-card-checked' : ''}`}
+                className={`track-card-shell ${selectionMode ? 'track-card-shell-selecting' : ''} ${selectedTrackId === track.id ? 'track-card-active' : ''} ${isSelected ? 'track-card-checked' : ''}`}
               >
-                <label className="track-card-check" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => onToggleSelect(track.id)}
-                    aria-label={`Select ${track.title}`}
-                  />
-                </label>
+                {selectionMode ? (
+                  <label className="track-card-check" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => onToggleSelect(track.id)}
+                      aria-label={`Select ${track.title}`}
+                    />
+                  </label>
+                ) : null}
                 <button
                   type="button"
                   className="track-card"
@@ -234,9 +248,9 @@ export function TrackList({
                     ) : hasKeeper ? (
                       <span
                         className="track-card-status track-card-status-final"
-                        title="A run is marked as final"
+                        title="A render is marked as final"
                       >
-                        ★ final
+                        Final Render
                       </span>
                     ) : null}
                   </div>
@@ -247,8 +261,8 @@ export function TrackList({
                     </span>
                     <span>
                       {track.run_count === 0
-                        ? 'no runs'
-                        : `${track.run_count} run${track.run_count === 1 ? '' : 's'}`}
+                        ? 'no renders'
+                        : `${track.run_count} render${track.run_count === 1 ? '' : 's'}`}
                     </span>
                   </div>
                   {isActive && latest ? (

@@ -25,7 +25,7 @@ const SHORTCUTS: Array<{ keys: string; label: string }> = [
   { keys: 'k  ·  ↑', label: 'Previous track' },
   { keys: 'r', label: 'Render current track again' },
   { keys: 'c', label: 'Toggle compare' },
-  { keys: '1 – 9', label: 'Switch to run N' },
+  { keys: '1 – 9', label: 'Switch to render N' },
   { keys: '⌘ ,', label: 'Toggle settings' },
   { keys: 'Esc', label: 'Close overlay' },
 ]

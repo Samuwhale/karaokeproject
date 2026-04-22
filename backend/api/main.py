@@ -30,7 +30,7 @@ async def lifespan(_: FastAPI):
 
 runtime_settings = get_runtime_settings()
 app = FastAPI(
-    title="Local Karaoke Generator API",
+    title="Local Stem Workflow API",
     version="0.1.0",
     lifespan=lifespan,
 )
