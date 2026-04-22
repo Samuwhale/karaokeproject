@@ -21,4 +21,8 @@ def download_artifact(artifact_id: str, session: Session = Depends(get_db_sessio
     if not artifact_path.exists():
         raise HTTPException(status_code=404, detail="Artifact file is missing on disk.")
 
-    return FileResponse(path=artifact_path, filename=artifact_path.name)
+    return FileResponse(
+        path=artifact_path,
+        filename=artifact_path.name,
+        content_disposition_type="attachment",
+    )

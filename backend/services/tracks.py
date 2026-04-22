@@ -1,19 +1,27 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any, BinaryIO
-from uuid import uuid4
+from typing import Any
 
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
-from backend.core.constants import SUPPORTED_IMPORT_EXTENSIONS
-from backend.db.models import Run, RunArtifact, RunStatus, Track
+from backend.core.config import RuntimeSettings
+from backend.db.models import (
+    IN_PROGRESS_RUN_STATUSES,
+    TERMINAL_RUN_STATUSES,
+    Run,
+    RunArtifact,
+    RunStatus,
+    Track,
+)
 from backend.schemas.tracks import (
+    ArtifactMetricsResponse,
     RunArtifactResponse,
     RunDetailResponse,
     RunSummaryResponse,
@@ -26,6 +34,17 @@ from backend.services.processing import resolve_run_processing, serialize_proces
 def _slugify(value: str) -> str:
     normalized = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower())
     return normalized.strip("-") or "track"
+
+
+def compute_file_sha256(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def _artifact_download_url(artifact_id: str) -> str:
@@ -66,6 +85,20 @@ def _sorted_runs(track: Track) -> list[Run]:
     return sorted(track.runs, key=lambda run: run.created_at, reverse=True)
 
 
+def _serialize_artifact_metrics(metrics: dict[str, Any] | None) -> ArtifactMetricsResponse | None:
+    if not metrics:
+        return None
+    return ArtifactMetricsResponse(
+        duration_seconds=metrics.get("duration_seconds"),
+        sample_rate=metrics.get("sample_rate"),
+        channels=metrics.get("channels"),
+        size_bytes=metrics.get("size_bytes"),
+        integrated_lufs=metrics.get("integrated_lufs"),
+        true_peak_dbfs=metrics.get("true_peak_dbfs"),
+        peaks=list(metrics.get("peaks") or []),
+    )
+
+
 def serialize_run_artifact(artifact: RunArtifact) -> RunArtifactResponse:
     return RunArtifactResponse(
         id=artifact.id,
@@ -75,7 +108,14 @@ def serialize_run_artifact(artifact: RunArtifact) -> RunArtifactResponse:
         path=artifact.path,
         created_at=artifact.created_at,
         download_url=_artifact_download_url(artifact.id),
+        metrics=_serialize_artifact_metrics(artifact.metrics_json),
     )
+
+
+def _run_note(run: Run) -> str:
+    metadata = run.metadata_json or {}
+    note = metadata.get("note")
+    return note.strip() if isinstance(note, str) else ""
 
 
 def serialize_run_summary(run: Run) -> RunSummaryResponse:
@@ -90,6 +130,7 @@ def serialize_run_summary(run: Run) -> RunSummaryResponse:
         output_directory=run.output_directory,
         created_at=run.created_at,
         updated_at=run.updated_at,
+        note=_run_note(run),
     )
 
 
@@ -117,6 +158,7 @@ def serialize_track_summary(track: Track) -> TrackSummaryResponse:
         updated_at=track.updated_at,
         latest_run=serialize_run_summary(latest_run) if latest_run else None,
         run_count=len(runs),
+        keeper_run_id=track.keeper_run_id,
     )
 
 
@@ -136,6 +178,7 @@ def serialize_track_detail(track: Track) -> TrackDetailResponse:
         created_at=track.created_at,
         updated_at=track.updated_at,
         runs=[serialize_run_detail(run) for run in _sorted_runs(track)],
+        keeper_run_id=track.keeper_run_id,
     )
 
 
@@ -154,37 +197,21 @@ def get_track(session: Session, track_id: str) -> Track | None:
     return session.scalars(statement).first()
 
 
-def create_tracks_from_uploads(
-    session: Session,
-    uploads_dir: Path,
-    files: list[tuple[str, BinaryIO]],
-    processing: dict[str, str],
-    artist: str | None,
-) -> list[Track]:
-    tracks: list[Track] = []
-    for original_name, file_handle in files:
-        extension = Path(original_name).suffix.lower()
-        if extension not in SUPPORTED_IMPORT_EXTENSIONS:
-            raise ValueError(f"Unsupported file type '{extension or 'unknown'}' for '{original_name}'.")
-
-        stored_name = f"{uuid4().hex}{extension}"
-        stored_path = uploads_dir / stored_name
-        with stored_path.open("wb") as output_file:
-            shutil.copyfileobj(file_handle, output_file)
-
-        title = Path(original_name).stem.replace("_", " ").strip() or "Untitled Track"
-        track = create_track(
-            session,
-            source_path=stored_path,
-            source_filename=original_name,
-            title=title,
-            artist=artist,
-            processing=processing,
-            source_metadata={"source_type": "file"},
-        )
-        tracks.append(track)
-
-    return tracks
+def backfill_content_hashes(session: Session) -> int:
+    updated = 0
+    for track in session.scalars(select(Track)):
+        metadata = dict(track.metadata_json or {})
+        if metadata.get("content_hash"):
+            continue
+        source_path = Path(track.source_path)
+        if not source_path.exists():
+            continue
+        metadata["content_hash"] = compute_file_sha256(source_path)
+        track.metadata_json = metadata
+        updated += 1
+    if updated:
+        session.commit()
+    return updated
 
 
 def create_track(
@@ -194,7 +221,6 @@ def create_track(
     source_filename: str,
     title: str,
     artist: str | None,
-    processing: dict[str, str],
     source_metadata: dict[str, Any] | None = None,
 ) -> Track:
     clean_title = title.strip() or "Untitled Track"
@@ -215,7 +241,6 @@ def create_track(
     )
     session.add(track)
     session.flush()
-    create_run(track, processing)
     return track
 
 
@@ -299,6 +324,245 @@ def claim_next_run(session: Session) -> Run | None:
     )
     session.flush()
     return run
+
+
+def recover_orphaned_runs(session: Session) -> int:
+    statement = select(Run).where(Run.status.in_(list(IN_PROGRESS_RUN_STATUSES)))
+    orphaned = list(session.scalars(statement))
+    for run in orphaned:
+        set_run_state(
+            run,
+            status=RunStatus.failed,
+            progress=run.progress,
+            status_message="Worker restarted mid-run",
+            error_message="Worker restarted before this run could finish.",
+        )
+    if orphaned:
+        session.commit()
+    return len(orphaned)
+
+
+def request_run_cancellation(session: Session, run_id: str) -> Run:
+    run = session.get(Run, run_id, options=[selectinload(Run.track), selectinload(Run.artifacts)])
+    if run is None:
+        raise LookupError(f"Run '{run_id}' does not exist.")
+
+    if run.status == RunStatus.cancelled.value:
+        return run
+    if run.status in {RunStatus.completed.value, RunStatus.failed.value}:
+        raise ValueError(f"Run is already {run.status}; nothing to cancel.")
+
+    if run.status == RunStatus.queued.value:
+        set_run_state(
+            run,
+            status=RunStatus.cancelled,
+            progress=run.progress,
+            status_message="Cancelled before processing started",
+            error_message=None,
+        )
+    else:
+        metadata = dict(run.metadata_json or {})
+        metadata["cancellation_requested"] = True
+        run.metadata_json = metadata
+        run.status_message = "Cancellation requested; stopping at next stage"
+
+    session.commit()
+    return run
+
+
+def is_cancellation_requested(run: Run) -> bool:
+    metadata = run.metadata_json or {}
+    return bool(metadata.get("cancellation_requested"))
+
+
+def mark_run_cancelled(run: Run) -> None:
+    set_run_state(
+        run,
+        status=RunStatus.cancelled,
+        progress=run.progress,
+        status_message="Cancelled",
+        error_message=None,
+    )
+    metadata = dict(run.metadata_json or {})
+    metadata.pop("cancellation_requested", None)
+    run.metadata_json = metadata
+
+
+def retry_run(session: Session, run_id: str) -> Run:
+    source_run = session.get(Run, run_id, options=[selectinload(Run.track)])
+    if source_run is None:
+        raise LookupError(f"Run '{run_id}' does not exist.")
+
+    stored_processing = (source_run.metadata_json or {}).get("processing")
+    if not isinstance(stored_processing, dict) or "profile_key" not in stored_processing:
+        raise ValueError("This run does not have a stored processing config to retry from.")
+
+    track = source_run.track
+    processing: dict[str, str] = {str(key): str(value) for key, value in stored_processing.items()}
+    new_run = create_run(track, processing)
+    session.commit()
+    session.refresh(new_run)
+    return new_run
+
+
+RUN_NOTE_MAX_LENGTH = 280
+
+
+def set_run_note(session: Session, run_id: str, note: str) -> Run:
+    run = session.get(Run, run_id, options=[selectinload(Run.track), selectinload(Run.artifacts)])
+    if run is None:
+        raise LookupError(f"Run '{run_id}' does not exist.")
+
+    cleaned = note.strip()
+    if len(cleaned) > RUN_NOTE_MAX_LENGTH:
+        raise ValueError(f"Note cannot exceed {RUN_NOTE_MAX_LENGTH} characters.")
+
+    metadata = dict(run.metadata_json or {})
+    if cleaned:
+        metadata["note"] = cleaned
+    else:
+        metadata.pop("note", None)
+    run.metadata_json = metadata
+    session.commit()
+    session.refresh(run)
+    return run
+
+
+def set_keeper_run(session: Session, track_id: str, run_id: str | None) -> Track:
+    track = get_track(session, track_id)
+    if track is None:
+        raise LookupError(f"Track '{track_id}' does not exist.")
+
+    if run_id is None:
+        track.keeper_run_id = None
+        session.commit()
+        session.refresh(track)
+        return track
+
+    run = session.get(Run, run_id)
+    if run is None or run.track_id != track.id:
+        raise ValueError("Run does not belong to this track.")
+    if run.status != RunStatus.completed.value:
+        raise ValueError("Only completed runs can be marked as the keeper.")
+
+    track.keeper_run_id = run.id
+    session.commit()
+    session.refresh(track)
+    return track
+
+
+def _directory_size(path: Path) -> int:
+    if not path.exists():
+        return 0
+    total = 0
+    for entry in path.rglob("*"):
+        if entry.is_file():
+            try:
+                total += entry.stat().st_size
+            except OSError:
+                continue
+    return total
+
+
+def update_track(
+    session: Session,
+    track_id: str,
+    *,
+    title: str | None,
+    artist: str | None,
+) -> Track:
+    track = get_track(session, track_id)
+    if track is None:
+        raise LookupError(f"Track '{track_id}' does not exist.")
+
+    if title is not None:
+        clean_title = title.strip()
+        if not clean_title:
+            raise ValueError("Title cannot be empty.")
+        track.title = clean_title
+        metadata = dict(track.metadata_json or {})
+        metadata["source_slug"] = _slugify(clean_title)
+        track.metadata_json = metadata
+
+    if artist is not None:
+        clean_artist = artist.strip() or None
+        track.artist = clean_artist
+
+    session.commit()
+    session.refresh(track)
+    return track
+
+
+def delete_track(
+    session: Session,
+    runtime_settings: RuntimeSettings,
+    track_id: str,
+) -> None:
+    track = get_track(session, track_id)
+    if track is None:
+        raise LookupError(f"Track '{track_id}' does not exist.")
+
+    if any(run.status in IN_PROGRESS_RUN_STATUSES for run in track.runs):
+        raise ValueError("Cancel or wait for in-progress runs before deleting this track.")
+
+    exports_dir = Path(runtime_settings.exports_dir)
+    source_slug = (track.metadata_json or {}).get("source_slug") or track.id
+    source_path = Path(track.source_path) if track.source_path else None
+
+    for run in list(track.runs):
+        if run.output_directory:
+            shutil.rmtree(Path(run.output_directory), ignore_errors=True)
+        export_zip = exports_dir / f"{source_slug}-{run.id}.zip"
+        export_zip.unlink(missing_ok=True)
+
+    session.delete(track)
+    session.commit()
+
+    if source_path is not None and source_path.exists():
+        source_path.unlink(missing_ok=True)
+
+
+def purge_non_keeper_runs(
+    session: Session,
+    runtime_settings: RuntimeSettings,
+    track_id: str,
+) -> tuple[int, int]:
+    track = get_track(session, track_id)
+    if track is None:
+        raise LookupError(f"Track '{track_id}' does not exist.")
+    if not track.keeper_run_id:
+        raise ValueError("Set a keeper run before cleaning up other runs.")
+
+    exports_dir = Path(runtime_settings.exports_dir)
+    source_slug = (track.metadata_json or {}).get("source_slug") or track.id
+
+    deleted = 0
+    reclaimed = 0
+    for run in list(track.runs):
+        if run.id == track.keeper_run_id:
+            continue
+        if run.status not in TERMINAL_RUN_STATUSES:
+            continue
+
+        if run.output_directory:
+            output_directory = Path(run.output_directory)
+            reclaimed += _directory_size(output_directory)
+            shutil.rmtree(output_directory, ignore_errors=True)
+
+        export_zip = exports_dir / f"{source_slug}-{run.id}.zip"
+        if export_zip.exists():
+            try:
+                reclaimed += export_zip.stat().st_size
+            except OSError:
+                pass
+            export_zip.unlink(missing_ok=True)
+
+        session.delete(run)
+        deleted += 1
+
+    if deleted:
+        session.commit()
+    return deleted, reclaimed
 
 
 def write_metadata_file(track: Track, run: Run, target_path: Path) -> None:

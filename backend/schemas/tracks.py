@@ -23,6 +23,16 @@ class RunProcessingConfigResponse(BaseModel):
     export_mp3_bitrate: str
 
 
+class ArtifactMetricsResponse(BaseModel):
+    duration_seconds: float | None = None
+    sample_rate: int | None = None
+    channels: int | None = None
+    size_bytes: int | None = None
+    integrated_lufs: float | None = None
+    true_peak_dbfs: float | None = None
+    peaks: list[float] = []
+
+
 class RunArtifactResponse(BaseModel):
     id: str
     kind: str
@@ -31,6 +41,7 @@ class RunArtifactResponse(BaseModel):
     path: str
     created_at: datetime
     download_url: str
+    metrics: ArtifactMetricsResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -46,6 +57,7 @@ class RunSummaryResponse(BaseModel):
     output_directory: str | None
     created_at: datetime
     updated_at: datetime
+    note: str = ""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -68,6 +80,7 @@ class TrackSummaryResponse(BaseModel):
     updated_at: datetime
     latest_run: RunSummaryResponse | None
     run_count: int
+    keeper_run_id: str | None = None
 
 
 class TrackDetailResponse(BaseModel):
@@ -85,10 +98,7 @@ class TrackDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     runs: list[RunDetailResponse]
-
-
-class ImportTracksResponse(BaseModel):
-    tracks: list[TrackSummaryResponse]
+    keeper_run_id: str | None = None
 
 
 class CreateRunRequest(BaseModel):
@@ -97,3 +107,69 @@ class CreateRunRequest(BaseModel):
 
 class CreateRunResponse(BaseModel):
     run: RunSummaryResponse
+
+
+class SetKeeperRequest(BaseModel):
+    run_id: str | None = None
+
+
+class SetRunNoteRequest(BaseModel):
+    note: str = ""
+
+
+class UpdateTrackRequest(BaseModel):
+    title: str | None = None
+    artist: str | None = None
+
+
+class PurgeNonKeepersResponse(BaseModel):
+    deleted_run_count: int
+    bytes_reclaimed: int
+
+
+class BackfillMetricsResponse(BaseModel):
+    updated_artifact_count: int
+
+
+class QueueRunResponse(BaseModel):
+    run: RunSummaryResponse
+    track_id: str
+    track_title: str
+    track_artist: str | None
+
+
+class BatchTrackIdsRequest(BaseModel):
+    track_ids: list[str]
+
+
+class BatchQueueRunsRequest(BatchTrackIdsRequest):
+    processing: RunProcessingConfigRequest
+
+
+class BatchApplyRequest(BatchTrackIdsRequest):
+    artist: str | None = None
+
+
+class BatchQueueRunsResponse(BaseModel):
+    queued_run_count: int
+    skipped_track_ids: list[str] = []
+
+
+class BatchDeleteResponse(BaseModel):
+    deleted_track_count: int
+    skipped_track_ids: list[str] = []
+
+
+class BatchCancelResponse(BaseModel):
+    cancelled_run_count: int
+
+
+class BatchApplyResponse(BaseModel):
+    updated_track_count: int
+
+
+class BatchPurgeNonKeepersResponse(BaseModel):
+    purged_track_count: int
+    deleted_run_count: int
+    bytes_reclaimed: int
+    skipped_track_ids: list[str] = []

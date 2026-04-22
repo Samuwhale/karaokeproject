@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { Settings } from '../types'
+import { Skeleton } from './feedback/Skeleton'
+import { Spinner } from './feedback/Spinner'
 
 type SettingsPanelProps = {
   settings: Settings | null
@@ -13,6 +15,9 @@ type DraftState = {
   sourceKey: string
   values: SettingsDraft
 }
+
+const BITRATE_PATTERN = /^\d{2,3}k$/
+const BITRATE_HINT = 'Use a value like 192k or 320k.'
 
 function createDraft(settings: Settings | null): SettingsDraft {
   return {
@@ -36,12 +41,32 @@ export function SettingsPanel({ settings, saving, onSave }: SettingsPanelProps) 
     sourceKey: settingsKey,
     values: createDraft(settings),
   }))
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!savedAt) return
+    const id = window.setTimeout(() => setSavedAt(null), 5000)
+    return () => window.clearTimeout(id)
+  }, [savedAt])
 
   if (!settings) {
-    return <section className="section skeleton">Loading settings…</section>
+    return (
+      <section className="section">
+        <div className="section-head">
+          <h2>Preferences</h2>
+        </div>
+        <div style={{ display: 'grid', gap: 'var(--space-sm)' }}>
+          <Skeleton height={32} />
+          <Skeleton height={32} />
+          <Skeleton height={32} />
+          <Skeleton height={32} />
+        </div>
+      </section>
+    )
   }
 
   const draft = draftState.sourceKey === settingsKey ? draftState.values : createDraft(settings)
+  const bitrateValid = BITRATE_PATTERN.test(draft.export_mp3_bitrate)
 
   function updateDraft(nextDraft: SettingsDraft) {
     setDraftState({
@@ -52,13 +77,19 @@ export function SettingsPanel({ settings, saving, onSave }: SettingsPanelProps) 
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    await onSave(draft)
+    if (!bitrateValid) return
+    try {
+      await onSave(draft)
+      setSavedAt(Date.now())
+    } catch {
+      // toast surfaces the error; don't flash "Saved."
+    }
   }
 
   return (
     <section className="section">
       <div className="section-head">
-        <h2>Settings</h2>
+        <h2>Preferences</h2>
       </div>
 
       <form className="import-form" onSubmit={handleSubmit}>
@@ -82,8 +113,10 @@ export function SettingsPanel({ settings, saving, onSave }: SettingsPanelProps) 
             <input
               type="text"
               value={draft.export_mp3_bitrate}
+              aria-invalid={!bitrateValid}
               onChange={(event) => updateDraft({ ...draft, export_mp3_bitrate: event.target.value })}
             />
+            {!bitrateValid ? <span className="field-error">{BITRATE_HINT}</span> : null}
           </label>
         </div>
 
@@ -106,9 +139,11 @@ export function SettingsPanel({ settings, saving, onSave }: SettingsPanelProps) 
         </label>
 
         <div className="import-footer">
-          <span />
-          <button type="submit" className="button-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
+          <span>
+            {savedAt ? <span className="field-saved">Saved.</span> : null}
+          </span>
+          <button type="submit" className="button-primary" disabled={saving || !bitrateValid}>
+            {saving ? <><Spinner /> Saving</> : 'Save'}
           </button>
         </div>
       </form>

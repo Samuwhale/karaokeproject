@@ -10,9 +10,27 @@ from backend.adapters.separator import AudioSeparatorAdapter, SeparationError
 from backend.core.config import RuntimeSettings
 from backend.db.models import Run, RunStatus
 from backend.services.exporters import bundle_files
+from backend.services.metrics import populate_run_metrics
 from backend.services.processing import resolve_run_processing
 from backend.services.settings import get_or_create_settings
-from backend.services.tracks import add_run_artifact, assign_run_metadata, set_run_state, write_metadata_file
+from backend.services.tracks import (
+    add_run_artifact,
+    assign_run_metadata,
+    is_cancellation_requested,
+    mark_run_cancelled,
+    set_run_state,
+    write_metadata_file,
+)
+
+
+class RunCancelled(Exception):
+    pass
+
+
+def _check_cancellation(session: Session, run: Run) -> None:
+    session.refresh(run, attribute_names=["metadata_json", "status"])
+    if is_cancellation_requested(run) or run.status == RunStatus.cancelled.value:
+        raise RunCancelled()
 
 
 def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -> None:
@@ -44,6 +62,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
     output_directory.mkdir(parents=True, exist_ok=True)
 
     try:
+        _check_cancellation(session, run)
         set_run_state(
             run,
             status=RunStatus.preparing,
@@ -77,6 +96,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         )
         session.commit()
 
+        _check_cancellation(session, run)
         set_run_state(
             run,
             status=RunStatus.separating,
@@ -125,6 +145,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             )
         session.commit()
 
+        _check_cancellation(session, run)
         set_run_state(
             run,
             status=RunStatus.exporting,
@@ -201,6 +222,25 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             status_message="Ready for preview and export",
             error_message=None,
         )
+        session.commit()
+
+        try:
+            populate_run_metrics(session, runtime_settings, run)
+        except Exception as metrics_error:
+            session.rollback()
+            run = session.get(Run, run.id, options=[selectinload(Run.artifacts)])
+            if run is not None:
+                metadata = dict(run.metadata_json or {})
+                metadata["metrics_error"] = f"{metrics_error.__class__.__name__}: {metrics_error}"
+                run.metadata_json = metadata
+                session.commit()
+    except RunCancelled:
+        session.rollback()
+        run = session.get(Run, run.id, options=[selectinload(Run.track), selectinload(Run.artifacts)])
+        if run is None:
+            return
+        shutil.rmtree(output_directory, ignore_errors=True)
+        mark_run_cancelled(run)
         session.commit()
     except (RuntimeError, SeparationError) as error:
         session.rollback()

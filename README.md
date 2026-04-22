@@ -1,45 +1,58 @@
-# Local Karaoke Prep Pipeline
+# KaraokeProject
 
-Local-first karaoke prep app for a single power user. The stack is a FastAPI backend, a React frontend, a polling worker, SQLite metadata, and filesystem-backed media storage. Product direction and roadmap live in [local_karaoke_web_app_project_brief.md](/Users/samuel/Documents/Projects/karaokeproject/local_karaoke_web_app_project_brief.md).
+KaraokeProject is a local-first stem separation tool.
 
-## Repo layout
+Today it is a personal app for importing audio, running stem separation locally, reviewing outputs, comparing reruns, and exporting usable results. Karaoke generation is the clearest first use case, but the product direction is broader than karaoke alone: it is moving toward a more general stem workflow for creators who need clean vocals, instrumentals, and reviewable export results.
 
-- `backend/`: API, worker, adapters for FFmpeg, `audio-separator`, and `yt-dlp`, plus import, run, export, and settings logic.
-- `frontend/`: React + Vite dashboard for import, library, run review, preview, diagnostics, and settings.
-- `data/`: local uploads, outputs, exports, logs, temp files, and model cache.
+## What It Does Today
 
-## Run locally
+- import local files or YouTube sources
+- run asynchronous stem separation locally
+- review track metadata and run history
+- compare outputs across reruns
+- export instrumental, vocal, and packaged results
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-pip install -e ".[processing]"
-npm install
-brew install ffmpeg yt-dlp
-npm run dev
-```
+## Who It Is For
 
-The frontend runs on `http://127.0.0.1:5173` and proxies API traffic to `http://127.0.0.1:8000`.
+The near-term product is aimed at two overlapping groups:
 
-`npm run dev`, `npm run dev:api`, and `npm run dev:worker` prefer `.venv/bin/python` automatically and fall back to `python3` when needed.
+- solo creators who want a fast, legible workflow with minimal setup
+- power users who want better reruns, comparison, and output control without turning the app into a cluttered workstation
 
-## Current scope
+The UX rule is simple: keep the default flow clear and low-friction, then expose deeper control where it materially improves results.
 
-The app currently supports:
+## Product Positioning
 
-- local file import
-- YouTube video and playlist resolve, review, and confirm flow
-- duplicate-aware track reuse
-- repeatable per-track processing runs with stored config
-- instrumental and vocal preview
-- WAV, MP3, metadata, and ZIP export
-- local diagnostics and editable settings
+This project should be understood as a **stem separation tool with a karaoke wedge**.
 
-Playlist imports stay explicit: nothing is added to the library until review is confirmed.
+That means:
 
-## Notes
+- karaoke is the easiest way to explain the product's immediate value
+- stem separation is the broader category the product is growing into
+- the local app is the incubation environment, not the final product boundary
 
-- The worker expects `ffmpeg`, `ffprobe`, `audio-separator`, and `yt-dlp` on your path.
-- Processing profiles expose official `audio-separator` model filenames, and each run stores the chosen model and MP3 bitrate for reproducibility.
-- This app is for media you own, license, or are otherwise authorized to process.
+## Current Status
+
+Right now the product is intentionally local-first:
+
+- processing runs on your machine
+- files live in local project-managed storage
+- the current app is optimized for rapid iteration and maintainability
+
+That local-first shape is deliberate. It keeps the workflow easy to reason about while the product direction is still being refined.
+
+## Roadmap Direction
+
+The planned path is:
+
+1. tighten the current local workflow around reliability, clarity, and clean exports
+2. improve separation quality, rerun control, and comparison tooling
+3. reshape the system for a free hosted alpha
+4. expand from a karaoke wedge into a broader online stem tool
+
+The target is not a rushed SaaS rewrite. The target is a staged transition from a strong local product into a hosted web product with a clear architecture and a clear user story.
+
+## Key Docs
+
+- [ROADMAP.md](/Users/samuel/Documents/Projects/karaokeproject/ROADMAP.md) is the product roadmap
+- [website-scaling-plan.md](/Users/samuel/Documents/Projects/karaokeproject/website-scaling-plan.md) covers the cheapest serious hosted setup

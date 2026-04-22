@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "karaokeproject"
 version = "0.1.0"
-description = "Local-first karaoke generator web app"
+description = "Local-first stem separation tool with karaoke as an initial use case"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

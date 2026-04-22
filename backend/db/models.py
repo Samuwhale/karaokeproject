@@ -22,6 +22,16 @@ class RunStatus(StrEnum):
     exporting = "exporting"
     completed = "completed"
     failed = "failed"
+    cancelled = "cancelled"
+
+
+IN_PROGRESS_RUN_STATUSES: frozenset[str] = frozenset(
+    {RunStatus.preparing.value, RunStatus.separating.value, RunStatus.exporting.value}
+)
+
+TERMINAL_RUN_STATUSES: frozenset[str] = frozenset(
+    {RunStatus.completed.value, RunStatus.failed.value, RunStatus.cancelled.value}
+)
 
 
 class TimestampMixin:
@@ -56,11 +66,13 @@ class Track(TimestampMixin, Base):
     source_path: Mapped[str] = mapped_column(String(512))
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    keeper_run_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     runs: Mapped[list[Run]] = relationship(
         back_populates="track",
         cascade="all, delete-orphan",
         order_by=lambda: Run.created_at.desc(),
+        foreign_keys=lambda: [Run.track_id],
     )
 
 
@@ -94,6 +106,60 @@ class RunArtifact(Base):
     label: Mapped[str] = mapped_column(String(255))
     format: Mapped[str] = mapped_column(String(32))
     path: Mapped[str] = mapped_column(String(512))
+    metrics_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=datetime.utcnow)
 
     run: Mapped[Run] = relationship(back_populates="artifacts")
+
+
+class DraftSourceType(StrEnum):
+    youtube = "youtube"
+    local = "local"
+
+
+class DraftStatus(StrEnum):
+    pending = "pending"
+    confirmed = "confirmed"
+    discarded = "discarded"
+
+
+class DraftDuplicateAction(StrEnum):
+    create_new = "create-new"
+    reuse_existing = "reuse-existing"
+    skip = "skip"
+
+
+class ImportDraft(TimestampMixin, Base):
+    __tablename__ = "import_drafts"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_identifier)
+    source_type: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16), default=DraftStatus.pending.value)
+
+    # YouTube-specific
+    video_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    canonical_source_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    playlist_source_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    thumbnail_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+
+    # Local-specific
+    session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pending_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    original_filename: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Common editable fields
+    suggested_title: Mapped[str] = mapped_column(String(255), default="Untitled Track")
+    suggested_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    title: Mapped[str] = mapped_column(String(255))
+    artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Duplicate handling — null means "unresolved" and must be disambiguated before confirm
+    duplicate_action: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    existing_track_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    duplicate_track_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+    resolution_metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)

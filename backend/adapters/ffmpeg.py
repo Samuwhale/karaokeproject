@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+import numpy as np
 
 from backend.core.binaries import resolve_binary
 from backend.core.config import RuntimeSettings
@@ -18,6 +21,10 @@ class AudioMetadata:
     duration_seconds: float | None
     sample_rate: int | None
     channels: int | None
+
+
+_INTEGRATED_LOUDNESS_RE = re.compile(r"Integrated loudness:.*?I:\s*(-?\d+(?:\.\d+)?)\s*LUFS", re.DOTALL)
+_TRUE_PEAK_RE = re.compile(r"True peak:.*?Peak:\s*(-?\d+(?:\.\d+)?)\s*dBFS", re.DOTALL)
 
 
 class FfmpegAdapter:
@@ -97,6 +104,87 @@ class FfmpegAdapter:
                 str(destination_path),
             ]
         )
+
+    def measure_loudness(self, source_path: Path) -> tuple[float | None, float | None]:
+        completed = subprocess.run(
+            [
+                self.ffmpeg_binary,
+                "-nostats",
+                "-hide_banner",
+                "-i",
+                str(source_path),
+                "-af",
+                "ebur128=peak=true",
+                "-f",
+                "null",
+                "-",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise FfmpegCommandError(completed.stderr.strip() or completed.stdout.strip())
+
+        stderr = completed.stderr
+        integrated = None
+        peak = None
+        match = _INTEGRATED_LOUDNESS_RE.search(stderr)
+        if match:
+            value = float(match.group(1))
+            integrated = None if value <= -70.0 else value
+        match = _TRUE_PEAK_RE.search(stderr)
+        if match:
+            peak = float(match.group(1))
+        return integrated, peak
+
+    def extract_peaks(self, source_path: Path, buckets: int = 512) -> list[float]:
+        completed = subprocess.run(
+            [
+                self.ffmpeg_binary,
+                "-nostats",
+                "-hide_banner",
+                "-i",
+                str(source_path),
+                "-ac",
+                "1",
+                "-ar",
+                "22050",
+                "-f",
+                "f32le",
+                "-",
+            ],
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            stderr = completed.stderr.decode("utf-8", errors="replace").strip()
+            raise FfmpegCommandError(stderr or "ffmpeg failed to extract peaks")
+
+        raw = completed.stdout
+        if not raw:
+            return [0.0] * buckets
+
+        aligned_length = len(raw) - (len(raw) % 4)
+        if aligned_length == 0:
+            return [0.0] * buckets
+        samples = np.frombuffer(raw[:aligned_length], dtype=np.float32)
+        if samples.size == 0:
+            return [0.0] * buckets
+
+        if samples.size < buckets:
+            peaks = np.zeros(buckets, dtype=np.float32)
+            peaks[: samples.size] = np.abs(samples)
+        else:
+            bucket_size = samples.size // buckets
+            trimmed = samples[: bucket_size * buckets]
+            grid = trimmed.reshape(buckets, bucket_size)
+            peaks = np.max(np.abs(grid), axis=1)
+
+        maximum = float(peaks.max())
+        if maximum > 0.0:
+            peaks = peaks / maximum
+        return [float(value) for value in peaks]
 
     def version(self, binary_name: str) -> str | None:
         completed = subprocess.run(

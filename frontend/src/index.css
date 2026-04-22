@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
   color-scheme: dark;
@@ -7,30 +8,31 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --bg: #0b0c0e;
-  --surface: #14161a;
-  --surface-2: #181b20;
-  --surface-sunk: #0f1113;
-  --surface-hover: #1d2026;
-  --surface-active: #22262d;
+  --bg: oklch(0.15 0.004 155);
+  --surface: oklch(0.20 0.005 155);
+  --surface-2: oklch(0.225 0.006 155);
+  --surface-sunk: oklch(0.175 0.004 155);
+  --surface-hover: oklch(0.255 0.006 155);
+  --surface-active: oklch(0.28 0.008 155);
 
-  --border: #26292f;
-  --border-soft: #1c1f24;
-  --border-strong: #3a3f48;
+  --border: oklch(0.30 0.007 155);
+  --border-soft: oklch(0.245 0.005 155);
+  --border-strong: oklch(0.40 0.008 155);
 
-  --text: #e7e8ea;
-  --text-2: #b4b7bd;
-  --text-muted: #868a92;
-  --text-faint: #5c606a;
+  --text: oklch(0.92 0.003 155);
+  --text-2: oklch(0.76 0.004 155);
+  --text-muted: oklch(0.61 0.006 155);
+  --text-faint: oklch(0.45 0.007 155);
 
-  --accent: #8bd5a2;
-  --accent-dim: rgba(139, 213, 162, 0.14);
-  --accent-press: #6dc28a;
+  --accent: oklch(0.82 0.11 155);
+  --accent-press: oklch(0.72 0.12 155);
+  --accent-dim: color-mix(in oklch, var(--accent) 14%, transparent);
+  --accent-ink: oklch(0.22 0.04 155);
 
-  --ok: #8bd5a2;
-  --warn: #e6b86f;
-  --err: #f08476;
-  --info: #7eb6e6;
+  --ok: oklch(0.82 0.11 155);
+  --warn: oklch(0.80 0.13 75);
+  --err: oklch(0.72 0.17 25);
+  --info: oklch(0.75 0.09 240);
 
   --space-2xs: 2px;
   --space-xs: 6px;
@@ -44,8 +46,11 @@
   --radius-sm: 3px;
   --radius-md: 4px;
 
-  --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --font-sans: 'General Sans', -apple-system, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --line-height-base: 1.5;
+  --line-height-mono: 1.6;
 
   --t-micro: 10.5px;
   --t-xs: 11.5px;
@@ -73,7 +78,7 @@ body {
   font-family: var(--font-sans);
   font-size: var(--t-base);
   font-weight: 400;
-  line-height: 1.5;
+  line-height: var(--line-height-base);
   color: var(--text);
   background: var(--bg);
 }

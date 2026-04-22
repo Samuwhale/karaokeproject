@@ -1,25 +1,66 @@
+# OS
 .DS_Store
+Thumbs.db
+
+# Python
 .venv/
+venv/
 __pycache__/
 *.pyc
-*.sqlite3
-*.db
-*.zip
+*.pyo
 *.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend
 node_modules/
 frontend/node_modules/
 frontend/dist/
-data/*
-!data/.gitkeep
+frontend/.vite/
+*.tsbuildinfo
+
+# Databases
+*.sqlite3
+*.sqlite
+*.db
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Generated app data — keep folder structure via .gitkeep only
+data/**
+!data/
 !data/uploads/
-!data/uploads/.gitkeep
 !data/cache/
-!data/cache/.gitkeep
 !data/outputs/
-!data/outputs/.gitkeep
 !data/exports/
-!data/exports/.gitkeep
 !data/logs/
-!data/logs/.gitkeep
 !data/tmp/
-!data/tmp/.gitkeep
+!data/**/.gitkeep
+
+# Dev tool artefacts
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# Screenshots and scratch images in project root
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs / archives
+*.log
+*.zip
+*.tar
+*.tar.gz
