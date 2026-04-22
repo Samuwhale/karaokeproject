@@ -154,10 +154,7 @@ export function TrackDetailPanel({
     if (hasFirstSync && tracksCount === 0) {
       return (
         <section className="section track-detail-empty">
-          <h2>Nothing to review yet</h2>
-          <p>
-            Once you import sources, this panel shows track details, render history, results, mix controls, and export files for the selected track.
-          </p>
+          <p>Import a song to start rendering.</p>
         </section>
       )
     }
@@ -192,6 +189,17 @@ export function TrackDetailPanel({
 
   const hasNoRuns = track.runs.length === 0
   const renderFormExpanded = hasNoRuns || renderFormOpen
+
+  const mode: 'active' | 'failed' | 'completed-mixable' | 'completed-empty' | null =
+    hasNoRuns || !selectedRun
+      ? null
+      : isActiveRun
+        ? 'active'
+        : isFailedRun
+          ? 'failed'
+          : selectedRunMixable
+            ? 'completed-mixable'
+            : 'completed-empty'
 
   async function handleCreateRun() {
     const payload: RunProcessingConfigInput = {
@@ -306,7 +314,7 @@ export function TrackDetailPanel({
                 className="button-primary"
                 onClick={() => setRenderFormOpen(true)}
               >
-                New Render
+                Render
               </button>
             ) : null}
             <button type="button" className="button-secondary" onClick={startEditing}>
@@ -327,8 +335,7 @@ export function TrackDetailPanel({
       {renderFormExpanded ? (
         <div className="render-form track-detail-section">
           <div className="track-detail-section-head">
-            <h3 className="subsection-head">Render Setup</h3>
-            <p>Choose the model for the next render of this track.</p>
+            <h3 className="subsection-head">Render setup</h3>
           </div>
           <ModelPicker
             profileKey={nextProcessing.profile_key}
@@ -356,7 +363,7 @@ export function TrackDetailPanel({
               disabled={!canSubmit}
               onClick={() => void handleCreateRun()}
             >
-              {creatingRun ? <><Spinner /> Queueing</> : hasNoRuns ? 'Queue First Render' : 'Queue Render'}
+              {creatingRun ? <><Spinner /> Queueing</> : 'Render'}
             </button>
             {!hasNoRuns ? (
               <button
@@ -387,16 +394,16 @@ export function TrackDetailPanel({
       </div>
 
       {track.runs.length ? (
-        <div className="run-history track-detail-section">
+        <div className="run-history">
           <div className="run-history-head">
-            <h3 className="subsection-head">Render History</h3>
+            <h3 className="subsection-head">Renders</h3>
             <select
               aria-label="Filter renders"
               className="run-filter"
               value={runFilter}
               onChange={(event) => setRunFilter(event.target.value as RunFilter)}
             >
-              <option value="all">All renders</option>
+              <option value="all">All</option>
               <option value="completed">Completed</option>
               <option value="failed">Failed</option>
             </select>
@@ -406,7 +413,7 @@ export function TrackDetailPanel({
           ) : null}
           <div className="run-selector">
             {filteredRuns.map((run, index) => {
-              const isActive = selectedRun?.id === run.id
+              const isActiveChip = selectedRun?.id === run.id
               const isKeeper = keeperRunId === run.id
               const isCompareTarget = compareRunId === run.id
               const isCompleted = run.status === 'completed'
@@ -414,7 +421,7 @@ export function TrackDetailPanel({
               return (
                 <div
                   key={run.id}
-                  className={`run-chip ${isActive ? 'run-chip-active' : ''} ${
+                  className={`run-chip ${isActiveChip ? 'run-chip-active' : ''} ${
                     isKeeper ? 'run-chip-keeper' : ''
                   } ${isCompareTarget ? 'run-chip-compare' : ''}`}
                 >
@@ -445,30 +452,100 @@ export function TrackDetailPanel({
         </div>
       ) : null}
 
-      {selectedRun ? (
+      {mode === 'active' && selectedRun ? (
         <>
-          <div className="track-detail-section">
-            <div className="track-detail-section-head">
-              <h3 className="subsection-head">Selected Render</h3>
-              <p>
-                {selectedRun.processing.profile_label} ·{' '}
-                {selectedRun.status === 'completed'
-                  ? `Updated ${formatTimestampShort(selectedRun.updated_at)}`
-                  : statusLabel(selectedRun.status)}
-              </p>
-            </div>
+          <div className="run-stepper-wrap">
+            <RunStepper
+              status={selectedRun.status}
+              lastActiveStatus={selectedRun.last_active_status}
+            />
+          </div>
+          <div className="run-progress">
+            <ProgressBar value={selectedRun.progress} label={selectedRun.status_message} />
+          </div>
+          <div className="run-actions">
+            <ConfirmInline
+              label="Cancel render"
+              pendingLabel="Cancelling…"
+              confirmLabel="Cancel render"
+              cancelLabel="Keep running"
+              prompt="Cancel this render?"
+              pending={cancellingRunId === selectedRun.id}
+              onConfirm={() => onCancelRun(selectedRun.id)}
+            />
+          </div>
+        </>
+      ) : null}
+
+      {mode === 'failed' && selectedRun ? (
+        <div className="run-failure">
+          <div className="run-failure-head">
+            <span className="run-failure-title">
+              {selectedRun.status === 'cancelled'
+                ? 'This render was cancelled'
+                : 'This render failed'}
+            </span>
+            <button
+              type="button"
+              className="button-primary"
+              disabled={retryingRunId === selectedRun.id}
+              onClick={() => void onRetryRun(selectedRun.id)}
+            >
+              {retryingRunId === selectedRun.id ? <><Spinner /> Retrying</> : 'Retry'}
+            </button>
+          </div>
+          {selectedRun.error_message ? (
+            <p className="run-failure-message">{selectedRun.error_message}</p>
+          ) : null}
+          <p className="run-failure-next">
+            {selectedRun.status === 'cancelled'
+              ? 'Retry keeps the same settings, or open Render above to change them.'
+              : 'Retry keeps the same settings. If this keeps failing, open Render above and try a different model.'}
+          </p>
+        </div>
+      ) : null}
+
+      {mode === 'completed-mixable' && selectedRun ? (
+        <>
+          <OutputIntentPicker
+            run={selectedRun}
+            profiles={profiles}
+            onApplyTemplate={handleApplyIntent}
+            onRerunWithProfile={handleRerunWithProfile}
+            onExport={onOpenExport}
+            onReveal={() => void onReveal({ kind: 'track-outputs', track_id: trackId })}
+          />
+
+          <MixPanel
+            run={selectedRun}
+            saving={savingMixRunId === selectedRun.id}
+            onSave={(stems) => onSaveMix(trackId, selectedRun.id, stems)}
+          />
+
+          {bothCompleted && compareRun ? (
+            <CompareView
+              runA={selectedRun}
+              runB={compareRun}
+              keeperRunId={keeperRunId}
+              settingKeeper={settingKeeper}
+              onSetKeeper={(runId) => onSetKeeper(trackId, runId)}
+            />
+          ) : null}
+
+          <details className="advanced-actions">
+            <summary>Notes and comparison</summary>
             <div className="selected-render-actions">
               <button
                 type="button"
                 className={`button-secondary ${keeperRunId === selectedRun.id ? 'button-secondary-active' : ''}`}
-                disabled={settingKeeper || selectedRun.status !== 'completed'}
+                disabled={settingKeeper}
                 onClick={() => void handleToggleKeeper(selectedRun.id)}
               >
-                {keeperRunId === selectedRun.id ? 'Clear Final Render' : 'Mark Final Render'}
+                {keeperRunId === selectedRun.id ? 'Clear final render' : 'Mark final render'}
               </button>
               {compareCandidates.length > 0 ? (
                 <label className="field field-inline">
-                  <span>Compare Against</span>
+                  <span>Compare against</span>
                   <select
                     value={compareRunId ?? ''}
                     onChange={(event) => handleCompareTargetChange(event.target.value)}
@@ -483,124 +560,36 @@ export function TrackDetailPanel({
                 </label>
               ) : null}
             </div>
-          </div>
-
-          <RunNoteEditor
-            runId={selectedRun.id}
-            note={selectedRun.note}
-            saving={savingNoteRunId === selectedRun.id}
-            onSave={onSetRunNote}
-          />
-
-          <div className="run-stepper-wrap">
-            <RunStepper
-              status={selectedRun.status}
-              lastActiveStatus={selectedRun.last_active_status}
+            <RunNoteEditor
+              runId={selectedRun.id}
+              note={selectedRun.note}
+              saving={savingNoteRunId === selectedRun.id}
+              onSave={onSetRunNote}
             />
-          </div>
-
-          {isActiveRun ? (
-            <div className="run-progress">
-              <ProgressBar value={selectedRun.progress} label={selectedRun.status_message} />
-            </div>
-          ) : null}
-
-          {isFailedRun ? (
-            <div className="run-failure">
-              <div className="run-failure-head">
-                <span className="run-failure-title">
-                  {selectedRun.status === 'cancelled'
-                    ? 'This render was cancelled'
-                    : 'This render failed'}
-                </span>
-                <button
-                  type="button"
-                  className="button-primary"
-                  disabled={retryingRunId === selectedRun.id}
-                  onClick={() => void onRetryRun(selectedRun.id)}
-                >
-                  {retryingRunId === selectedRun.id ? (
-                    <><Spinner /> Retrying</>
-                  ) : selectedRun.status === 'cancelled' ? (
-                    'Render Again'
-                  ) : (
-                    'Retry'
-                  )}
-                </button>
-              </div>
-              {selectedRun.error_message ? (
-                <p className="run-failure-message">{selectedRun.error_message}</p>
-              ) : null}
-              <p className="run-failure-next">
-                {selectedRun.status === 'cancelled'
-                  ? 'Queue another render to pick up where you left off, or change the render setup above.'
-                  : 'Retry keeps the same settings. If this keeps failing, open Render Setup above and try a different model.'}
-              </p>
-            </div>
-          ) : null}
-
-          {isActiveRun ? (
-            <div className="run-actions">
-              <ConfirmInline
-                label="Cancel render"
-                pendingLabel="Cancelling…"
-                confirmLabel="Cancel render"
-                cancelLabel="Keep running"
-                prompt="Cancel this render?"
-                pending={cancellingRunId === selectedRun.id}
-                onConfirm={() => onCancelRun(selectedRun.id)}
-              />
-            </div>
-          ) : null}
-
-          {selectedRunMixable ? (
-            <OutputIntentPicker
-              run={selectedRun}
-              profiles={profiles}
-              onApplyTemplate={handleApplyIntent}
-              onRerunWithProfile={handleRerunWithProfile}
-              onExport={onOpenExport}
-              onReveal={() => void onReveal({ kind: 'track-outputs', track_id: trackId })}
-            />
-          ) : null}
-
-          {selectedRunMixable ? (
-            <MixPanel
-              run={selectedRun}
-              saving={savingMixRunId === selectedRun.id}
-              onSave={(stems) => onSaveMix(trackId, selectedRun.id, stems)}
-            />
-          ) : null}
-
-          {!selectedRunMixable && !isActiveRun ? (
-            <p className="empty-state preview-empty">
-              No stems yet for this render.
-            </p>
-          ) : null}
-
-          {bothCompleted && compareRun ? (
-            <CompareView
-              runA={selectedRun}
-              runB={compareRun}
-              keeperRunId={keeperRunId}
-              settingKeeper={settingKeeper}
-              onSetKeeper={(runId) => onSetKeeper(trackId, runId)}
-            />
-          ) : null}
+          </details>
 
           {keeperRunId ? (
-            <div className="bookmark-actions">
-              <ConfirmInline
-                label="Purge non-final renders"
-                pendingLabel="Cleaning…"
-                confirmLabel="Delete other renders"
-                cancelLabel="Keep them"
-                prompt="Delete every non-final render for this track?"
-                onConfirm={() => onPurgeNonKeepers(trackId)}
-              />
-            </div>
+            <details className="advanced-actions">
+              <summary>Cleanup</summary>
+              <div className="bookmark-actions">
+                <ConfirmInline
+                  label="Purge non-final renders"
+                  pendingLabel="Cleaning…"
+                  confirmLabel="Delete other renders"
+                  cancelLabel="Keep them"
+                  prompt="Delete every non-final render for this track?"
+                  onConfirm={() => onPurgeNonKeepers(trackId)}
+                />
+              </div>
+            </details>
           ) : null}
         </>
+      ) : null}
+
+      {mode === 'completed-empty' ? (
+        <p className="empty-state preview-empty">
+          No stems from this render. Open Render above to try a different model.
+        </p>
       ) : null}
     </section>
   )
@@ -609,10 +598,10 @@ export function TrackDetailPanel({
 function TrackDetailSkeleton() {
   return (
     <section className="section">
-      <div style={{ display: 'grid', gap: 'var(--space-md)' }}>
+      <div className="skeleton-detail">
         <Skeleton width="55%" height={22} />
         <Skeleton width="80%" height={12} />
-        <div style={{ display: 'grid', gridAutoFlow: 'column', gap: 'var(--space-sm)' }}>
+        <div className="skeleton-row">
           <Skeleton height={32} />
           <Skeleton height={32} />
           <Skeleton height={32} />

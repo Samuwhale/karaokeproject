@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 
+import { useDialogFocus } from '../hooks/useDialogFocus'
 import { createExportBundle, listExportStems, planExportBundle } from '../api'
 import type {
   ExportArtifactKind,
@@ -49,6 +50,7 @@ export function ExportModal({
   onError,
   onReveal,
 }: ExportModalProps) {
+  useDialogFocus(open)
   const [stemOptions, setStemOptions] = useState<ExportStemOption[]>([])
   const [stemsLoading, setStemsLoading] = useState(false)
 
@@ -237,7 +239,7 @@ export function ExportModal({
       />
       <div className="import-modal-panel">
         <header className="import-modal-head">
-          <h2>Export Files for {selectedTrackIds.length} track{selectedTrackIds.length === 1 ? '' : 's'}</h2>
+          <h2>Export files for {selectedTrackIds.length} track{selectedTrackIds.length === 1 ? '' : 's'}</h2>
           <button type="button" className="button-secondary" onClick={onClose}>
             Close
           </button>
@@ -555,16 +557,17 @@ function ExportManifest({ plan, artifactList, stemOptions }: ExportManifestProps
   )
 }
 
-function ManifestRow({
-  track,
-  artifactList,
-  stemOptions,
-}: {
+type ManifestRowProps = {
   track: ExportPlanTrack
   artifactList: ExportArtifactKind[]
   stemOptions: ExportStemOption[]
-}) {
-  const presentMap = new Map(track.artifacts.map((a) => [a.kind, a]))
+}
+
+const ManifestRow = memo(function ManifestRow({ track, artifactList, stemOptions }: ManifestRowProps) {
+  const presentMap = useMemo(
+    () => new Map(track.artifacts.map((a) => [a.kind, a])),
+    [track.artifacts],
+  )
 
   return (
     <li className={`export-manifest-row ${track.skip_reason ? 'export-manifest-row-skipped' : ''}`}>
@@ -596,7 +599,7 @@ function ManifestRow({
       )}
     </li>
   )
-}
+})
 
 function artifactLabel(value: ExportArtifactKind, stems: ExportStemOption[]): string {
   if (value === 'mix-mp3') return 'Mixdown MP3'

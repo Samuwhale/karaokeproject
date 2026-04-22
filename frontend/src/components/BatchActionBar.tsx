@@ -7,12 +7,13 @@ type BatchActionBarProps = {
   onClear: () => void
   busy: boolean
   children: React.ReactNode
+  inert?: boolean
 }
 
-export function BatchActionBar({ selectedCount, onClear, busy, children }: BatchActionBarProps) {
+export function BatchActionBar({ selectedCount, onClear, busy, children, inert }: BatchActionBarProps) {
   if (selectedCount === 0) return null
   return (
-    <div className="batch-bar" role="region" aria-label="Selection actions">
+    <div className="batch-bar" role="region" aria-label="Selection actions" inert={inert || undefined}>
       <div className="batch-bar-inner">
         <div className="batch-bar-count">
           {busy ? <Spinner /> : null}
@@ -63,6 +64,7 @@ export function OverflowMenu({ label = 'More…', children }: OverflowMenuProps)
       <button
         type="button"
         className="button-secondary"
+        aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >

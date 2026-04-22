@@ -69,8 +69,8 @@ export function WaveformOverlay({
   useEffect(() => {
     if (!containerARef.current || !containerBRef.current) return
 
-    const accent = readToken('--accent') || '#3b82f6'
-    const compare = readToken('--warn') || '#f59e0b'
+    const accent = readToken('--accent')
+    const compare = readToken('--warn')
 
     const playerA = WaveSurfer.create(
       buildOptions(containerARef.current, urlA, peaksA, durationA, accent, true),

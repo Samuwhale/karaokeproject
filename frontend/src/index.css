@@ -20,9 +20,9 @@
   --border-strong: oklch(0.40 0.008 155);
 
   --text: oklch(0.92 0.003 155);
-  --text-2: oklch(0.76 0.004 155);
-  --text-muted: oklch(0.61 0.006 155);
-  --text-faint: oklch(0.45 0.007 155);
+  --text-2: oklch(0.80 0.004 155);
+  --text-muted: oklch(0.72 0.006 155);
+  --text-faint: oklch(0.62 0.007 155);
 
   --accent: oklch(0.78 0.09 205);
   --accent-press: oklch(0.68 0.10 205);

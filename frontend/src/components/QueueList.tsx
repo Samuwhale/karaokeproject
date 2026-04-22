@@ -139,15 +139,7 @@ export function QueueList({
                       disabled={retrying}
                       onClick={() => void onRetryRun(run.id)}
                     >
-                      {retrying ? (
-                        <>
-                          <Spinner /> Retrying
-                        </>
-                      ) : run.status === 'cancelled' ? (
-                        'Render Again'
-                      ) : (
-                        'Retry'
-                      )}
+                      {retrying ? <><Spinner /> Retrying</> : 'Retry'}
                     </button>
                     <button
                       type="button"

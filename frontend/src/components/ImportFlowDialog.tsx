@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 
+import { useDialogFocus } from '../hooks/useDialogFocus'
 import type {
   CachedModel,
   DraftDuplicateAction,
@@ -174,6 +175,7 @@ export function ImportFlowDialog({
   onDiscardStagedImport,
   onConfirmStagedImports,
 }: ImportFlowDialogProps) {
+  useDialogFocus(open)
   const [step, setStep] = useState<Step>('add')
   const [youtubeUrl, setYoutubeUrl] = useState('')
   const [localFiles, setLocalFiles] = useState<File[]>([])
@@ -346,8 +348,7 @@ export function ImportFlowDialog({
       <div className="import-modal-panel import-flow-panel">
         <header className="import-modal-head">
           <div className="import-flow-head-copy">
-            <h2>Import Sources</h2>
-            <p>Stage sources first, then choose how to render them.</p>
+            <h2>Import sources</h2>
           </div>
           <div className="import-flow-head-actions">
             <button
@@ -355,7 +356,7 @@ export function ImportFlowDialog({
               className={`button-secondary ${step === 'add' ? 'button-secondary-active' : ''}`}
               onClick={() => setStep('add')}
             >
-              Add Sources
+              Add sources
             </button>
             <button
               type="button"
@@ -363,7 +364,7 @@ export function ImportFlowDialog({
               onClick={() => setStep('review')}
               disabled={stagedImports.length === 0}
             >
-              Review & Queue{stagedImports.length ? ` (${stagedImports.length})` : ''}
+              Review & queue{stagedImports.length ? ` (${stagedImports.length})` : ''}
             </button>
             <button type="button" className="button-secondary" onClick={handleClose}>
               Close
@@ -382,8 +383,8 @@ export function ImportFlowDialog({
             <div className="import-flow-add">
               <section className="import-flow-section">
                 <div className="import-flow-section-head">
-                  <h3>Add From YouTube</h3>
-                  <p>Paste a video or playlist URL. Nothing queues until you confirm.</p>
+                  <h3>From YouTube</h3>
+                  <p>Nothing queues until you confirm.</p>
                 </div>
                 <label className="field">
                   <span>YouTube URL</span>
@@ -417,8 +418,7 @@ export function ImportFlowDialog({
 
               <section className="import-flow-section">
                 <div className="import-flow-section-head">
-                  <h3>Add Local Files</h3>
-                  <p>Drop audio or video files here, or click to browse.</p>
+                  <h3>Local files</h3>
                 </div>
                 <div
                   className={`drop-zone ${dragActive ? 'drop-zone-active' : ''}`}
@@ -441,6 +441,7 @@ export function ImportFlowDialog({
                   onClick={() => fileInputRef.current?.click()}
                   role="button"
                   tabIndex={0}
+                  aria-label="Drop audio or video files here, or press Enter to browse"
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
@@ -455,7 +456,7 @@ export function ImportFlowDialog({
                     multiple
                     disabled={busy}
                     onChange={(event) => setLocalFiles(Array.from(event.target.files ?? []))}
-                    style={{ display: 'none' }}
+                    hidden
                   />
                   {localFiles.length > 0 ? (
                     <div className="drop-zone-files">
@@ -489,7 +490,7 @@ export function ImportFlowDialog({
                         <Spinner /> Staging…
                       </>
                     ) : (
-                      'Stage Files'
+                      'Stage files'
                     )}
                   </button>
                 </div>
@@ -498,14 +499,14 @@ export function ImportFlowDialog({
               {stagedImports.length > 0 ? (
                 <section className="import-flow-section import-flow-section-compact">
                   <div className="import-flow-section-head">
-                    <h3>Already Staged</h3>
+                    <h3>Already staged</h3>
                     <p>
                       {stagedImports.length} source{stagedImports.length === 1 ? '' : 's'} ready for review.
                     </p>
                   </div>
                   <div className="import-flow-section-actions">
                     <button type="button" className="button-secondary" onClick={() => setStep('review')}>
-                      Review & Queue
+                      Review & queue
                     </button>
                   </div>
                 </section>
@@ -515,8 +516,8 @@ export function ImportFlowDialog({
             <div className="import-flow-review">
               <section className="import-flow-section">
                 <div className="import-flow-section-head">
-                  <h3>Render Defaults</h3>
-                  <p>Choose the model for every staged source unless you override it on a specific row.</p>
+                  <h3>Render defaults</h3>
+                  <p>Applies to every staged source unless a row overrides it.</p>
                 </div>
                 <ModelPicker
                   profileKey={batchProcessing.profile_key}
@@ -547,8 +548,7 @@ export function ImportFlowDialog({
 
               <section className="import-flow-section">
                 <div className="import-flow-section-head">
-                  <h3>Review Staged Sources</h3>
-                  <p>Confirm titles, duplicate handling, and any source-specific render overrides.</p>
+                  <h3>Staged sources</h3>
                 </div>
 
                 {stagedImports.length === 0 ? (
@@ -621,7 +621,7 @@ export function ImportFlowDialog({
                                   })
                                 }
                               >
-                                Create Separate
+                                Create separate
                               </button>
                               <button
                                 type="button"
@@ -634,7 +634,7 @@ export function ImportFlowDialog({
                                   })
                                 }
                               >
-                                Reuse Existing
+                                Reuse existing
                               </button>
                               <button
                                 type="button"
@@ -681,7 +681,7 @@ export function ImportFlowDialog({
                               className="button-secondary"
                               onClick={() => setOverrideEnabled(item.id, !overrideEnabled)}
                             >
-                              {overrideEnabled ? 'Use Batch Defaults' : 'Override Render'}
+                              {overrideEnabled ? 'Use batch defaults' : 'Override render'}
                             </button>
                             {overrideEnabled ? (
                               <div className="staged-import-override-panel">
@@ -737,7 +737,7 @@ export function ImportFlowDialog({
                 </div>
                 <div className="import-flow-footer-actions">
                   <button type="button" className="button-secondary" onClick={() => setStep('add')}>
-                    Add More Sources
+                    Add more sources
                   </button>
                   <button
                     type="button"
@@ -750,7 +750,7 @@ export function ImportFlowDialog({
                         <Spinner /> Importing…
                       </>
                     ) : (
-                      'Import Without Rendering'
+                      'Import without rendering'
                     )}
                   </button>
                   <button
@@ -764,7 +764,7 @@ export function ImportFlowDialog({
                         <Spinner /> Queueing…
                       </>
                     ) : (
-                      `Queue ${stagedImports.length} Render${stagedImports.length === 1 ? '' : 's'}`
+                      `Queue ${stagedImports.length} render${stagedImports.length === 1 ? '' : 's'}`
                     )}
                   </button>
                 </div>

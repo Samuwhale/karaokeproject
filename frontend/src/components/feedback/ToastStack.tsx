@@ -25,7 +25,7 @@ export function ToastStack({ toasts, onDismiss }: ToastStackProps) {
   if (!toasts.length) return null
 
   return (
-    <div className="toast-stack" aria-live="polite">
+    <div className="toast-stack" aria-live="polite" aria-atomic="false">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}

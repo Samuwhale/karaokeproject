@@ -99,7 +99,7 @@ export function SettingsPanel({
         <div className="section-head">
           <h2>Preferences</h2>
         </div>
-        <div style={{ display: 'grid', gap: 'var(--space-sm)' }}>
+        <div className="skeleton-stack">
           <Skeleton height={32} />
           <Skeleton height={32} />
           <Skeleton height={32} />
@@ -193,7 +193,7 @@ export function SettingsPanel({
             ))}
           </div>
           {!storageOverview ? (
-            <div style={{ display: 'grid', gap: 'var(--space-sm)' }}>
+            <div className="skeleton-stack">
               <Skeleton height={36} />
               <Skeleton height={36} />
               <Skeleton height={36} />

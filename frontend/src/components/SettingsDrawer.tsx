@@ -1,3 +1,4 @@
+import { useDialogFocus } from '../hooks/useDialogFocus'
 import type { Diagnostics, Settings, StorageOverview } from '../types'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { SettingsPanel } from './SettingsPanel'
@@ -47,6 +48,7 @@ export function SettingsDrawer({
   onCleanupLibraryRuns,
   onBackfillMetrics,
 }: SettingsDrawerProps) {
+  useDialogFocus(open)
   if (!open) return null
 
   return (

@@ -29,8 +29,8 @@ const SORT_OPTIONS: { value: LibrarySort; label: string }[] = [
 const FILTER_OPTIONS: { value: LibraryFilter; label: string }[] = [
   { value: 'all', label: 'All tracks' },
   { value: 'failed', label: 'Failed' },
-  { value: 'has-keeper', label: 'With Final Render' },
-  { value: 'no-keeper', label: 'Without Final Render' },
+  { value: 'has-keeper', label: 'With final render' },
+  { value: 'no-keeper', label: 'Without final render' },
 ]
 
 export function applyLibraryView(tracks: TrackSummary[], view: LibraryView): TrackSummary[] {
@@ -152,6 +152,7 @@ export function TrackList({
             type="search"
             className="library-search"
             placeholder="Search title or artist"
+            aria-label="Search tracks by title or artist"
             value={view.search}
             onChange={(event) => onViewChange({ ...view, search: event.target.value })}
           />
@@ -201,11 +202,11 @@ export function TrackList({
           ))}
         </div>
       ) : libraryEmpty ? (
-        <p className="empty-state" style={{ padding: 'var(--space-md) var(--space-lg)' }}>
+        <p className="empty-state track-list-empty">
           Library is empty. Add files or paste a YouTube URL to stage sources, then choose how to render them.
         </p>
       ) : noMatches ? (
-        <p className="empty-state" style={{ padding: 'var(--space-md) var(--space-lg)' }}>
+        <p className="empty-state track-list-empty">
           No tracks match this search or filter.
         </p>
       ) : (
@@ -250,7 +251,7 @@ export function TrackList({
                         className="track-card-status track-card-status-final"
                         title="A render is marked as final"
                       >
-                        Final Render
+                        Final render
                       </span>
                     ) : null}
                   </div>

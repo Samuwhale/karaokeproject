@@ -1,11 +1,11 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 
 import './App.css'
-import { ActivityPanel } from './components/ActivityPanel'
 import { ApplyArtistPrompt, BatchActionBar, OverflowMenu } from './components/BatchActionBar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ExportModal } from './components/ExportModal'
 import { ImportFlowDialog } from './components/ImportFlowDialog'
+import { QueueDock } from './components/QueueDock'
 import { SettingsDrawer } from './components/SettingsDrawer'
 import { TrackDetailPanel } from './components/TrackDetailPanel'
 import { DEFAULT_LIBRARY_VIEW, TrackList, applyLibraryView } from './components/TrackList'
@@ -223,6 +223,7 @@ function App() {
     onEscape: () => {
       if (settingsOpen) setSettingsOpen(false)
       else if (importOpen) setImportOpen(false)
+      else if (exportTargetIds !== null) setExportTargetIds(null)
       else {
         clearSelection('library')
         setLibrarySelectionMode(false)
@@ -232,6 +233,7 @@ function App() {
 
   const hasFirstSync = connection.lastSyncAt > 0
   const setupRequired = hasFirstSync && diagnostics ? !diagnostics.app_ready : false
+  const anyDialogOpen = settingsOpen || importOpen || exportTargetIds !== null
 
   const librarySelectionList = Array.from(selectedLibraryIds)
   const queueSelectionList = Array.from(selectedQueueRunIds)
@@ -239,7 +241,7 @@ function App() {
   return (
     <ErrorBoundary>
       <div className="app-shell">
-        <header className="topbar">
+        <header className="topbar" inert={anyDialogOpen || undefined}>
           <div className="topbar-brand">stems</div>
           <div className="topbar-meta">
             <StatusChip
@@ -259,7 +261,7 @@ function App() {
           </div>
         </header>
 
-        <main className="workspace">
+        <main className="workspace" inert={anyDialogOpen || undefined}>
           <section className="column column-left">
             <TrackList
               tracks={visibleTracks}
@@ -286,24 +288,7 @@ function App() {
             />
           </section>
 
-          <section className="column column-right column-right-stack">
-            <ActivityPanel
-              entries={queueRuns}
-              selectedIds={selectedQueueRunIds}
-              onToggleSelect={toggleQueueRunSelected}
-              onSelectAll={(ids) => selectAll('queue', ids)}
-              onClearSelection={() => clearSelection('queue')}
-              onSelectTrack={(trackId) => {
-                startTransition(() => {
-                  handleSelectTrack(trackId)
-                })
-              }}
-              onCancelRun={handleCancelRun}
-              onRetryRun={handleRetryRun}
-              onDismissRun={handleDismissRun}
-              cancellingRunId={cancellingRunId}
-              retryingRunId={retryingRunId}
-            />
+          <section className="column column-right">
             <TrackDetailPanel
               track={selectedTrack}
               selectedRunId={selectedRunId}
@@ -343,6 +328,24 @@ function App() {
           </section>
         </main>
 
+        <QueueDock
+          entries={queueRuns}
+          selectedIds={selectedQueueRunIds}
+          onToggleSelect={toggleQueueRunSelected}
+          onSelectAll={(ids) => selectAll('queue', ids)}
+          onClearSelection={() => clearSelection('queue')}
+          onSelectTrack={(trackId) => {
+            startTransition(() => {
+              handleSelectTrack(trackId)
+            })
+          }}
+          onCancelRun={handleCancelRun}
+          onRetryRun={handleRetryRun}
+          onDismissRun={handleDismissRun}
+          cancellingRunId={cancellingRunId}
+          retryingRunId={retryingRunId}
+        />
+
         {librarySelectionList.length > 0 ? (
           <BatchActionBar
             selectedCount={librarySelectionList.length}
@@ -351,6 +354,7 @@ function App() {
               setLibrarySelectionMode(false)
             }}
             busy={batching}
+            inert={anyDialogOpen}
           >
             <button
               type="button"
@@ -365,7 +369,7 @@ function App() {
               className="button-secondary"
               onClick={() => setExportTargetIds(librarySelectionList)}
             >
-              Export Files
+              Export files
             </button>
             <ConfirmInline
               label="Delete"
@@ -407,6 +411,7 @@ function App() {
             selectedCount={queueSelectionList.length}
             onClear={() => clearSelection('queue')}
             busy={batching}
+            inert={anyDialogOpen}
           >
             <button
               type="button"
@@ -510,7 +515,7 @@ function StatusChip({ connection, setupRequired, onOpenSettings }: StatusChipPro
         title="Open settings to resolve"
       >
         <span className="topbar-dot topbar-dot-warn" />
-        Setup needed
+        setup needed
       </button>
     )
   }

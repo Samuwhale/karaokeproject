@@ -31,7 +31,7 @@ export function DiagnosticsPanel({
         <div className="section-head">
           <h2>System</h2>
         </div>
-        <div style={{ display: 'grid', gap: 'var(--space-sm)' }}>
+        <div className="skeleton-stack">
           <Skeleton height={24} />
           <Skeleton height={24} />
           <Skeleton height={24} />
@@ -66,7 +66,7 @@ export function DiagnosticsPanel({
         </div>
       ) : null}
 
-      <div className="metric-line" style={{ marginBottom: 'var(--space-md)' }}>
+      <div className="metric-line diagnostics-summary">
         <div>
           <span>Acceleration</span>
           <strong>{diagnostics.acceleration}</strong>

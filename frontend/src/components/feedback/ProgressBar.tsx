@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react'
+
 type ProgressBarProps = {
   value?: number
   label?: string
@@ -21,7 +23,7 @@ export function ProgressBar({ value, label, indeterminate, showPercent = true }:
       <div className="progress-bar-track">
         <div
           className={`progress-bar-fill ${indeterminate ? 'progress-bar-indeterminate' : ''}`}
-          style={indeterminate ? undefined : { width: `${percent}%` }}
+          style={indeterminate ? undefined : ({ '--progress-fill': clamped } as CSSProperties)}
         />
       </div>
       {label ? (

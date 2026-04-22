@@ -128,13 +128,10 @@ export function OutputIntentPicker({
   return (
     <section className="output-intent">
       <header className="output-intent-head">
-        <div>
-          <h3 className="subsection-head">Result</h3>
-          <p className="output-intent-summary">Choose a quick target result, then fine-tune it in Mix if needed.</p>
-        </div>
+        <h3 className="subsection-head">Result</h3>
         <div className="output-intent-actions">
           <button type="button" className="button-primary" onClick={onExport}>
-            Export Files
+            Export files
           </button>
           <button type="button" className="button-secondary" onClick={onReveal}>
             Open folder

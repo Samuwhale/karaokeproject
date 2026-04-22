@@ -41,7 +41,7 @@
 .topbar-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-xs);
   color: var(--text-2);
 }
 
@@ -188,7 +188,7 @@ button.topbar-chip:focus-visible {
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  font-size: 16px;
+  font-size: var(--t-lg);
   line-height: 1;
   border-radius: var(--radius-xs);
   transition: color 80ms ease, background-color 80ms ease;
@@ -242,15 +242,19 @@ button.topbar-chip:focus-visible {
 
 .progress-bar-fill {
   position: absolute;
-  inset: 0 auto 0 0;
-  height: 100%;
+  inset: 0;
   background: var(--accent);
   border-radius: 999px;
-  transition: width 400ms ease;
+  transform-origin: left center;
+  transform: scaleX(var(--progress-fill, 0));
+  transition: transform 400ms ease;
 }
 
 .progress-bar-indeterminate {
+  inset: 0 auto 0 0;
   width: 35%;
+  transform: none;
+  transition: none;
   animation: progress-indeterminate 1200ms ease-in-out infinite;
 }
 
@@ -297,6 +301,22 @@ button.topbar-chip:focus-visible {
   border-bottom: 1px solid var(--border-soft);
   display: grid;
   gap: 6px;
+}
+
+.skeleton-stack {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.skeleton-row {
+  display: grid;
+  grid-auto-flow: column;
+  gap: var(--space-sm);
+}
+
+.skeleton-detail {
+  display: grid;
+  gap: var(--space-md);
 }
 
 /* -------- Stepper ---------------------------------------------------- */
@@ -976,6 +996,10 @@ h1, h2, h3, h4, p {
   font-size: var(--t-xs);
 }
 
+.diagnostics-summary {
+  margin-bottom: var(--space-md);
+}
+
 .metric-line > div {
   display: flex;
   flex-direction: column;
@@ -1638,6 +1662,10 @@ code {
   line-height: 1.55;
 }
 
+.track-list-empty {
+  padding: var(--space-md) var(--space-lg);
+}
+
 .track-detail-empty {
   display: grid;
   align-content: center;
@@ -2227,6 +2255,24 @@ code {
 
   .drawer {
     grid-template-columns: 0 1fr;
+  }
+}
+
+@media (pointer: coarse) {
+  .topbar-gear,
+  .toast-close {
+    width: 44px;
+    height: 44px;
+  }
+
+  button.topbar-chip {
+    min-height: 36px;
+    padding: 0 var(--space-sm);
+  }
+
+  .toast-action {
+    min-height: 36px;
+    padding: 0 var(--space-sm);
   }
 }
 
@@ -2872,7 +2918,7 @@ code {
 .export-artifact-group h4 {
   font-size: var(--t-xs);
   font-weight: 600;
-  color: var(--text-dim);
+  color: var(--text-muted);
   margin: 0;
 }
 
@@ -3187,14 +3233,14 @@ code {
 
 .mix-stem-toggle.active {
   background: var(--accent);
-  color: var(--accent-contrast, #fff);
+  color: var(--accent-ink);
   border-color: var(--accent);
 }
 
 .mix-error {
   margin: 0;
   font-size: var(--t-xs);
-  color: var(--danger, #c03b3b);
+  color: var(--err);
 }
 
 .compare-pick {
@@ -3395,13 +3441,6 @@ code {
   gap: 4px;
 }
 
-.column-right-stack {
-  display: grid;
-  grid-auto-rows: min-content;
-  gap: var(--space-md);
-  align-content: start;
-}
-
 .track-list-head-actions {
   display: flex;
   gap: var(--space-xs);
@@ -3422,6 +3461,21 @@ code {
 
 .output-intent-head {
   align-items: flex-start;
+}
+
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: minmax(220px, 280px) 1fr;
+  }
+  .section {
+    padding: var(--space-md);
+  }
+  .track-list-wrap .section-head,
+  .library-controls,
+  .track-card {
+    padding-left: var(--space-md);
+    padding-right: var(--space-md);
+  }
 }
 
 @media (max-width: 960px) {
