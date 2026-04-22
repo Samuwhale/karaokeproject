@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.routes.imports import router as imports_router
+from backend.api.routes.models import router as models_router
 from backend.api.routes.storage import router as storage_router
 from backend.api.routes.assets import router as assets_router
 from backend.api.routes.exports import router as exports_router
@@ -45,6 +46,7 @@ app.add_middleware(
 app.include_router(system_router, prefix="/api")
 app.include_router(storage_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(models_router, prefix="/api")
 app.include_router(tracks_router, prefix="/api")
 app.include_router(imports_router, prefix="/api")
 app.include_router(exports_router, prefix="/api")

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import type {
+  CachedModel,
   ProcessingProfile,
   RerunPresetOverride,
   RevealFolderInput,
@@ -11,6 +12,7 @@ import type {
   TrackDetail,
 } from '../types'
 import { CUSTOM_PROFILE_KEY, isMixableArtifactKind } from '../types'
+import { ProfileTierBadge } from './ProfileTierBadge'
 import { CompareView } from './CompareView'
 import { ConfirmInline } from './feedback/ConfirmInline'
 import { ProgressBar } from './feedback/ProgressBar'
@@ -31,6 +33,7 @@ type TrackDetailPanelProps = {
   selectedRunId: string | null
   compareRunId: string | null
   profiles: ProcessingProfile[]
+  cachedModels: CachedModel[]
   defaultProfileKey: string
   defaultMp3Bitrate: string
   hasFirstSync: boolean
@@ -160,6 +163,7 @@ export function TrackDetailPanel({
   selectedRunId,
   compareRunId,
   profiles,
+  cachedModels,
   defaultProfileKey,
   defaultMp3Bitrate,
   hasFirstSync,
@@ -418,7 +422,7 @@ export function TrackDetailPanel({
                   {profile.label} — {profile.strength}
                 </option>
               ))}
-              <option value={CUSTOM_PROFILE_KEY}>Custom model — advanced</option>
+              <option value={CUSTOM_PROFILE_KEY}>Pick a specific model</option>
             </select>
           </label>
           <label className="field">
@@ -438,28 +442,31 @@ export function TrackDetailPanel({
             {!bitrateValid ? <span className="field-error">{BITRATE_HINT}</span> : null}
           </label>
           {nextProfile ? (
-            <p className="profile-meta">
-              <strong>{nextProfile.strength}.</strong> {nextProfile.description}
-            </p>
+            <div className="profile-meta-lines">
+              <span><strong>Best for:</strong> {nextProfile.best_for}</span>
+              <span><strong>Tradeoff:</strong> {nextProfile.tradeoff}</span>
+              <ProfileTierBadge profile={nextProfile} />
+            </div>
           ) : isCustomProfile ? (
             <p className="profile-meta">
-              <strong>Custom model.</strong> Use any audio-separator model filename. You are on your own for quality.
+              <strong>Specific model.</strong> Pick any audio-separator model already cached locally, or type a filename. You are on your own for quality.
             </p>
           ) : null}
           <div className="render-form-advanced">
-            {!advancedOpen ? (
+            {!advancedOpen && !isCustomProfile ? (
               <button
                 type="button"
                 className="link-button"
                 onClick={() => setAdvancedOpen(true)}
               >
-                Advanced…
+                Pick a specific model…
               </button>
             ) : (
               <label className="field">
                 <span>Model filename</span>
                 <input
                   type="text"
+                  list="cached-models-list"
                   placeholder="e.g. model_bs_roformer_ep_368_sdr_12.9628.ckpt"
                   value={nextProcessing.model_filename ?? ''}
                   aria-invalid={isCustomProfile && !customModelValid}
@@ -471,13 +478,20 @@ export function TrackDetailPanel({
                     })
                   }
                 />
+                <datalist id="cached-models-list">
+                  {cachedModels.map((model) => (
+                    <option key={model.filename} value={model.filename} />
+                  ))}
+                </datalist>
                 {isCustomProfile && !customModelValid ? (
                   <span className="field-error">Enter a bare filename ending in .ckpt, .onnx, or .pth.</span>
                 ) : (
                   <span className="field-hint">
                     {isCustomProfile
-                      ? 'Used with the Custom model profile. Must match a filename audio-separator can resolve.'
-                      : 'Only used when Profile is set to Custom model.'}
+                      ? cachedModels.length
+                        ? `Type or pick from the ${cachedModels.length} model${cachedModels.length === 1 ? '' : 's'} already cached.`
+                        : 'No models cached yet. Type a filename audio-separator can resolve.'
+                      : 'Only used when Profile is set to "Pick a specific model".'}
                   </span>
                 )}
               </label>
@@ -736,36 +750,41 @@ export function TrackDetailPanel({
             </div>
           ) : null}
 
-          {alternativePresets.length ? (
+          {alternativePresets.length && selectedRun ? (
             <div className="rerun-card">
               <div className="rerun-card-meta">
-                <strong>Not quite right? Try another preset.</strong>
-                <span>Queues a new run on the same source. Slower presets usually take longer.</span>
+                <strong>Not what you expected? Try a different model.</strong>
+                <span>Queues a new run on the same source. Pick based on what is wrong with the current one.</span>
               </div>
-              <div className="rerun-card-options">
-                {alternativePresets.map((preset) => (
-                  <button
-                    key={preset.key}
-                    type="button"
-                    className="button-secondary"
-                    disabled={rerunningRunId === selectedRun.id}
-                    onClick={() =>
-                      void onRerunWithPreset(selectedRun.id, { profile_key: preset.key })
-                    }
-                  >
-                    {rerunningRunId === selectedRun.id ? (
-                      <><Spinner /> Queueing</>
-                    ) : (
-                      `Try ${preset.label} — ${preset.strength.toLowerCase()}`
-                    )}
-                  </button>
-                ))}
+              <div className="rerun-card-intent-list">
+                {alternativePresets.map((preset) => {
+                  const disabled = rerunningRunId === selectedRun.id
+                  return (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      className="rerun-intent-option"
+                      disabled={disabled}
+                      onClick={() =>
+                        void onRerunWithPreset(selectedRun.id, { profile_key: preset.key })
+                      }
+                    >
+                      <span className="rerun-intent-copy">
+                        <span className="rerun-intent-title">
+                          {disabled ? <><Spinner /> Queueing {preset.label}…</> : `Try ${preset.label}`}
+                        </span>
+                        <span className="rerun-intent-reason">{preset.rerun_reason}</span>
+                      </span>
+                      <ProfileTierBadge profile={preset} />
+                    </button>
+                  )
+                })}
                 <button
                   type="button"
                   className="link-button"
                   onClick={openRenderFormAdvanced}
                 >
-                  Advanced…
+                  Or pick a specific model…
                 </button>
               </div>
             </div>

@@ -4,6 +4,7 @@ import type { Settings, StorageBucket, StorageOverview } from '../types'
 import { formatSize } from './metrics'
 import { Skeleton } from './feedback/Skeleton'
 import { Spinner } from './feedback/Spinner'
+import { ProfileTierBadge } from './ProfileTierBadge'
 
 type SettingsPanelProps = {
   settings: Settings | null
@@ -164,9 +165,12 @@ export function SettingsPanel({
               const current = settings.profiles.find((preset) => preset.key === draft.default_preset)
               if (!current) return null
               return (
-                <span className="field-hint">
-                  <strong>{current.strength}.</strong> {current.description} Used for new renders unless you change it per track.
-                </span>
+                <div className="profile-meta-lines">
+                  <span><strong>Best for:</strong> {current.best_for}</span>
+                  <span><strong>Tradeoff:</strong> {current.tradeoff}</span>
+                  <ProfileTierBadge profile={current} />
+                  <span className="field-hint">Used for new renders unless you change it per track.</span>
+                </div>
               )
             })()}
           </label>

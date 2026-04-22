@@ -11,7 +11,9 @@ class ProcessingProfileResponse(BaseModel):
     key: str
     label: str
     strength: str
-    description: str
+    best_for: str
+    tradeoff: str
+    rerun_reason: str
     model_filename: str
     quality_tier: int
     speed_tier: int

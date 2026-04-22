@@ -28,6 +28,7 @@ function App() {
     tracks,
     drafts,
     queueRuns,
+    cachedModels,
     draftsNeedingAttention,
     selectedTrack,
     selectedTrackId,
@@ -292,6 +293,7 @@ function App() {
               selectedRunId={selectedRunId}
               compareRunId={compareRunId}
               profiles={settings?.profiles ?? []}
+              cachedModels={cachedModels}
               defaultProfileKey={defaultProcessing.profile_key}
               defaultMp3Bitrate={defaultProcessing.export_mp3_bitrate}
               hasFirstSync={hasFirstSync}

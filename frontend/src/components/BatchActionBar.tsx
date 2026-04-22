@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import type { ProcessingProfile, RunProcessingConfigInput } from '../types'
 import { Spinner } from './feedback/Spinner'
+import { ProfileTierBadge } from './ProfileTierBadge'
 
 type BatchActionBarProps = {
   selectedCount: number
@@ -120,6 +121,8 @@ export function ConfirmDraftsPrompt({
     )
   }
 
+  const selectedProfile = profiles.find((profile) => profile.key === processing.profile_key) ?? null
+
   return (
     <div className="inline-popover">
       <div className="inline-popover-row">
@@ -133,7 +136,7 @@ export function ConfirmDraftsPrompt({
           >
             {profiles.map((profile) => (
               <option key={profile.key} value={profile.key}>
-                {profile.label}
+                {profile.label} — {profile.strength}
               </option>
             ))}
           </select>
@@ -149,6 +152,12 @@ export function ConfirmDraftsPrompt({
           />
         </label>
       </div>
+      {selectedProfile ? (
+        <div className="profile-meta-lines">
+          <span><strong>Best for:</strong> {selectedProfile.best_for}</span>
+          <ProfileTierBadge profile={selectedProfile} />
+        </div>
+      ) : null}
       <div className="inline-popover-actions">
         <button
           type="button"

@@ -18,6 +18,7 @@ import {
   discardImportDraft,
   dismissRun,
   getActiveRuns,
+  getCachedModels,
   getDiagnostics,
   getSettings,
   getStorageOverview,
@@ -40,6 +41,7 @@ import {
 import type { Toast, ToastAction, ToastTone } from '../components/feedback/ToastStack'
 import type {
   BatchUpdateImportDraftInput,
+  CachedModel,
   ConfirmImportDraftsInput,
   Diagnostics,
   ExportBundleCleanupResponse,
@@ -131,6 +133,7 @@ export function useDashboardData() {
   const [tracks, setTracks] = useState<TrackSummary[]>([])
   const [drafts, setDrafts] = useState<ImportDraft[]>([])
   const [queueRuns, setQueueRuns] = useState<QueueRunEntry[]>([])
+  const [cachedModels, setCachedModels] = useState<CachedModel[]>([])
 
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
@@ -294,11 +297,21 @@ export function useDashboardData() {
     }
   }
 
+  async function refreshCachedModels() {
+    try {
+      const result = await getCachedModels()
+      setCachedModels(result.items)
+    } catch {
+      // Non-critical: a missing cache directory just means the list stays empty.
+    }
+  }
+
   useEffect(() => {
     let disposed = false
 
     const initialLoadId = window.setTimeout(() => {
       void refreshDashboard()
+      void refreshCachedModels()
     }, 0)
 
     function tick() {
@@ -1020,6 +1033,8 @@ export function useDashboardData() {
     tracks: visibleTracks,
     drafts,
     queueRuns,
+    cachedModels,
+    refreshCachedModels,
     draftsNeedingAttention,
     selectedTrack: visibleSelectedTrack,
     selectedTrackId,

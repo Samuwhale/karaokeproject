@@ -1125,6 +1125,58 @@ code {
   overflow-wrap: anywhere;
 }
 
+.profile-meta-lines {
+  display: grid;
+  gap: 2px;
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.profile-meta-lines > span > strong {
+  color: var(--text);
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.profile-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.profile-tier-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.profile-tier-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+.tier-dots {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.tier-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-soft);
+}
+
+.tier-dot-filled {
+  background: var(--text);
+}
+
 .storage-panel-block {
   display: grid;
   gap: var(--space-sm);
@@ -1475,6 +1527,63 @@ code {
 .rerun-card-options {
   display: flex;
   flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.rerun-card-intent-list {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.rerun-intent-option {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text);
+}
+
+.rerun-intent-option:hover:not(:disabled) {
+  border-color: var(--border);
+}
+
+.rerun-intent-option:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.rerun-intent-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rerun-intent-title {
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+.rerun-intent-reason {
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.rerun-card-picker {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.rerun-card-picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-xs);
   align-items: center;
 }

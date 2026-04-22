@@ -2,10 +2,23 @@ export type ProcessingProfile = {
   key: string
   label: string
   strength: string
-  description: string
+  best_for: string
+  tradeoff: string
+  rerun_reason: string
   model_filename: string
   quality_tier: number
   speed_tier: number
+}
+
+export type CachedModel = {
+  filename: string
+  size_bytes: number
+  is_preset: boolean
+}
+
+export type CachedModelsResponse = {
+  directory: string
+  items: CachedModel[]
 }
 
 export const CUSTOM_PROFILE_KEY = 'custom'

@@ -22,7 +22,9 @@ class PresetDefinition:
     key: str
     label: str
     strength: str
-    description: str
+    best_for: str
+    tradeoff: str
+    rerun_reason: str
     model_filename: str
     quality_tier: int
     speed_tier: int
@@ -36,7 +38,9 @@ PRESET_DEFINITIONS = (
         key="preview",
         label="Preview",
         strength="Fastest",
-        description="Quick triage pass. Use to check whether a track is worth a full render.",
+        best_for="Deciding whether a track is worth a full render.",
+        tradeoff="Lower separation quality. Vocal bleed and artefacts are expected.",
+        rerun_reason="Just want a quick triage pass before committing to a slower model.",
         model_filename="UVR_MDXNET_KARA_2.onnx",
         quality_tier=0,
         speed_tier=3,
@@ -45,7 +49,9 @@ PRESET_DEFINITIONS = (
         key="standard",
         label="Standard",
         strength="Balanced default",
-        description="Clean enough for most modern pop, rock, and electronic tracks.",
+        best_for="Most modern pop, rock, and electronic tracks.",
+        tradeoff="Not always clean on dense mixes with heavy vocal layering.",
+        rerun_reason="Balanced starting point when you are not sure what the track needs.",
         model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt",
         quality_tier=1,
         speed_tier=2,
@@ -54,7 +60,9 @@ PRESET_DEFINITIONS = (
         key="high",
         label="High",
         strength="Less vocal bleed",
-        description="Slower. Try this when Standard leaves audible vocals in the instrumental on busy mixes.",
+        best_for="Busy mixes where Standard leaves vocals bleeding into the instrumental.",
+        tradeoff="Noticeably slower to render than Standard.",
+        rerun_reason="Vocals are still audible in the instrumental.",
         model_filename="model_bs_roformer_ep_368_sdr_12.9628.ckpt",
         quality_tier=2,
         speed_tier=1,
@@ -63,7 +71,9 @@ PRESET_DEFINITIONS = (
         key="vocal-focus",
         label="Vocal focus",
         strength="Cleaner vocals",
-        description="Prioritises vocal clarity over instrumental cleanliness. Good when the vocal is the keeper stem.",
+        best_for="Isolating a clean vocal when the vocal is the keeper stem.",
+        tradeoff="The instrumental may sound rougher than with High.",
+        rerun_reason="Vocals sound muddy, thin, or coloured on the previous run.",
         model_filename="mel_band_roformer_vocals_fv4_gabox.ckpt",
         quality_tier=2,
         speed_tier=1,
@@ -74,6 +84,9 @@ PRESET_DEFINITIONS = (
 PRESET_LOOKUP = {preset.key: preset for preset in PRESET_DEFINITIONS}
 
 
+# "standard" is the default because its quality/speed balance fits most imports
+# without the user having to think. Change deliberately — it ships as the starting
+# point for every new track until the user picks something else.
 DEFAULT_PRESET_KEY = "standard"
 
 
