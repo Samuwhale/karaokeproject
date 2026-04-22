@@ -1,6 +1,7 @@
-import { RUN_STATUS_LABELS } from './runStatus'
+import { RUN_STATUS_LABELS, describeRun, isTerminalRunStatus } from './runStatus'
 import type { QueueRunEntry } from '../types'
 import { ProgressBar } from './feedback/ProgressBar'
+import { Spinner } from './feedback/Spinner'
 
 type QueueListProps = {
   entries: QueueRunEntry[]
@@ -10,7 +11,10 @@ type QueueListProps = {
   onClearSelection: () => void
   onSelectTrack: (trackId: string) => void
   onCancelRun: (runId: string) => Promise<void>
+  onRetryRun: (runId: string) => Promise<void>
+  onDismissRun: (runId: string) => Promise<void>
   cancellingRunId: string | null
+  retryingRunId: string | null
 }
 
 function formatElapsed(createdAt: string) {
@@ -30,13 +34,20 @@ export function QueueList({
   onClearSelection,
   onSelectTrack,
   onCancelRun,
+  onRetryRun,
+  onDismissRun,
   cancellingRunId,
+  retryingRunId,
 }: QueueListProps) {
-  const allSelected = entries.length > 0 && entries.every((entry) => selectedIds.has(entry.run.id))
+  const selectableIds = entries
+    .filter((entry) => !isTerminalRunStatus(entry.run.status))
+    .map((entry) => entry.run.id)
+  const allSelected =
+    selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id))
 
   function handleToggleAll() {
     if (allSelected) onClearSelection()
-    else onSelectAll(entries.map((entry) => entry.run.id))
+    else onSelectAll(selectableIds)
   }
 
   if (entries.length === 0) {
@@ -61,7 +72,12 @@ export function QueueList({
 
       <div className="inbox-controls">
         <label className="checkbox-row">
-          <input type="checkbox" checked={allSelected} onChange={handleToggleAll} />
+          <input
+            type="checkbox"
+            checked={allSelected}
+            disabled={selectableIds.length === 0}
+            onChange={handleToggleAll}
+          />
           <span>{allSelected ? 'Clear all' : 'Select all'}</span>
         </label>
         <span className="library-count">{entries.length} active</span>
@@ -69,18 +85,32 @@ export function QueueList({
 
       <div className="queue-list">
         {entries.map((entry) => {
-          const selected = selectedIds.has(entry.run.id)
-          const cancelling = cancellingRunId === entry.run.id
+          const { run } = entry
+          const terminal = isTerminalRunStatus(run.status)
+          const failed = run.status === 'failed' || run.status === 'cancelled'
+          const completed = run.status === 'completed'
+          const selected = selectedIds.has(run.id)
+          const cancelling = cancellingRunId === run.id
+          const retrying = retryingRunId === run.id
+          const description = describeRun(run)
+
+          const rowClassName = [
+            'queue-row',
+            selected ? 'queue-row-selected' : '',
+            failed ? 'queue-row-failed' : '',
+            completed ? 'queue-row-done' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')
+
           return (
-            <article
-              key={entry.run.id}
-              className={`queue-row ${selected ? 'queue-row-selected' : ''}`}
-            >
+            <article key={run.id} className={rowClassName}>
               <label className="inbox-row-check">
                 <input
                   type="checkbox"
                   checked={selected}
-                  onChange={() => onToggleSelect(entry.run.id)}
+                  disabled={terminal}
+                  onChange={() => onToggleSelect(run.id)}
                 />
               </label>
               <button
@@ -93,22 +123,63 @@ export function QueueList({
                   {entry.track_artist ? <span> · {entry.track_artist}</span> : null}
                 </div>
                 <div className="queue-row-meta">
-                  {RUN_STATUS_LABELS[entry.run.status] ?? entry.run.status} ·{' '}
-                  {entry.run.processing.profile_label} · {formatElapsed(entry.run.created_at)}
+                  {RUN_STATUS_LABELS[run.status] ?? run.status} ·{' '}
+                  {run.processing.profile_label} · {formatElapsed(run.created_at)}
                 </div>
-                <ProgressBar value={entry.run.progress} />
-                {entry.run.status !== 'queued' && entry.run.status_message ? (
-                  <div className="queue-row-message">{entry.run.status_message}</div>
+                {!terminal ? <ProgressBar value={run.progress} /> : null}
+                {description && !failed ? (
+                  <div className="queue-row-message">{description}</div>
+                ) : null}
+                {failed && run.error_message ? (
+                  <div className="queue-row-error">{run.error_message}</div>
                 ) : null}
               </button>
-              <button
-                type="button"
-                className="button-secondary"
-                disabled={cancelling}
-                onClick={() => void onCancelRun(entry.run.id)}
-              >
-                {cancelling ? 'Cancelling…' : 'Cancel'}
-              </button>
+              <div className="queue-row-actions">
+                {failed ? (
+                  <>
+                    <button
+                      type="button"
+                      className="button-primary"
+                      disabled={retrying}
+                      onClick={() => void onRetryRun(run.id)}
+                    >
+                      {retrying ? (
+                        <>
+                          <Spinner /> Retrying
+                        </>
+                      ) : run.status === 'cancelled' ? (
+                        'Run again'
+                      ) : (
+                        'Retry'
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      onClick={() => void onDismissRun(run.id)}
+                    >
+                      Dismiss
+                    </button>
+                  </>
+                ) : completed ? (
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={() => void onDismissRun(run.id)}
+                  >
+                    Dismiss
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    disabled={cancelling}
+                    onClick={() => void onCancelRun(run.id)}
+                  >
+                    {cancelling ? 'Cancelling…' : 'Cancel'}
+                  </button>
+                )}
+              </div>
             </article>
           )
         })}

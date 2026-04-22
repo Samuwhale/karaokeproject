@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 
-import type { ProcessingProfile, RunArtifact, RunDetail, RunProcessingConfigInput, TrackDetail } from '../types'
+import type {
+  ProcessingProfile,
+  RevealFolderInput,
+  RunArtifact,
+  RunDetail,
+  RunProcessingConfigInput,
+  TrackDetail,
+} from '../types'
 import { CompareView } from './CompareView'
 import { ConfirmInline } from './feedback/ConfirmInline'
 import { ProgressBar } from './feedback/ProgressBar'
@@ -43,6 +50,7 @@ type TrackDetailPanelProps = {
   onDeleteTrack: (trackId: string) => Promise<void>
   onToggleCompare: (runId: string) => void
   onOpenExport: () => void
+  onReveal: (payload: RevealFolderInput) => void | Promise<void>
 }
 
 const ACTIVE_RUN_STATUSES = new Set(['queued', 'preparing', 'separating', 'exporting'])
@@ -148,6 +156,7 @@ export function TrackDetailPanel({
   onDeleteTrack,
   onToggleCompare,
   onOpenExport,
+  onReveal,
 }: TrackDetailPanelProps) {
   const [runFilter, setRunFilter] = useState<RunFilter>('all')
   const [editing, setEditing] = useState(false)
@@ -438,7 +447,7 @@ export function TrackDetailPanel({
             <h3 className="subsection-head">Runs</h3>
             <div className="run-history-head-actions">
               {showFinalCta ? (
-                <span className="inline-hint">Star a run to mark it final</span>
+                <span className="inline-hint">Star a run to mark it final.</span>
               ) : null}
               <select
                 aria-label="Filter runs"
@@ -486,8 +495,8 @@ export function TrackDetailPanel({
                     <button
                       type="button"
                       className="run-chip-star"
-                      title={isKeeper ? 'Clear final' : 'Mark as final'}
-                      aria-label={isKeeper ? 'Clear final' : 'Mark as final'}
+                      title={isKeeper ? 'Clear final' : 'Mark final'}
+                      aria-label={isKeeper ? 'Clear final' : 'Mark final'}
                       disabled={keeperDisabled}
                       onClick={() => void handleToggleKeeper(run.id)}
                     >
@@ -501,7 +510,7 @@ export function TrackDetailPanel({
                       disabled={compareDisabled}
                       onClick={() => onToggleCompare(run.id)}
                     >
-                      A|B
+                      {isCompareTarget ? 'Comparing' : 'Compare'}
                     </button>
                   </div>
                 </div>
@@ -592,6 +601,15 @@ export function TrackDetailPanel({
               >
                 Download {packageArtifact.label}
               </a>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() =>
+                  void onReveal({ kind: 'track-outputs', track_id: trackId })
+                }
+              >
+                Open folder
+              </button>
             </div>
           ) : null}
 

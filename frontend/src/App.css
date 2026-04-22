@@ -1,4 +1,4 @@
-/* Local Karaoke — tool UI. Flat, dense, functional. */
+/* Stems — tool UI. Flat, dense, functional. */
 
 /* -------- Shell -------------------------------------------------------- */
 
@@ -2097,21 +2097,21 @@ code {
 }
 
 .tab-count {
-  font-size: 12px;
-  color: var(--text-muted);
-  background: var(--border-soft);
-  padding: 2px 8px;
-  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--text-faint);
+  padding: 2px 0;
 }
 
 .tab-active .tab-count {
-  background: var(--accent-dim);
   color: var(--accent);
 }
 
 .tab-count-attention {
   background: color-mix(in oklch, var(--warn) 22%, transparent);
   color: var(--warn);
+  padding: 2px 8px;
+  border-radius: 999px;
 }
 
 .tab-active .tab-count.tab-count-attention {
@@ -2124,11 +2124,11 @@ code {
 .inbox-banner {
   margin: 0 var(--space-lg) var(--space-sm);
   padding: var(--space-sm) var(--space-md);
-  background: color-mix(in oklch, var(--warn) 10%, var(--surface));
-  border: 1px solid var(--warn);
-  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--warn) 8%, var(--surface));
+  border: 1px solid color-mix(in oklch, var(--warn) 40%, var(--border));
+  border-radius: var(--radius-sm);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--t-sm);
 }
 
 .inbox-controls {
@@ -2307,6 +2307,133 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.queue-row-failed {
+  border-color: color-mix(in oklch, var(--danger, #c0392b) 40%, var(--border-soft));
+  background: color-mix(in oklch, var(--danger, #c0392b) 5%, var(--surface));
+}
+
+.queue-row-done {
+  opacity: 0.78;
+}
+
+.queue-row-error {
+  font-size: 12px;
+  color: color-mix(in oklch, var(--danger, #c0392b) 85%, var(--text));
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 4.5em;
+  overflow: hidden;
+}
+
+.queue-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs, 4px);
+  align-items: stretch;
+  justify-self: end;
+}
+
+.queue-row-actions .button-primary,
+.queue-row-actions .button-secondary {
+  white-space: nowrap;
+}
+
+/* ----- Import inline error --------------------------------------------- */
+
+.import-error {
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--t-sm);
+  color: color-mix(in oklch, var(--danger, #c0392b) 85%, var(--text));
+  background: color-mix(in oklch, var(--danger, #c0392b) 7%, var(--surface));
+  border: 1px solid color-mix(in oklch, var(--danger, #c0392b) 35%, var(--border-soft));
+  border-radius: var(--radius-sm);
+}
+
+/* ----- Export manifest ------------------------------------------------- */
+
+.export-manifest {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-xs, 4px);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.export-manifest-row {
+  padding: var(--space-xs, 4px) var(--space-sm);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  display: grid;
+  gap: 4px;
+}
+
+.export-manifest-row-skipped {
+  opacity: 0.7;
+  border-style: dashed;
+}
+
+.export-manifest-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  justify-content: space-between;
+}
+
+.export-manifest-fallback {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.export-manifest-skip {
+  font-size: 12px;
+  color: color-mix(in oklch, var(--danger, #c0392b) 80%, var(--text));
+}
+
+.export-manifest-artifacts {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.export-manifest-artifact {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.export-manifest-artifact.is-present {
+  color: var(--text);
+}
+
+.export-manifest-artifact.is-missing {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.export-manifest-size {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.export-result-skipped {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.export-result-skipped ul {
+  padding-left: var(--space-md);
+  margin: 4px 0 0;
 }
 
 /* ----- Batch action bar ----- */

@@ -29,8 +29,8 @@ const SORT_OPTIONS: { value: LibrarySort; label: string }[] = [
 const FILTER_OPTIONS: { value: LibraryFilter; label: string }[] = [
   { value: 'all', label: 'All tracks' },
   { value: 'failed', label: 'Failed' },
-  { value: 'has-keeper', label: 'Has keeper' },
-  { value: 'no-keeper', label: 'No keeper' },
+  { value: 'has-keeper', label: 'With final' },
+  { value: 'no-keeper', label: 'No final' },
 ]
 
 export function applyLibraryView(tracks: TrackSummary[], view: LibraryView): TrackSummary[] {

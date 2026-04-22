@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { createExportBundle } from '../api'
+import { createExportBundle, planExportBundle } from '../api'
 import type {
   ExportArtifactKind,
   ExportBundleResponse,
   ExportOutputMode,
+  ExportPlanResponse,
+  ExportPlanTrack,
   ExportRunSelector,
+  RevealFolderInput,
   TrackSummary,
 } from '../types'
 import { Spinner } from './feedback/Spinner'
@@ -16,6 +19,7 @@ type ExportModalProps = {
   tracks: TrackSummary[]
   selectedTrackIds: string[]
   onError: (message: string) => void
+  onReveal: (payload: RevealFolderInput) => void | Promise<void>
 }
 
 const ARTIFACT_OPTIONS: { value: ExportArtifactKind; label: string; description: string }[] = [
@@ -26,12 +30,24 @@ const ARTIFACT_OPTIONS: { value: ExportArtifactKind; label: string; description:
   { value: 'metadata', label: 'Metadata JSON', description: 'Run + track metadata' },
 ]
 
+const ARTIFACT_LABELS: Record<ExportArtifactKind, string> = Object.fromEntries(
+  ARTIFACT_OPTIONS.map((option) => [option.value, option.label]),
+) as Record<ExportArtifactKind, string>
+
+function formatBytes(bytes: number) {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes >= 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${bytes} B`
+}
+
 export function ExportModal({
   open,
   onClose,
   tracks,
   selectedTrackIds,
   onError,
+  onReveal,
 }: ExportModalProps) {
   const [runSelector, setRunSelector] = useState<ExportRunSelector>('keeper')
   const [artifacts, setArtifacts] = useState<Set<ExportArtifactKind>>(
@@ -40,12 +56,16 @@ export function ExportModal({
   const [mode, setMode] = useState<ExportOutputMode>('single-bundle')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ExportBundleResponse | null>(null)
+  const [plan, setPlan] = useState<ExportPlanResponse | null>(null)
+  const [planLoading, setPlanLoading] = useState(false)
   const doneButtonRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     if (!open) {
       setResult(null)
       setBusy(false)
+      setPlan(null)
+      setPlanLoading(false)
     }
   }, [open])
 
@@ -53,10 +73,50 @@ export function ExportModal({
     if (result) doneButtonRef.current?.focus()
   }, [result])
 
-  const selectedTracks = tracks.filter((track) => selectedTrackIds.includes(track.id))
-  const withoutKeeper = selectedTracks.filter((track) => !track.keeper_run_id).length
-  const withKeeper = selectedTracks.length - withoutKeeper
-  const showKeeperSummary = runSelector === 'keeper' && selectedTracks.length > 0
+  const selectedTracks = useMemo(
+    () => tracks.filter((track) => selectedTrackIds.includes(track.id)),
+    [tracks, selectedTrackIds],
+  )
+
+  const planKey = useMemo(() => {
+    const artifactList = Array.from(artifacts).sort().join(',')
+    return `${selectedTrackIds.join(',')}|${runSelector}|${artifactList}|${mode}`
+  }, [selectedTrackIds, runSelector, artifacts, mode])
+
+  useEffect(() => {
+    if (!open || result) return
+    if (!selectedTrackIds.length || !artifacts.size) {
+      setPlan(null)
+      return
+    }
+    let cancelled = false
+    setPlanLoading(true)
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await planExportBundle({
+          track_ids: selectedTrackIds,
+          run_selector: runSelector,
+          artifacts: Array.from(artifacts),
+          mode,
+        })
+        if (!cancelled) setPlan(response)
+      } catch (error) {
+        if (!cancelled) {
+          setPlan(null)
+          onError(error instanceof Error ? error.message : 'Could not plan export.')
+        }
+      } finally {
+        if (!cancelled) setPlanLoading(false)
+      }
+    }, 150)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+    // planKey folds in all relevant deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, planKey, result])
 
   function toggleArtifact(kind: ExportArtifactKind) {
     setArtifacts((current) => {
@@ -88,6 +148,13 @@ export function ExportModal({
 
   if (!open) return null
 
+  const artifactList = Array.from(artifacts)
+  const totalBytes = plan?.total_bytes ?? 0
+  const includedCount = plan?.included_track_count ?? 0
+  const skippedCount = plan?.skipped_track_count ?? 0
+  const usingFallback = plan?.tracks_using_latest_fallback ?? 0
+  const usingKeeper = plan?.tracks_using_keeper ?? 0
+
   return (
     <div className="import-modal" role="dialog" aria-modal="true" aria-label="Export tracks">
       <button
@@ -110,13 +177,23 @@ export function ExportModal({
               <strong>Built {result.filename}</strong>
               <p>
                 {result.included_track_count} track
-                {result.included_track_count === 1 ? '' : 's'} included
-                {result.skipped.length
-                  ? ` · ${result.skipped.length} skipped (${result.skipped[0].reason}${
-                      result.skipped.length > 1 ? ', …' : ''
-                    })`
-                  : ''}
+                {result.included_track_count === 1 ? '' : 's'} included ·{' '}
+                {formatBytes(result.byte_count)}
               </p>
+              {result.skipped.length ? (
+                <details className="export-result-skipped">
+                  <summary>
+                    {result.skipped.length} skipped
+                  </summary>
+                  <ul>
+                    {result.skipped.map((skip) => (
+                      <li key={skip.track_id}>
+                        <strong>{skip.track_title}</strong> — {skip.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
               <div className="export-result-actions">
                 <a
                   className="button-secondary"
@@ -125,6 +202,13 @@ export function ExportModal({
                 >
                   Download again
                 </a>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => void onReveal({ kind: 'exports' })}
+                >
+                  Open exports folder
+                </button>
                 <button
                   type="button"
                   className="button-secondary"
@@ -162,11 +246,11 @@ export function ExportModal({
                     Latest completed
                   </button>
                 </div>
-                {showKeeperSummary ? (
+                {selectedTracks.length > 0 && runSelector === 'keeper' ? (
                   <p className="inline-hint">
-                    {withoutKeeper === 0
+                    {usingFallback === 0
                       ? `All ${selectedTracks.length} track${selectedTracks.length === 1 ? '' : 's'} have a final run marked.`
-                      : `${withKeeper} will use the final run, ${withoutKeeper} will fall back to the latest completed run.`}
+                      : `${usingKeeper} will use the final run, ${usingFallback} will fall back to the latest completed run.`}
                   </p>
                 ) : null}
               </section>
@@ -210,16 +294,35 @@ export function ExportModal({
                 </div>
               </section>
 
+              <section className="export-section">
+                <h3>Included</h3>
+                {planLoading && !plan ? (
+                  <p className="inline-hint">
+                    <Spinner /> Checking which artifacts are available…
+                  </p>
+                ) : plan ? (
+                  <ExportManifest plan={plan} artifactList={artifactList} />
+                ) : (
+                  <p className="inline-hint">
+                    Pick at least one track and one artifact to see what will be included.
+                  </p>
+                )}
+              </section>
+
               <div className="import-footer">
                 <span>
                   {busy
                     ? 'Building bundle…'
-                    : `${selectedTrackIds.length} track${selectedTrackIds.length === 1 ? '' : 's'} × ${artifacts.size} artifact${artifacts.size === 1 ? '' : 's'}`}
+                    : plan
+                      ? `${includedCount} included · ${skippedCount} skipped · ${formatBytes(totalBytes)}`
+                      : `${selectedTrackIds.length} track${selectedTrackIds.length === 1 ? '' : 's'} × ${artifacts.size} artifact${artifacts.size === 1 ? '' : 's'}`}
                 </span>
                 <button
                   type="button"
                   className="button-primary"
-                  disabled={busy || !artifacts.size || !selectedTrackIds.length}
+                  disabled={
+                    busy || !artifacts.size || !selectedTrackIds.length || includedCount === 0
+                  }
                   onClick={() => void handleExport()}
                 >
                   {busy ? (
@@ -236,6 +339,69 @@ export function ExportModal({
         </div>
       </div>
     </div>
+  )
+}
+
+type ExportManifestProps = {
+  plan: ExportPlanResponse
+  artifactList: ExportArtifactKind[]
+}
+
+function ExportManifest({ plan, artifactList }: ExportManifestProps) {
+  if (!plan.tracks.length) {
+    return <p className="inline-hint">No tracks selected.</p>
+  }
+
+  return (
+    <ul className="export-manifest">
+      {plan.tracks.map((track) => (
+        <ManifestRow key={track.track_id} track={track} artifactList={artifactList} />
+      ))}
+    </ul>
+  )
+}
+
+function ManifestRow({
+  track,
+  artifactList,
+}: {
+  track: ExportPlanTrack
+  artifactList: ExportArtifactKind[]
+}) {
+  const presentMap = new Map(track.artifacts.map((a) => [a.kind, a]))
+
+  return (
+    <li className={`export-manifest-row ${track.skip_reason ? 'export-manifest-row-skipped' : ''}`}>
+      <div className="export-manifest-head">
+        <strong>{track.track_title}</strong>
+        {track.fallback_to_latest ? (
+          <span className="export-manifest-fallback">fallback: latest</span>
+        ) : null}
+      </div>
+      {track.skip_reason ? (
+        <div className="export-manifest-skip">{track.skip_reason}</div>
+      ) : (
+        <ul className="export-manifest-artifacts">
+          {artifactList.map((kind) => {
+            const match = presentMap.get(kind)
+            const present = match?.present ?? false
+            return (
+              <li
+                key={kind}
+                className={`export-manifest-artifact ${present ? 'is-present' : 'is-missing'}`}
+                title={match?.missing_reason ?? undefined}
+              >
+                <span aria-hidden>{present ? '✓' : '—'}</span>
+                <span>{ARTIFACT_LABELS[kind]}</span>
+                {present && match?.size_bytes != null ? (
+                  <span className="export-manifest-size">{formatBytes(match.size_bytes)}</span>
+                ) : null}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </li>
   )
 }
 

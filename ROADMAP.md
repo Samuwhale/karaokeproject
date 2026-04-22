@@ -23,6 +23,7 @@ The near-term product should be understood as a stem workflow tool:
 - keep the default flow legible from import to export
 - optimize for one person using the tool directly on their own machine
 - use clean seams around storage, jobs, and domain logic without introducing premature hosted abstractions
+- make local storage usage visible and manageable instead of opaque
 - improve outcomes without turning the product into a cluttered browser workstation
 - deepen the finish of the core loop before expanding into adjacent product surfaces
 - avoid infrastructure work before the local product is stable enough to carry forward
@@ -32,15 +33,17 @@ The near-term product should be understood as a stem workflow tool:
 Focus:
 
 - clearer import flow for local files and supported sources
+- clearer control over where local files are stored
 - more legible queue and processing state
 - stronger failure handling and recovery
+- clearer storage usage, retention, and cleanup controls
 - clearer export paths and final outputs
 - lower ambiguity about what will happen next
 
 Why this phase exists:
 
 - the product already works locally
-- the main gap is workflow clarity, not surface area
+- the main gap is workflow clarity, trust, and file lifecycle management, not surface area
 - future work should inherit a stronger local loop instead of compensating for a confusing one
 
 ## Phase 2. Improve Separation Quality
@@ -110,6 +113,15 @@ Do not treat this as a reason to add:
 - plugin-style effects chains
 - automation lanes
 - general DAW routing
+
+Local file management is also in scope for the near-term product when it supports the local-first workflow clearly, such as:
+
+- choosing or understanding the storage location used by the app
+- seeing which imports, runs, and exports are using disk space
+- deleting old runs, artifacts, and exports with clear consequences
+- keeping keeper results while cleaning up disposable intermediates
+
+Do not treat this as a reason to add a general-purpose file browser inside the app.
 
 ## Related Docs
 

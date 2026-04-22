@@ -24,10 +24,10 @@
   --text-muted: oklch(0.61 0.006 155);
   --text-faint: oklch(0.45 0.007 155);
 
-  --accent: oklch(0.82 0.11 155);
-  --accent-press: oklch(0.72 0.12 155);
+  --accent: oklch(0.78 0.09 205);
+  --accent-press: oklch(0.68 0.10 205);
   --accent-dim: color-mix(in oklch, var(--accent) 14%, transparent);
-  --accent-ink: oklch(0.22 0.04 155);
+  --accent-ink: oklch(0.20 0.04 205);
 
   --ok: oklch(0.82 0.11 155);
   --warn: oklch(0.80 0.13 75);

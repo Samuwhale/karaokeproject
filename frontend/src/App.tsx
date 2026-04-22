@@ -11,6 +11,7 @@ import { SettingsDrawer } from './components/SettingsDrawer'
 import { TrackDetailPanel } from './components/TrackDetailPanel'
 import { DEFAULT_LIBRARY_VIEW, TrackList, applyLibraryView } from './components/TrackList'
 import type { LibraryView } from './components/TrackList'
+import { ConfirmInline } from './components/feedback/ConfirmInline'
 import { ToastStack } from './components/feedback/ToastStack'
 import { useDashboardData } from './hooks/useDashboardData'
 import type { Connection, DashboardSurface } from './hooks/useDashboardData'
@@ -68,6 +69,8 @@ function App() {
     handleCreateRun,
     handleCancelRun,
     handleRetryRun,
+    handleDismissRun,
+    handleRevealFolder,
     handleSaveSettings,
     handleSetKeeper,
     handlePurgeNonKeepers,
@@ -171,7 +174,7 @@ function App() {
     <ErrorBoundary>
       <div className="app-shell">
         <header className="topbar">
-          <div className="topbar-brand">karaoke</div>
+          <div className="topbar-brand">stems</div>
           <div className="topbar-meta">
             <StatusChip
               connection={connection}
@@ -247,7 +250,10 @@ function App() {
                   })
                 }}
                 onCancelRun={handleCancelRun}
+                onRetryRun={handleRetryRun}
+                onDismissRun={handleDismissRun}
                 cancellingRunId={cancellingRunId}
+                retryingRunId={retryingRunId}
               />
             ) : (
               <TrackList
@@ -306,6 +312,7 @@ function App() {
               onOpenExport={() => {
                 if (selectedTrack) setExportTargetIds([selectedTrack.id])
               }}
+              onReveal={handleRevealFolder}
             />
           </section>
         </main>
@@ -393,7 +400,7 @@ function App() {
               disabled={batching}
               onClick={() => void handleBatchPurgeNonKeepers(librarySelectionList)}
             >
-              Purge non-keepers
+              Purge non-final runs
             </button>
             <button
               type="button"
@@ -402,18 +409,15 @@ function App() {
             >
               Export…
             </button>
-            <button
-              type="button"
-              className="button-secondary"
-              disabled={batching}
-              onClick={() => {
-                if (window.confirm(`Delete ${librarySelectionList.length} track(s)?`)) {
-                  void handleBatchDeleteTracks(librarySelectionList)
-                }
-              }}
-            >
-              Delete
-            </button>
+            <ConfirmInline
+              label="Delete"
+              pendingLabel="Deleting…"
+              confirmLabel={`Delete ${librarySelectionList.length} track${librarySelectionList.length === 1 ? '' : 's'}`}
+              cancelLabel="Keep them"
+              prompt={`Delete ${librarySelectionList.length} track${librarySelectionList.length === 1 ? '' : 's'}?`}
+              pending={batching}
+              onConfirm={() => handleBatchDeleteTracks(librarySelectionList)}
+            />
           </BatchActionBar>
         ) : null}
 
@@ -460,6 +464,7 @@ function App() {
           tracks={tracks}
           selectedTrackIds={exportTargetIds ?? []}
           onError={(message) => pushToast('error', message)}
+          onReveal={handleRevealFolder}
         />
 
         <ToastStack toasts={toasts} onDismiss={dismissToast} />
