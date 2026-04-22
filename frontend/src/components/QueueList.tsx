@@ -1,4 +1,4 @@
-import { RUN_STATUS_LABELS, describeRun, isTerminalRunStatus } from './runStatus'
+import { RUN_STATUS_LABELS, describeRun } from './runStatus'
 import type { QueueRunEntry } from '../types'
 import { ProgressBar } from './feedback/ProgressBar'
 import { Spinner } from './feedback/Spinner'
@@ -40,7 +40,7 @@ export function QueueList({
   retryingRunId,
 }: QueueListProps) {
   const selectableIds = entries
-    .filter((entry) => !isTerminalRunStatus(entry.run.status))
+    .filter((entry) => entry.run.status !== 'failed' && entry.run.status !== 'cancelled')
     .map((entry) => entry.run.id)
   const allSelected =
     selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id))
@@ -86,9 +86,7 @@ export function QueueList({
       <div className="queue-list">
         {entries.map((entry) => {
           const { run } = entry
-          const terminal = isTerminalRunStatus(run.status)
           const failed = run.status === 'failed' || run.status === 'cancelled'
-          const completed = run.status === 'completed'
           const selected = selectedIds.has(run.id)
           const cancelling = cancellingRunId === run.id
           const retrying = retryingRunId === run.id
@@ -98,7 +96,6 @@ export function QueueList({
             'queue-row',
             selected ? 'queue-row-selected' : '',
             failed ? 'queue-row-failed' : '',
-            completed ? 'queue-row-done' : '',
           ]
             .filter(Boolean)
             .join(' ')
@@ -109,7 +106,7 @@ export function QueueList({
                 <input
                   type="checkbox"
                   checked={selected}
-                  disabled={terminal}
+                  disabled={failed}
                   onChange={() => onToggleSelect(run.id)}
                 />
               </label>
@@ -126,7 +123,7 @@ export function QueueList({
                   {RUN_STATUS_LABELS[run.status] ?? run.status} ·{' '}
                   {run.processing.profile_label} · {formatElapsed(run.created_at)}
                 </div>
-                {!terminal ? <ProgressBar value={run.progress} /> : null}
+                {!failed ? <ProgressBar value={run.progress} /> : null}
                 {description && !failed ? (
                   <div className="queue-row-message">{description}</div>
                 ) : null}
@@ -161,14 +158,6 @@ export function QueueList({
                       Dismiss
                     </button>
                   </>
-                ) : completed ? (
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    onClick={() => void onDismissRun(run.id)}
-                  >
-                    Dismiss
-                  </button>
                 ) : (
                   <button
                     type="button"

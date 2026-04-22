@@ -15,7 +15,7 @@ def get_settings(
     runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
 ) -> SettingsResponse:
     settings = get_or_create_settings(session, runtime_settings)
-    return serialize_settings(settings)
+    return serialize_settings(settings, runtime_settings)
 
 
 @router.put("/settings", response_model=SettingsResponse)

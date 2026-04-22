@@ -1,0 +1,313 @@
+from __future__ import annotations
+
+import re
+import shutil
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from backend.core.config import RuntimeSettings
+from backend.db.models import AppSettings, IN_PROGRESS_RUN_STATUSES, Run, Track
+from backend.schemas.storage import (
+    ExportBundleCleanupResponse,
+    NonKeeperCleanupResponse,
+    StorageBucketKey,
+    StorageBucketResponse,
+    StorageOverviewResponse,
+    TempCleanupResponse,
+)
+from backend.services.tracks import list_tracks, purge_non_keeper_runs
+
+
+LEGACY_EXPORT_BUNDLE_PATTERN = re.compile(r".+-[0-9a-f]{32}\.zip$")
+
+
+@dataclass(frozen=True)
+class StoragePaths:
+    database_path: Path
+    uploads_dir: Path
+    outputs_dir: Path
+    exports_dir: Path
+    temp_dir: Path
+    model_cache_dir: Path
+
+    @property
+    def export_bundles_dir(self) -> Path:
+        return self.exports_dir / "bundles"
+
+    def ensure_directories(self) -> None:
+        for directory in (
+            self.database_path.parent,
+            self.uploads_dir,
+            self.outputs_dir,
+            self.exports_dir,
+            self.temp_dir,
+            self.model_cache_dir,
+        ):
+            directory.mkdir(parents=True, exist_ok=True)
+
+
+def resolve_storage_paths(runtime_settings: RuntimeSettings, settings: AppSettings) -> StoragePaths:
+    uploads_dir = Path(settings.uploads_directory or runtime_settings.uploads_dir).expanduser().resolve()
+    outputs_dir = Path(settings.outputs_directory or runtime_settings.output_dir).expanduser().resolve()
+    exports_dir = Path(settings.exports_directory or runtime_settings.exports_dir).expanduser().resolve()
+    temp_dir = Path(settings.temp_directory or runtime_settings.temp_dir).expanduser().resolve()
+    model_cache_dir = Path(settings.model_cache_directory or runtime_settings.model_cache_dir).expanduser().resolve()
+    paths = StoragePaths(
+        database_path=runtime_settings.database_path.expanduser().resolve(),
+        uploads_dir=uploads_dir,
+        outputs_dir=outputs_dir,
+        exports_dir=exports_dir,
+        temp_dir=temp_dir,
+        model_cache_dir=model_cache_dir,
+    )
+    paths.ensure_directories()
+    return paths
+
+
+def file_size(path: Path) -> int:
+    try:
+        return path.stat().st_size if path.is_file() else 0
+    except OSError:
+        return 0
+
+
+def directory_size(path: Path) -> int:
+    if not path.exists():
+        return 0
+    if path.is_file():
+        return file_size(path)
+
+    total = 0
+    for entry in path.rglob("*"):
+        if entry.is_file():
+            total += file_size(entry)
+    return total
+
+
+def entry_count(path: Path) -> int:
+    if not path.exists():
+        return 0
+    if path.is_file():
+        return 1
+    return sum(1 for _ in path.rglob("*"))
+
+
+def _iter_export_bundle_files(paths: StoragePaths) -> list[Path]:
+    files: list[Path] = []
+    bundle_dir = paths.export_bundles_dir
+    if bundle_dir.is_dir():
+        files.extend(sorted(path for path in bundle_dir.iterdir() if path.is_file() and path.suffix == ".zip"))
+    if paths.exports_dir.is_dir():
+        files.extend(
+            sorted(
+                path
+                for path in paths.exports_dir.iterdir()
+                if path.is_file() and LEGACY_EXPORT_BUNDLE_PATTERN.fullmatch(path.name)
+            )
+        )
+    return files
+
+
+def _delete_path(path: Path) -> tuple[int, int]:
+    if not path.exists():
+        return 0, 0
+    reclaimed = directory_size(path)
+    deleted = entry_count(path)
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+    else:
+        path.unlink(missing_ok=True)
+    return deleted, reclaimed
+
+
+def _delete_children(directory: Path) -> tuple[int, int]:
+    if not directory.is_dir():
+        return 0, 0
+    deleted = 0
+    reclaimed = 0
+    for child in list(directory.iterdir()):
+        child_deleted, child_reclaimed = _delete_path(child)
+        deleted += child_deleted
+        reclaimed += child_reclaimed
+    return deleted, reclaimed
+
+
+def cleanup_temp_storage(paths: StoragePaths, *, older_than: timedelta | None = None) -> TempCleanupResponse:
+    deleted = 0
+    reclaimed = 0
+    cutoff = datetime.utcnow() - older_than if older_than is not None else None
+    if not paths.temp_dir.is_dir():
+        return TempCleanupResponse(deleted_entry_count=0, bytes_reclaimed=0)
+
+    for child in list(paths.temp_dir.iterdir()):
+        if cutoff is not None:
+            try:
+                modified_at = datetime.utcfromtimestamp(child.stat().st_mtime)
+            except OSError:
+                continue
+            if modified_at > cutoff:
+                continue
+        child_deleted, child_reclaimed = _delete_path(child)
+        deleted += child_deleted
+        reclaimed += child_reclaimed
+
+    return TempCleanupResponse(deleted_entry_count=deleted, bytes_reclaimed=reclaimed)
+
+
+def cleanup_export_bundles(
+    paths: StoragePaths,
+    *,
+    older_than: timedelta | None = None,
+) -> ExportBundleCleanupResponse:
+    deleted = 0
+    reclaimed = 0
+    cutoff = datetime.utcnow() - older_than if older_than is not None else None
+
+    for path in _iter_export_bundle_files(paths):
+        if cutoff is not None:
+            try:
+                modified_at = datetime.utcfromtimestamp(path.stat().st_mtime)
+            except OSError:
+                continue
+            if modified_at > cutoff:
+                continue
+        reclaimed += file_size(path)
+        path.unlink(missing_ok=True)
+        deleted += 1
+
+    return ExportBundleCleanupResponse(deleted_bundle_count=deleted, bytes_reclaimed=reclaimed)
+
+
+def apply_storage_retention(session: Session, runtime_settings: RuntimeSettings) -> None:
+    from backend.services.settings import get_or_create_settings
+
+    settings = get_or_create_settings(session, runtime_settings)
+    paths = resolve_storage_paths(runtime_settings, settings)
+    cleanup_temp_storage(paths, older_than=timedelta(hours=settings.temp_max_age_hours or 24))
+    cleanup_export_bundles(
+        paths,
+        older_than=timedelta(days=settings.export_bundle_max_age_days or 7),
+    )
+
+
+def _sum_unique_paths(paths: set[Path]) -> int:
+    return sum(directory_size(path) for path in paths)
+
+
+def _non_keeper_reclaimable_bytes(track: Track) -> int:
+    if not track.keeper_run_id:
+        return 0
+    reclaimable = 0
+    seen_paths: set[Path] = set()
+    for run in track.runs:
+        if run.id == track.keeper_run_id:
+            continue
+        if run.status not in {"completed", "failed", "cancelled"}:
+            continue
+        if run.output_directory:
+            seen_paths.add(Path(run.output_directory))
+        for artifact in run.artifacts:
+            if artifact.kind == "source":
+                continue
+            artifact_path = Path(artifact.path)
+            if run.output_directory and artifact_path.is_relative_to(Path(run.output_directory)):
+                continue
+            seen_paths.add(artifact_path)
+    reclaimable += _sum_unique_paths(seen_paths)
+    return reclaimable
+
+
+def collect_storage_overview(
+    session: Session,
+    runtime_settings: RuntimeSettings,
+) -> StorageOverviewResponse:
+    from backend.services.settings import get_or_create_settings
+
+    settings = get_or_create_settings(session, runtime_settings)
+    paths = resolve_storage_paths(runtime_settings, settings)
+    library_tracks = list_tracks(session)
+
+    upload_paths = {Path(track.source_path) for track in library_tracks if track.source_path}
+    output_paths = {
+        Path(run.output_directory)
+        for track in library_tracks
+        for run in track.runs
+        if run.output_directory
+    }
+    non_keeper_reclaimable = sum(_non_keeper_reclaimable_bytes(track) for track in library_tracks)
+    export_bundle_paths = {Path(artifact.path) for track in library_tracks for run in track.runs for artifact in run.artifacts if artifact.kind == "package"}
+    export_bundle_paths.update(_iter_export_bundle_files(paths))
+
+    items = [
+        StorageBucketResponse(
+            key=StorageBucketKey.database,
+            label="Database",
+            path=str(paths.database_path),
+            total_bytes=file_size(paths.database_path),
+            reclaimable_bytes=0,
+        ),
+        StorageBucketResponse(
+            key=StorageBucketKey.uploads,
+            label="Source uploads",
+            path=str(paths.uploads_dir),
+            total_bytes=_sum_unique_paths(upload_paths),
+            reclaimable_bytes=0,
+        ),
+        StorageBucketResponse(
+            key=StorageBucketKey.outputs,
+            label="Run outputs",
+            path=str(paths.outputs_dir),
+            total_bytes=_sum_unique_paths(output_paths),
+            reclaimable_bytes=non_keeper_reclaimable,
+        ),
+        StorageBucketResponse(
+            key=StorageBucketKey.export_bundles,
+            label="Export bundles",
+            path=str(paths.exports_dir),
+            total_bytes=_sum_unique_paths(export_bundle_paths),
+            reclaimable_bytes=_sum_unique_paths(export_bundle_paths),
+        ),
+        StorageBucketResponse(
+            key=StorageBucketKey.temp,
+            label="Temp workspace",
+            path=str(paths.temp_dir),
+            total_bytes=directory_size(paths.temp_dir),
+            reclaimable_bytes=directory_size(paths.temp_dir),
+        ),
+        StorageBucketResponse(
+            key=StorageBucketKey.model_cache,
+            label="Model cache",
+            path=str(paths.model_cache_dir),
+            total_bytes=directory_size(paths.model_cache_dir),
+            reclaimable_bytes=0,
+        ),
+    ]
+    total_bytes = sum(item.total_bytes for item in items)
+    return StorageOverviewResponse(items=items, total_bytes=total_bytes)
+
+
+def cleanup_non_keeper_runs_library(session: Session) -> NonKeeperCleanupResponse:
+    deleted_run_count = 0
+    bytes_reclaimed = 0
+    purged_track_count = 0
+    skipped_track_count = 0
+
+    for track in list_tracks(session):
+        if not track.keeper_run_id or any(run.status in IN_PROGRESS_RUN_STATUSES for run in track.runs):
+            skipped_track_count += 1
+            continue
+        deleted, reclaimed = purge_non_keeper_runs(session, track.id)
+        if deleted > 0:
+            purged_track_count += 1
+            deleted_run_count += deleted
+            bytes_reclaimed += reclaimed
+
+    return NonKeeperCleanupResponse(
+        purged_track_count=purged_track_count,
+        skipped_track_count=skipped_track_count,
+        deleted_run_count=deleted_run_count,
+        bytes_reclaimed=bytes_reclaimed,
+    )

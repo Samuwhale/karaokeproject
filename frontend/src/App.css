@@ -113,8 +113,7 @@ button.topbar-chip:focus-visible {
 
 .toast {
   pointer-events: auto;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-xs) var(--space-sm);
@@ -125,6 +124,31 @@ button.topbar-chip:focus-visible {
   border-radius: var(--radius-sm);
   box-shadow: 0 6px 18px -10px color-mix(in oklch, var(--bg) 90%, black);
   animation: toast-in 140ms ease-out both;
+}
+
+.toast-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-wrap: break-word;
+}
+
+.toast-action {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-xs);
+  transition: color 80ms ease, background-color 80ms ease;
+}
+
+.toast-action:hover {
+  background: var(--surface-hover);
+}
+
+.toast-action:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
 }
 
 @keyframes toast-in {
@@ -156,11 +180,6 @@ button.topbar-chip:focus-visible {
 .toast-dot-success { background: var(--ok); }
 .toast-dot-error { background: var(--err); }
 .toast-dot-info { background: var(--info); }
-
-.toast-body {
-  min-width: 0;
-  word-wrap: break-word;
-}
 
 .toast-close {
   width: 20px;
@@ -1106,6 +1125,75 @@ code {
   overflow-wrap: anywhere;
 }
 
+.storage-panel-block {
+  display: grid;
+  gap: var(--space-sm);
+  padding-top: var(--space-xs);
+}
+
+.storage-usage-list,
+.storage-action-list {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.storage-usage-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-md);
+  align-items: start;
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.storage-usage-row:last-child {
+  border-bottom: 0;
+}
+
+.storage-usage-copy {
+  min-width: 0;
+}
+
+.storage-usage-copy strong {
+  display: block;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.storage-usage-copy p {
+  margin-top: 4px;
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.storage-usage-metrics {
+  display: grid;
+  gap: 4px;
+  text-align: right;
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.storage-usage-metrics span:first-child {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+}
+
+.storage-path-grid {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.storage-action-row {
+  width: 100%;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+}
+
 /* -------- Drop zone -------------------------------------------------- */
 
 .drop-zone {
@@ -1359,6 +1447,35 @@ code {
 
 .exports-row-label {
   font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+}
+
+.step-up-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-sunk);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  flex-wrap: wrap;
+}
+
+.step-up-row-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step-up-row-meta strong {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.step-up-row-meta span {
   font-size: var(--t-xs);
   color: var(--text-muted);
 }
@@ -1751,7 +1868,7 @@ code {
   outline-offset: -1px;
 }
 
-/* -------- Run chip actions (keeper / compare) ----------------------- */
+/* -------- Run chip actions (final / compare) ----------------------- */
 
 .run-chip {
   position: relative;
@@ -1772,6 +1889,23 @@ code {
   cursor: pointer;
   color: inherit;
   font: inherit;
+}
+
+.run-chip-key {
+  display: inline-block;
+  margin-right: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 400;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  vertical-align: baseline;
+}
+
+.run-chip-active .run-chip-key {
+  color: var(--accent);
 }
 
 .run-chip-select strong {
@@ -2310,17 +2444,13 @@ code {
 }
 
 .queue-row-failed {
-  border-color: color-mix(in oklch, var(--danger, #c0392b) 40%, var(--border-soft));
-  background: color-mix(in oklch, var(--danger, #c0392b) 5%, var(--surface));
-}
-
-.queue-row-done {
-  opacity: 0.78;
+  border-color: color-mix(in oklch, var(--err) 40%, var(--border-soft));
+  background: color-mix(in oklch, var(--err) 5%, var(--surface));
 }
 
 .queue-row-error {
   font-size: 12px;
-  color: color-mix(in oklch, var(--danger, #c0392b) 85%, var(--text));
+  color: color-mix(in oklch, var(--err) 85%, var(--text));
   font-family: var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;
@@ -2331,7 +2461,7 @@ code {
 .queue-row-actions {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs, 4px);
+  gap: var(--space-xs);
   align-items: stretch;
   justify-self: end;
 }
@@ -2346,9 +2476,9 @@ code {
 .import-error {
   padding: var(--space-sm) var(--space-md);
   font-size: var(--t-sm);
-  color: color-mix(in oklch, var(--danger, #c0392b) 85%, var(--text));
-  background: color-mix(in oklch, var(--danger, #c0392b) 7%, var(--surface));
-  border: 1px solid color-mix(in oklch, var(--danger, #c0392b) 35%, var(--border-soft));
+  color: color-mix(in oklch, var(--err) 85%, var(--text));
+  background: color-mix(in oklch, var(--err) 7%, var(--surface));
+  border: 1px solid color-mix(in oklch, var(--err) 35%, var(--border-soft));
   border-radius: var(--radius-sm);
 }
 
@@ -2359,13 +2489,13 @@ code {
   padding: 0;
   margin: 0;
   display: grid;
-  gap: var(--space-xs, 4px);
+  gap: var(--space-xs);
   max-height: 260px;
   overflow-y: auto;
 }
 
 .export-manifest-row {
-  padding: var(--space-xs, 4px) var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -2392,7 +2522,7 @@ code {
 
 .export-manifest-skip {
   font-size: 12px;
-  color: color-mix(in oklch, var(--danger, #c0392b) 80%, var(--text));
+  color: color-mix(in oklch, var(--err) 80%, var(--text));
 }
 
 .export-manifest-artifacts {

@@ -24,6 +24,7 @@ function App() {
     focusSurface,
     diagnostics,
     settings,
+    storageOverview,
     tracks,
     drafts,
     queueRuns,
@@ -49,14 +50,16 @@ function App() {
     creatingRun,
     cancellingRunId,
     retryingRunId,
+    steppingUpRunId,
     savingSettings,
+    cleaningTempStorage,
+    cleaningExportBundles,
+    cleaningLibraryRuns,
     compareRunId,
     settingKeeper,
-    purgingNonKeepers,
     backfillingMetrics,
     savingNoteRunId,
     updatingTrack,
-    deletingTrack,
     batching,
     setSelectedRunId,
     handleResolveYouTube,
@@ -69,9 +72,13 @@ function App() {
     handleCreateRun,
     handleCancelRun,
     handleRetryRun,
+    handleStepUpRun,
     handleDismissRun,
     handleRevealFolder,
     handleSaveSettings,
+    handleCleanupTempStorage,
+    handleCleanupExportBundles,
+    handleCleanupLibraryRuns,
     handleSetKeeper,
     handlePurgeNonKeepers,
     handleBackfillMetrics,
@@ -96,7 +103,7 @@ function App() {
   const visibleTracks = useMemo(() => applyLibraryView(tracks, libraryView), [tracks, libraryView])
 
   const defaultProcessing: RunProcessingConfigInput = {
-    profile_key: settings?.default_preset ?? 'balanced',
+    profile_key: settings?.default_preset ?? 'standard',
     export_mp3_bitrate: settings?.export_mp3_bitrate ?? '320k',
   }
 
@@ -290,11 +297,10 @@ function App() {
               creatingRun={creatingRun}
               cancellingRunId={cancellingRunId}
               retryingRunId={retryingRunId}
+              steppingUpRunId={steppingUpRunId}
               settingKeeper={settingKeeper}
-              purgingNonKeepers={purgingNonKeepers}
               savingNoteRunId={savingNoteRunId}
               updatingTrack={updatingTrack}
-              deletingTrack={deletingTrack}
               onSelectRun={(runId) => {
                 startTransition(() => {
                   setSelectedRunId(runId)
@@ -303,6 +309,7 @@ function App() {
               onCreateRun={handleCreateRun}
               onCancelRun={handleCancelRun}
               onRetryRun={handleRetryRun}
+              onStepUpRun={handleStepUpRun}
               onSetKeeper={handleSetKeeper}
               onPurgeNonKeepers={handlePurgeNonKeepers}
               onSetRunNote={handleSetRunNote}
@@ -379,7 +386,7 @@ function App() {
               disabled={batching}
               onClick={() => void handleBatchQueueRuns(librarySelectionList, defaultProcessing)}
             >
-              Queue runs
+              Queue renders
             </button>
             <ApplyArtistPrompt
               disabled={batching}
@@ -442,10 +449,17 @@ function App() {
           open={settingsOpen}
           diagnostics={diagnostics}
           settings={settings}
+          storageOverview={storageOverview}
           savingSettings={savingSettings}
+          cleaningTempStorage={cleaningTempStorage}
+          cleaningExportBundles={cleaningExportBundles}
+          cleaningLibraryRuns={cleaningLibraryRuns}
           backfillingMetrics={backfillingMetrics}
           onClose={() => setSettingsOpen(false)}
           onSaveSettings={handleSaveSettings}
+          onCleanupTempStorage={handleCleanupTempStorage}
+          onCleanupExportBundles={handleCleanupExportBundles}
+          onCleanupLibraryRuns={handleCleanupLibraryRuns}
           onBackfillMetrics={handleBackfillMetrics}
         />
 

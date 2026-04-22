@@ -104,16 +104,6 @@ export function DiagnosticsPanel({
           )
         })}
       </div>
-
-      <div className="directory-list">
-        {Object.entries(diagnostics.data_directories).map(([label, value]) => (
-          <div key={label}>
-            <span>{label}</span>
-            <code>{value}</code>
-          </div>
-        ))}
-      </div>
-
       <details className="advanced-actions">
         <summary>Advanced</summary>
         <button

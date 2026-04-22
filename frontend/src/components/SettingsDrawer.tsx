@@ -1,4 +1,4 @@
-import type { Diagnostics, Settings } from '../types'
+import type { Diagnostics, Settings, StorageOverview } from '../types'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { SettingsPanel } from './SettingsPanel'
 
@@ -6,10 +6,17 @@ type SettingsDrawerProps = {
   open: boolean
   diagnostics: Diagnostics | null
   settings: Settings | null
+  storageOverview: StorageOverview | null
   savingSettings: boolean
+  cleaningTempStorage: boolean
+  cleaningExportBundles: boolean
+  cleaningLibraryRuns: boolean
   backfillingMetrics: boolean
   onClose: () => void
   onSaveSettings: (settings: Omit<Settings, 'profiles'>) => Promise<void>
+  onCleanupTempStorage: () => Promise<void>
+  onCleanupExportBundles: () => Promise<void>
+  onCleanupLibraryRuns: () => void
   onBackfillMetrics: () => Promise<void>
 }
 
@@ -27,10 +34,17 @@ export function SettingsDrawer({
   open,
   diagnostics,
   settings,
+  storageOverview,
   savingSettings,
+  cleaningTempStorage,
+  cleaningExportBundles,
+  cleaningLibraryRuns,
   backfillingMetrics,
   onClose,
   onSaveSettings,
+  onCleanupTempStorage,
+  onCleanupExportBundles,
+  onCleanupLibraryRuns,
   onBackfillMetrics,
 }: SettingsDrawerProps) {
   if (!open) return null
@@ -51,7 +65,18 @@ export function SettingsDrawer({
             backfillingMetrics={backfillingMetrics}
             onBackfillMetrics={onBackfillMetrics}
           />
-          <SettingsPanel settings={settings} saving={savingSettings} onSave={onSaveSettings} />
+          <SettingsPanel
+            settings={settings}
+            storageOverview={storageOverview}
+            saving={savingSettings}
+            cleaningTempStorage={cleaningTempStorage}
+            cleaningExportBundles={cleaningExportBundles}
+            cleaningLibraryRuns={cleaningLibraryRuns}
+            onSave={onSaveSettings}
+            onCleanupTempStorage={onCleanupTempStorage}
+            onCleanupExportBundles={onCleanupExportBundles}
+            onCleanupLibraryRuns={onCleanupLibraryRuns}
+          />
           <section className="section">
             <div className="section-head">
               <h2>Keyboard shortcuts</h2>

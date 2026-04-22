@@ -29,12 +29,8 @@ class RuntimeSettings(BaseSettings):
     def ensure_directories(self) -> None:
         for directory in (
             self.data_root,
-            self.uploads_dir,
-            self.output_dir,
-            self.exports_dir,
-            self.temp_dir,
             self.logs_dir,
-            self.model_cache_dir,
+            self.database_path.parent,
         ):
             directory.mkdir(parents=True, exist_ok=True)
 

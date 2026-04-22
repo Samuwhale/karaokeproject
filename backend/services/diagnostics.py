@@ -12,10 +12,12 @@ from backend.core.binaries import find_binary
 from backend.core.config import RuntimeSettings
 from backend.schemas.system import BinaryStatusResponse, DiagnosticsResponse
 from backend.services.settings import get_or_create_settings
+from backend.services.storage import resolve_storage_paths
 
 
 def collect_diagnostics(session: Session, runtime_settings: RuntimeSettings) -> DiagnosticsResponse:
     application_settings = get_or_create_settings(session, runtime_settings)
+    storage_paths = resolve_storage_paths(runtime_settings, application_settings)
     ffmpeg_adapter = FfmpegAdapter(runtime_settings)
     separator_adapter = AudioSeparatorAdapter(runtime_settings)
     yt_dlp_adapter = YtDlpAdapter(runtime_settings)
@@ -69,12 +71,12 @@ def collect_diagnostics(session: Session, runtime_settings: RuntimeSettings) -> 
         for row in binary_rows
         if row.required and not row.available
     ]
-    if not Path(application_settings.output_directory).exists():
+    if not storage_paths.outputs_dir.exists():
         issues.append("Configured output directory does not exist.")
-    if not Path(application_settings.model_cache_directory).exists():
+    if not storage_paths.model_cache_dir.exists():
         issues.append("Configured model cache directory does not exist.")
 
-    disk_usage = shutil.disk_usage(runtime_settings.data_root)
+    disk_usage = shutil.disk_usage(storage_paths.outputs_dir)
     return DiagnosticsResponse(
         app_ready=not any(row.required and not row.available for row in binary_rows),
         acceleration=acceleration,
@@ -82,11 +84,11 @@ def collect_diagnostics(session: Session, runtime_settings: RuntimeSettings) -> 
         binaries=binary_rows,
         issues=issues,
         data_directories={
-            "uploads": str(runtime_settings.uploads_dir.resolve()),
-            "outputs": application_settings.output_directory,
-            "exports": str(runtime_settings.exports_dir.resolve()),
-            "temp": str(runtime_settings.temp_dir.resolve()),
-            "model_cache": application_settings.model_cache_directory,
+            "uploads": str(storage_paths.uploads_dir),
+            "outputs": str(storage_paths.outputs_dir),
+            "exports": str(storage_paths.exports_dir),
+            "temp": str(storage_paths.temp_dir),
+            "model_cache": str(storage_paths.model_cache_dir),
         },
         url_import_ready=all(
             row.available for row in binary_rows if row.name in {"ffmpeg", "ffprobe", "audio-separator", "yt-dlp"}

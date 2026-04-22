@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import shutil
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.core.config import RuntimeSettings
+from backend.core.constants import next_quality_tier
 from backend.db.models import (
     IN_PROGRESS_RUN_STATUSES,
     TERMINAL_RUN_STATUSES,
@@ -28,7 +30,11 @@ from backend.schemas.tracks import (
     TrackDetailResponse,
     TrackSummaryResponse,
 )
-from backend.services.processing import resolve_run_processing, serialize_processing_config
+from backend.services.processing import (
+    build_processing_config,
+    resolve_run_processing,
+    serialize_processing_config,
+)
 
 
 def _slugify(value: str) -> str:
@@ -427,6 +433,25 @@ def retry_run(session: Session, run_id: str) -> Run:
     return new_run
 
 
+def step_up_quality(session: Session, run_id: str) -> Run:
+    source_run = session.get(Run, run_id, options=[selectinload(Run.track)])
+    if source_run is None:
+        raise LookupError(f"Run '{run_id}' does not exist.")
+    if source_run.status != RunStatus.completed.value:
+        raise ValueError("Only completed runs can be stepped up to higher quality.")
+
+    source_processing = resolve_run_processing(source_run)
+    higher = next_quality_tier(source_processing["profile_key"])
+    if higher is None:
+        raise ValueError("This run is already at the highest quality tier.")
+
+    processing = build_processing_config(higher.key, source_processing["export_mp3_bitrate"])
+    new_run = create_run(source_run.track, processing)
+    session.commit()
+    session.refresh(new_run)
+    return new_run
+
+
 RUN_NOTE_MAX_LENGTH = 280
 
 
@@ -517,7 +542,6 @@ def update_track(
 
 def delete_track(
     session: Session,
-    runtime_settings: RuntimeSettings,
     track_id: str,
 ) -> None:
     track = get_track(session, track_id)
@@ -527,15 +551,10 @@ def delete_track(
     if any(run.status in IN_PROGRESS_RUN_STATUSES for run in track.runs):
         raise ValueError("Cancel or wait for in-progress runs before deleting this track.")
 
-    exports_dir = Path(runtime_settings.exports_dir)
-    source_slug = (track.metadata_json or {}).get("source_slug") or track.id
     source_path = Path(track.source_path) if track.source_path else None
 
     for run in list(track.runs):
-        if run.output_directory:
-            shutil.rmtree(Path(run.output_directory), ignore_errors=True)
-        export_zip = exports_dir / f"{source_slug}-{run.id}.zip"
-        export_zip.unlink(missing_ok=True)
+        _delete_run_files(run, include_source=False)
 
     session.delete(track)
     session.commit()
@@ -546,7 +565,6 @@ def delete_track(
 
 def purge_non_keeper_runs(
     session: Session,
-    runtime_settings: RuntimeSettings,
     track_id: str,
 ) -> tuple[int, int]:
     track = get_track(session, track_id)
@@ -554,9 +572,6 @@ def purge_non_keeper_runs(
         raise LookupError(f"Track '{track_id}' does not exist.")
     if not track.keeper_run_id:
         raise ValueError("Set a keeper run before cleaning up other runs.")
-
-    exports_dir = Path(runtime_settings.exports_dir)
-    source_slug = (track.metadata_json or {}).get("source_slug") or track.id
 
     deleted = 0
     reclaimed = 0
@@ -566,18 +581,8 @@ def purge_non_keeper_runs(
         if run.status not in TERMINAL_RUN_STATUSES:
             continue
 
-        if run.output_directory:
-            output_directory = Path(run.output_directory)
-            reclaimed += _directory_size(output_directory)
-            shutil.rmtree(output_directory, ignore_errors=True)
-
-        export_zip = exports_dir / f"{source_slug}-{run.id}.zip"
-        if export_zip.exists():
-            try:
-                reclaimed += export_zip.stat().st_size
-            except OSError:
-                pass
-            export_zip.unlink(missing_ok=True)
+        reclaimed += _measure_run_files(run, include_source=False)
+        _delete_run_files(run, include_source=False)
 
         session.delete(run)
         deleted += 1
@@ -585,6 +590,40 @@ def purge_non_keeper_runs(
     if deleted:
         session.commit()
     return deleted, reclaimed
+
+
+def _measure_paths(paths: Iterable[Path]) -> int:
+    unique_paths = {path.resolve() for path in paths if path.exists()}
+    return sum(_directory_size(path) for path in unique_paths)
+
+
+def _run_file_paths(run: Run, *, include_source: bool) -> set[Path]:
+    paths: set[Path] = set()
+    output_root = Path(run.output_directory).resolve() if run.output_directory else None
+    if output_root is not None:
+        paths.add(output_root)
+    for artifact in run.artifacts:
+        if not include_source and artifact.kind == "source":
+            continue
+        artifact_path = Path(artifact.path).resolve()
+        if output_root is not None and artifact_path == output_root:
+            continue
+        if output_root is not None and artifact_path.is_relative_to(output_root):
+            continue
+        paths.add(artifact_path)
+    return paths
+
+
+def _measure_run_files(run: Run, *, include_source: bool) -> int:
+    return _measure_paths(_run_file_paths(run, include_source=include_source))
+
+
+def _delete_run_files(run: Run, *, include_source: bool) -> None:
+    for path in _run_file_paths(run, include_source=include_source):
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        else:
+            path.unlink(missing_ok=True)
 
 
 def write_metadata_file(track: Track, run: Run, target_path: Path) -> None:

@@ -2,12 +2,18 @@ import { useEffect } from 'react'
 
 export type ToastTone = 'success' | 'error' | 'info'
 
+export type ToastAction = {
+  label: string
+  onInvoke: () => void
+}
+
 export type Toast = {
   id: string
   tone: ToastTone
   message: string
   createdAt: number
   autoDismissMs: number | null
+  action?: ToastAction
 }
 
 type ToastStackProps = {
@@ -38,6 +44,18 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
     <div className={`toast toast-${toast.tone}`} role={toast.tone === 'error' ? 'alert' : 'status'}>
       <span className={`toast-dot toast-dot-${toast.tone}`} />
       <span className="toast-body">{toast.message}</span>
+      {toast.action ? (
+        <button
+          type="button"
+          className="toast-action"
+          onClick={() => {
+            toast.action?.onInvoke()
+            onDismiss(toast.id)
+          }}
+        >
+          {toast.action.label}
+        </button>
+      ) : null}
       <button
         type="button"
         className="toast-close"

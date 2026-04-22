@@ -50,8 +50,13 @@ class AppSettings(TimestampMixin, Base):
     __tablename__ = "app_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
-    output_directory: Mapped[str] = mapped_column(String(512))
+    outputs_directory: Mapped[str] = mapped_column("output_directory", String(512))
+    uploads_directory: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    exports_directory: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    temp_directory: Mapped[str | None] = mapped_column(String(512), nullable=True)
     model_cache_directory: Mapped[str] = mapped_column(String(512))
+    temp_max_age_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    export_bundle_max_age_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     default_preset: Mapped[str] = mapped_column(String(64))
     export_mp3_bitrate: Mapped[str] = mapped_column(String(32), default="320k")
 

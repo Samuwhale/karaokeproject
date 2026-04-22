@@ -14,6 +14,8 @@ from backend.schemas.system import (
     RevealFolderResponse,
 )
 from backend.services.diagnostics import collect_diagnostics
+from backend.services.settings import get_or_create_settings
+from backend.services.storage import resolve_storage_paths
 from backend.services.tracks import get_track
 
 router = APIRouter(tags=["system"])
@@ -37,10 +39,12 @@ def _resolve_reveal_path(
     session: Session,
     runtime_settings: RuntimeSettings,
 ) -> Path:
+    settings = get_or_create_settings(session, runtime_settings)
+    storage_paths = resolve_storage_paths(runtime_settings, settings)
     if payload.kind == RevealFolderKind.exports:
-        return Path(runtime_settings.exports_dir)
+        return storage_paths.exports_dir
     if payload.kind == RevealFolderKind.outputs:
-        return Path(runtime_settings.output_dir)
+        return storage_paths.outputs_dir
 
     if not payload.track_id:
         raise HTTPException(status_code=400, detail="track_id is required for this folder kind.")
@@ -48,7 +52,7 @@ def _resolve_reveal_path(
     if track is None:
         raise HTTPException(status_code=404, detail="Track not found.")
     source_slug = (track.metadata_json or {}).get("source_slug") or track.id
-    return Path(runtime_settings.output_dir) / source_slug
+    return storage_paths.outputs_dir / source_slug
 
 
 @router.post("/system/reveal", response_model=RevealFolderResponse)

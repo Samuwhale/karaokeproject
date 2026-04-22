@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.core.constants import PRESET_DEFINITIONS, PRESET_LOOKUP
+from backend.core.constants import DEFAULT_PRESET_KEY, PRESET_DEFINITIONS, PRESET_LOOKUP
 from backend.db.models import AppSettings, Run
 from backend.schemas.tracks import ProcessingProfileResponse, RunProcessingConfigRequest, RunProcessingConfigResponse
 
@@ -41,11 +41,11 @@ def resolve_run_processing(run: Run) -> dict[str, str]:
     metadata = run.metadata_json or {}
     processing = metadata.get("processing")
     if isinstance(processing, dict):
-        profile_key = str(processing.get("profile_key") or run.preset or "balanced")
+        profile_key = str(processing.get("profile_key") or run.preset or DEFAULT_PRESET_KEY)
         bitrate = str(processing.get("export_mp3_bitrate") or DEFAULT_MP3_BITRATE)
         return build_processing_config(profile_key, bitrate)
 
-    fallback_preset = run.preset or "balanced"
+    fallback_preset = run.preset or DEFAULT_PRESET_KEY
     return build_processing_config(fallback_preset, DEFAULT_MP3_BITRATE)
 
 
@@ -65,6 +65,7 @@ def serialize_processing_profiles() -> list[ProcessingProfileResponse]:
             label=profile.label,
             description=profile.description,
             model_filename=profile.model_filename,
+            quality_tier=profile.quality_tier,
         )
         for profile in PRESET_DEFINITIONS
     ]

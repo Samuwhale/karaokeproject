@@ -38,10 +38,11 @@ def create_export_plan(
 @router.get("/exports/bundle/{job_id}")
 def download_export_bundle(
     job_id: str,
+    session: Session = Depends(get_db_session),
     runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
 ) -> FileResponse:
     try:
-        path = bundle_path(runtime_settings, job_id)
+        path = bundle_path(session, runtime_settings, job_id)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     if not path.is_file():

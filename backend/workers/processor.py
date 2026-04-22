@@ -13,6 +13,7 @@ from backend.services.exporters import bundle_files
 from backend.services.metrics import populate_run_metrics
 from backend.services.processing import resolve_run_processing
 from backend.services.settings import get_or_create_settings
+from backend.services.storage import apply_storage_retention, resolve_storage_paths
 from backend.services.tracks import (
     add_run_artifact,
     assign_run_metadata,
@@ -39,6 +40,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
     ffmpeg_adapter = FfmpegAdapter(runtime_settings)
     separator_adapter = AudioSeparatorAdapter(runtime_settings)
     app_settings = get_or_create_settings(session, runtime_settings)
+    storage_paths = resolve_storage_paths(runtime_settings, app_settings)
     processing = resolve_run_processing(run)
 
     source_path = Path(track.source_path)
@@ -54,7 +56,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         return
 
     source_slug = (track.metadata_json or {}).get("source_slug", track.id)
-    output_directory = Path(app_settings.output_directory) / source_slug / run.id
+    output_directory = storage_paths.outputs_dir / source_slug / run.id
     work_directory = output_directory / "work"
     raw_stems_directory = work_directory / "raw-stems"
     stems_directory = output_directory / "stems"
@@ -119,7 +121,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         separation = separator_adapter.run(
             source_path=normalized_path,
             output_dir=raw_stems_directory,
-            model_cache_dir=Path(app_settings.model_cache_directory),
+            model_cache_dir=storage_paths.model_cache_dir,
             model_filename=processing["model_filename"],
         )
         stems_directory.mkdir(parents=True, exist_ok=True)
@@ -199,7 +201,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         )
         session.commit()
 
-        bundle_path = Path(runtime_settings.exports_dir) / f"{source_slug}-{run.id}.zip"
+        bundle_path = storage_paths.exports_dir / f"{source_slug}-{run.id}.zip"
         bundle_files(
             bundle_path,
             [
@@ -253,6 +255,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             error_message=None,
         )
         session.commit()
+        apply_storage_retention(session, runtime_settings)
 
         try:
             populate_run_metrics(session, runtime_settings, run)

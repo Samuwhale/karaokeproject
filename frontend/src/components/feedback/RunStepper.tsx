@@ -19,7 +19,7 @@ export function RunStepper({ status, lastActiveStatus }: RunStepperProps) {
   const isFailed = status === 'failed' || status === 'cancelled'
   const activeIndex = STAGE_INDEX.get(status) ?? (isFailed ? -1 : 0)
   const failureIndex = isFailed
-    ? STAGE_INDEX.get(lastActiveStatus ?? '') ?? 1
+    ? STAGE_INDEX.get(lastActiveStatus ?? '') ?? 0
     : -1
   const activeDescription = isFailed
     ? null

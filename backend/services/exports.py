@@ -22,6 +22,8 @@ from backend.schemas.exports import (
     ExportPlanTrack,
     ExportRunSelector,
 )
+from backend.services.settings import get_or_create_settings
+from backend.services.storage import apply_storage_retention, resolve_storage_paths
 from backend.services.tracks import get_track
 
 
@@ -45,14 +47,16 @@ def _slugify(value: str) -> str:
     return normalized.strip("-") or "track"
 
 
-def _bundle_root(runtime_settings: RuntimeSettings) -> Path:
-    return Path(runtime_settings.exports_dir) / "bundles"
+def _bundle_root(exports_dir: Path) -> Path:
+    return exports_dir / "bundles"
 
 
-def bundle_path(runtime_settings: RuntimeSettings, job_id: str) -> Path:
+def bundle_path(session: Session, runtime_settings: RuntimeSettings, job_id: str) -> Path:
     if not re.fullmatch(r"[0-9a-f]{32}", job_id):
         raise ValueError("Invalid bundle id.")
-    return _bundle_root(runtime_settings) / f"{job_id}.zip"
+    settings = get_or_create_settings(session, runtime_settings)
+    storage_paths = resolve_storage_paths(runtime_settings, settings)
+    return _bundle_root(storage_paths.exports_dir) / f"{job_id}.zip"
 
 
 def _select_run(
@@ -138,7 +142,9 @@ def build_export_bundle(
     runtime_settings: RuntimeSettings,
     payload: ExportBundleRequest,
 ) -> ExportBundleResponse:
-    bundle_root = _bundle_root(runtime_settings)
+    settings = get_or_create_settings(session, runtime_settings)
+    storage_paths = resolve_storage_paths(runtime_settings, settings)
+    bundle_root = _bundle_root(storage_paths.exports_dir)
     bundle_root.mkdir(parents=True, exist_ok=True)
 
     job_id = uuid4().hex
@@ -199,6 +205,7 @@ def build_export_bundle(
         _write_single_bundle(output_path, entries)
     else:
         _write_zip_per_track(output_path, entries)
+    apply_storage_retention(session, runtime_settings)
 
     filename = _default_filename(payload.mode, included)
 

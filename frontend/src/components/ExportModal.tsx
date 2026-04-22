@@ -23,8 +23,8 @@ type ExportModalProps = {
 }
 
 const ARTIFACT_OPTIONS: { value: ExportArtifactKind; label: string; description: string }[] = [
-  { value: 'instrumental-wav', label: 'Instrumental WAV', description: 'Lossless karaoke backing track' },
-  { value: 'instrumental-mp3', label: 'Instrumental MP3', description: 'Compressed karaoke backing track' },
+  { value: 'instrumental-wav', label: 'Instrumental WAV', description: 'Lossless vocals-removed mix' },
+  { value: 'instrumental-mp3', label: 'Instrumental MP3', description: 'Compressed vocals-removed mix' },
   { value: 'vocals-wav', label: 'Vocals WAV', description: 'Separated lead vocal' },
   { value: 'source', label: 'Source audio', description: 'Original imported file' },
   { value: 'metadata', label: 'Metadata JSON', description: 'Run + track metadata' },

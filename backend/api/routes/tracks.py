@@ -45,6 +45,7 @@ from backend.services.tracks import (
     serialize_track_summary,
     set_keeper_run,
     set_run_note,
+    step_up_quality,
     update_track,
 )
 
@@ -87,10 +88,9 @@ def update_track_endpoint(
 def delete_track_endpoint(
     track_id: str,
     session: Session = Depends(get_db_session),
-    runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
 ) -> dict[str, bool]:
     try:
-        delete_track(session, runtime_settings, track_id)
+        delete_track(session, track_id)
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
@@ -173,6 +173,17 @@ def retry_run_endpoint(run_id: str, session: Session = Depends(get_db_session)) 
     return CreateRunResponse(run=serialize_run_summary(run))
 
 
+@router.post("/runs/{run_id}/step-up", response_model=CreateRunResponse)
+def step_up_run_endpoint(run_id: str, session: Session = Depends(get_db_session)) -> CreateRunResponse:
+    try:
+        run = step_up_quality(session, run_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return CreateRunResponse(run=serialize_run_summary(run))
+
+
 @router.put("/tracks/{track_id}/keeper", response_model=TrackDetailResponse)
 def set_track_keeper(
     track_id: str,
@@ -196,10 +207,9 @@ def set_track_keeper(
 def purge_non_keepers_endpoint(
     track_id: str,
     session: Session = Depends(get_db_session),
-    runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
 ) -> PurgeNonKeepersResponse:
     try:
-        deleted, reclaimed = purge_non_keeper_runs(session, runtime_settings, track_id)
+        deleted, reclaimed = purge_non_keeper_runs(session, track_id)
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
@@ -308,13 +318,12 @@ def batch_apply_track_fields(
 def batch_delete_tracks(
     payload: BatchTrackIdsRequest,
     session: Session = Depends(get_db_session),
-    runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
 ) -> BatchDeleteResponse:
     deleted = 0
     skipped: list[str] = []
     for track_id in payload.track_ids:
         try:
-            delete_track(session, runtime_settings, track_id)
+            delete_track(session, track_id)
             deleted += 1
         except LookupError:
             skipped.append(track_id)
@@ -349,7 +358,6 @@ def batch_cancel_runs(
 def batch_purge_non_keepers(
     payload: BatchTrackIdsRequest,
     session: Session = Depends(get_db_session),
-    runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
 ) -> BatchPurgeNonKeepersResponse:
     purged = 0
     total_deleted = 0
@@ -357,7 +365,7 @@ def batch_purge_non_keepers(
     skipped: list[str] = []
     for track_id in payload.track_ids:
         try:
-            deleted, reclaimed = purge_non_keeper_runs(session, runtime_settings, track_id)
+            deleted, reclaimed = purge_non_keeper_runs(session, track_id)
             purged += 1
             total_deleted += deleted
             total_reclaimed += reclaimed

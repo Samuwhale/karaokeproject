@@ -17,21 +17,8 @@ export const RUN_STAGE_DESCRIPTIONS: Record<string, string> = {
   exporting: 'rendering instrumental + bundle',
 }
 
-const TERMINAL_RUN_STATUSES = new Set(['completed', 'failed', 'cancelled'])
-
-/**
- * Return the best short progress line for a run.
- *
- * Prefers a specific status_message coming from the worker ("Encoding MP3 at
- * 320k", etc.) over the generic stage description. Falls back to the stage
- * description when no message has been set yet.
- */
 export function describeRun(run: RunSummary): string {
   const message = run.status_message?.trim()
   if (message) return message
   return RUN_STAGE_DESCRIPTIONS[run.status] ?? ''
-}
-
-export function isTerminalRunStatus(status: string): boolean {
-  return TERMINAL_RUN_STATUSES.has(status)
 }

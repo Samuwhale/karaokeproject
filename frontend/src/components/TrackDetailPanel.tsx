@@ -34,20 +34,20 @@ type TrackDetailPanelProps = {
   creatingRun: boolean
   cancellingRunId: string | null
   retryingRunId: string | null
+  steppingUpRunId: string | null
   settingKeeper: boolean
-  purgingNonKeepers: boolean
   savingNoteRunId: string | null
   updatingTrack: boolean
-  deletingTrack: boolean
   onSelectRun: (runId: string) => void
   onCreateRun: (trackId: string, processing: RunProcessingConfigInput) => Promise<void>
   onCancelRun: (runId: string) => Promise<void>
   onRetryRun: (runId: string) => Promise<void>
+  onStepUpRun: (runId: string) => Promise<void>
   onSetKeeper: (trackId: string, runId: string | null) => Promise<void>
-  onPurgeNonKeepers: (trackId: string) => Promise<void>
+  onPurgeNonKeepers: (trackId: string) => void
   onSetRunNote: (runId: string, note: string) => Promise<void>
   onUpdateTrack: (trackId: string, payload: { title?: string; artist?: string | null }) => Promise<void>
-  onDeleteTrack: (trackId: string) => Promise<void>
+  onDeleteTrack: (trackId: string) => void
   onToggleCompare: (runId: string) => void
   onOpenExport: () => void
   onReveal: (payload: RevealFolderInput) => void | Promise<void>
@@ -118,6 +118,16 @@ function resolveProfile(profiles: ProcessingProfile[], profileKey: string) {
   return profiles.find((profile) => profile.key === profileKey) ?? null
 }
 
+function resolveNextTier(profiles: ProcessingProfile[], profileKey: string) {
+  const current = resolveProfile(profiles, profileKey)
+  if (!current) return null
+  const higher = profiles.filter((profile) => profile.quality_tier > current.quality_tier)
+  if (!higher.length) return null
+  return higher.reduce((best, candidate) =>
+    candidate.quality_tier < best.quality_tier ? candidate : best,
+  )
+}
+
 function totalRunBytes(run: RunDetail) {
   return run.artifacts.reduce((total, artifact) => total + (artifact.metrics?.size_bytes ?? 0), 0)
 }
@@ -140,15 +150,15 @@ export function TrackDetailPanel({
   creatingRun,
   cancellingRunId,
   retryingRunId,
+  steppingUpRunId,
   settingKeeper,
-  purgingNonKeepers,
   savingNoteRunId,
   updatingTrack,
-  deletingTrack,
   onSelectRun,
   onCreateRun,
   onCancelRun,
   onRetryRun,
+  onStepUpRun,
   onSetKeeper,
   onPurgeNonKeepers,
   onSetRunNote,
@@ -212,6 +222,10 @@ export function TrackDetailPanel({
 
   const keeperRunId = track.keeper_run_id
   const keeperLabel = resolveKeeperLabel(track)
+  const nextTier =
+    selectedRun && selectedRun.status === 'completed' && !track.keeper_run_id
+      ? resolveNextTier(profiles, selectedRun.processing.profile_key)
+      : null
   const filteredRuns = track.runs.filter((run) => {
     if (runFilter === 'completed') return run.status === 'completed'
     if (runFilter === 'failed') return run.status === 'failed'
@@ -335,7 +349,6 @@ export function TrackDetailPanel({
               confirmLabel="Delete track"
               cancelLabel="Keep it"
               prompt={`Delete "${track.title}" and all its runs?`}
-              pending={deletingTrack}
               onConfirm={() => onDeleteTrack(trackId)}
             />
           </div>
@@ -385,7 +398,7 @@ export function TrackDetailPanel({
               disabled={!canSubmit}
               onClick={() => void handleCreateRun()}
             >
-              {creatingRun ? <><Spinner /> Queueing</> : hasNoRuns ? 'Start first render' : 'Queue render'}
+              {creatingRun ? <><Spinner /> Queueing</> : hasNoRuns ? 'Queue first render' : 'Queue render'}
             </button>
             {!hasNoRuns ? (
               <button
@@ -418,7 +431,6 @@ export function TrackDetailPanel({
                 confirmLabel="Delete other runs"
                 cancelLabel="Keep them"
                 prompt={`Delete ${nonKeeperTerminal.length} non-final run${nonKeeperTerminal.length === 1 ? '' : 's'}?`}
-                pending={purgingNonKeepers}
                 onConfirm={() => onPurgeNonKeepers(trackId)}
               />
             ) : null}
@@ -465,13 +477,14 @@ export function TrackDetailPanel({
             <p className="empty-state run-history-empty">No runs match this filter.</p>
           ) : null}
           <div className="run-selector">
-            {filteredRuns.map((run) => {
+            {filteredRuns.map((run, index) => {
               const isActive = selectedRun?.id === run.id
               const isKeeper = keeperRunId === run.id
               const isCompareTarget = compareRunId === run.id
               const isCompleted = run.status === 'completed'
               const keeperDisabled = settingKeeper || !isCompleted
               const compareDisabled = !isCompleted || isActive
+              const shortcutDigit = index < 9 ? index + 1 : null
               return (
                 <div
                   key={run.id}
@@ -483,8 +496,16 @@ export function TrackDetailPanel({
                     type="button"
                     className="run-chip-select"
                     onClick={() => onSelectRun(run.id)}
+                    title={shortcutDigit ? `Press ${shortcutDigit}` : undefined}
                   >
-                    <strong>{run.processing.profile_label}</strong>
+                    <strong>
+                      {shortcutDigit ? (
+                        <kbd className="run-chip-key" aria-hidden>
+                          {shortcutDigit}
+                        </kbd>
+                      ) : null}
+                      {run.processing.profile_label}
+                    </strong>
                     <span>
                       {isCompleted
                         ? formatTimestampShort(run.updated_at)
@@ -609,6 +630,27 @@ export function TrackDetailPanel({
                 }
               >
                 Open folder
+              </button>
+            </div>
+          ) : null}
+
+          {nextTier ? (
+            <div className="step-up-row">
+              <div className="step-up-row-meta">
+                <strong>Want higher quality?</strong>
+                <span>Re-run on {nextTier.label}. Slower, typically cleaner.</span>
+              </div>
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={steppingUpRunId === selectedRun.id}
+                onClick={() => void onStepUpRun(selectedRun.id)}
+              >
+                {steppingUpRunId === selectedRun.id ? (
+                  <><Spinner /> Queueing</>
+                ) : (
+                  `Try ${nextTier.label}`
+                )}
               </button>
             </div>
           ) : null}

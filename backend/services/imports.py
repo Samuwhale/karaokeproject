@@ -37,6 +37,7 @@ from backend.services.processing import (
     serialize_processing_profiles,
 )
 from backend.services.settings import get_or_create_settings
+from backend.services.storage import resolve_storage_paths
 from backend.services.tracks import (
     compute_file_sha256,
     create_run,
@@ -122,11 +123,12 @@ def resolve_local_import(
         raise ValueError("Select at least one file to import.")
 
     application_settings = get_or_create_settings(session, runtime_settings)
+    storage_paths = resolve_storage_paths(runtime_settings, application_settings)
     processing = build_processing_from_request(None, application_settings)
     duplicates = _build_duplicate_lookup(list_track_library(session))
 
     session_id = uuid4().hex
-    pending_dir = _session_dir(runtime_settings.uploads_dir, session_id)
+    pending_dir = _session_dir(storage_paths.uploads_dir, session_id)
     pending_dir.mkdir(parents=True, exist_ok=True)
 
     drafts: list[ImportDraft] = []
@@ -162,7 +164,9 @@ def resolve_local_import(
                 duplicate_action=_default_duplicate_action(matches),
                 existing_track_id=matches[0].id if len(matches) == 1 else None,
                 duplicate_track_ids=[track.id for track in matches],
-                resolution_metadata_json={},
+                resolution_metadata_json={
+                    "staged_uploads_directory": str(storage_paths.uploads_dir),
+                },
             )
             session.add(draft)
             drafts.append(draft)
@@ -246,7 +250,7 @@ def batch_discard_import_drafts(
         return
     drafts = _load_pending_drafts(session, payload.draft_ids)
     for draft in drafts:
-        _discard_draft(runtime_settings, draft)
+        _discard_draft(session, runtime_settings, draft)
     session.commit()
 
 
@@ -256,7 +260,7 @@ def discard_import_draft(
     draft_id: str,
 ) -> None:
     draft = _get_pending_draft(session, draft_id)
-    _discard_draft(runtime_settings, draft)
+    _discard_draft(session, runtime_settings, draft)
     session.commit()
 
 
@@ -294,13 +298,13 @@ def confirm_import_drafts(
             action = draft.duplicate_action
 
             if action == DraftDuplicateAction.skip.value:
-                _discard_draft(runtime_settings, draft)
+                _discard_draft(session, runtime_settings, draft)
                 skipped += 1
                 continue
 
             if action == DraftDuplicateAction.reuse_existing.value:
                 track = _resolve_reuse_target(session, draft)
-                _cleanup_pending_file(runtime_settings, draft)
+                _cleanup_pending_file(session, runtime_settings, draft)
                 reused += 1
             else:
                 track = _commit_draft_as_new_track(session, runtime_settings, adapter, draft)
@@ -415,7 +419,10 @@ def _commit_draft_as_new_track(
     if draft.source_type == DraftSourceType.youtube.value:
         downloaded = adapter.download(
             source_url=draft.source_url or "",
-            destination_dir=runtime_settings.uploads_dir,
+            destination_dir=resolve_storage_paths(
+                runtime_settings,
+                get_or_create_settings(session, runtime_settings),
+            ).uploads_dir,
             filename_prefix=uuid4().hex,
         )
         return create_track(
@@ -434,12 +441,13 @@ def _commit_draft_as_new_track(
         )
 
     if draft.source_type == DraftSourceType.local.value:
-        pending_path = _pending_path_for_draft(runtime_settings, draft)
+        pending_path = _pending_path_for_draft(session, runtime_settings, draft)
         if not pending_path.is_file():
             raise ValueError(
                 f"Staged file for '{draft.title}' is missing. Re-add the source."
             )
-        destination = runtime_settings.uploads_dir / pending_path.name
+        settings = get_or_create_settings(session, runtime_settings)
+        destination = resolve_storage_paths(runtime_settings, settings).uploads_dir / pending_path.name
         shutil.move(str(pending_path), destination)
         return create_track(
             session,
@@ -456,16 +464,24 @@ def _commit_draft_as_new_track(
     raise ValueError(f"Unknown source type '{draft.source_type}'.")
 
 
-def _discard_draft(runtime_settings: RuntimeSettings, draft: ImportDraft) -> None:
-    _cleanup_pending_file(runtime_settings, draft)
+def _discard_draft(
+    session: Session,
+    runtime_settings: RuntimeSettings,
+    draft: ImportDraft,
+) -> None:
+    _cleanup_pending_file(session, runtime_settings, draft)
     draft.status = DraftStatus.discarded.value
 
 
-def _cleanup_pending_file(runtime_settings: RuntimeSettings, draft: ImportDraft) -> None:
+def _cleanup_pending_file(
+    session: Session,
+    runtime_settings: RuntimeSettings,
+    draft: ImportDraft,
+) -> None:
     if draft.source_type != DraftSourceType.local.value:
         return
     try:
-        pending_path = _pending_path_for_draft(runtime_settings, draft)
+        pending_path = _pending_path_for_draft(session, runtime_settings, draft)
     except ValueError:
         return
     pending_path.unlink(missing_ok=True)
@@ -474,11 +490,46 @@ def _cleanup_pending_file(runtime_settings: RuntimeSettings, draft: ImportDraft)
         session_dir.rmdir()
 
 
-def _pending_path_for_draft(runtime_settings: RuntimeSettings, draft: ImportDraft) -> Path:
+def _pending_path_for_draft(
+    session: Session,
+    runtime_settings: RuntimeSettings,
+    draft: ImportDraft,
+) -> Path:
     if not draft.session_id or not draft.pending_id:
         raise ValueError("Draft has no staged file reference.")
-    pending_dir = _session_dir(runtime_settings.uploads_dir, draft.session_id)
+    for uploads_dir in _candidate_upload_dirs(session, runtime_settings, draft):
+        pending_dir = _session_dir(uploads_dir, draft.session_id)
+        pending_path = _pending_file(pending_dir, draft.pending_id)
+        if pending_path.exists():
+            return pending_path
+    settings = get_or_create_settings(session, runtime_settings)
+    pending_dir = _session_dir(resolve_storage_paths(runtime_settings, settings).uploads_dir, draft.session_id)
     return _pending_file(pending_dir, draft.pending_id)
+
+
+def _candidate_upload_dirs(
+    session: Session,
+    runtime_settings: RuntimeSettings,
+    draft: ImportDraft,
+) -> list[Path]:
+    metadata = draft.resolution_metadata_json or {}
+    candidates: list[Path] = []
+    staged_directory = metadata.get("staged_uploads_directory")
+    if isinstance(staged_directory, str) and staged_directory.strip():
+        candidates.append(Path(staged_directory).expanduser().resolve())
+
+    settings = get_or_create_settings(session, runtime_settings)
+    candidates.append(resolve_storage_paths(runtime_settings, settings).uploads_dir)
+    candidates.append(runtime_settings.uploads_dir.expanduser().resolve())
+
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for path in candidates:
+        if path in seen:
+            continue
+        unique.append(path)
+        seen.add(path)
+    return unique
 
 
 def _session_dir(uploads_dir: Path, session_id: str) -> Path:

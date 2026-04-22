@@ -12,11 +12,13 @@ import type {
   ConfirmImportDraftsInput,
   ConfirmImportDraftsResponse,
   Diagnostics,
+  ExportBundleCleanupResponse,
   ExportBundleInput,
   ExportBundleResponse,
   ExportPlanInput,
   ExportPlanResponse,
   ImportDraft,
+  NonKeeperCleanupResponse,
   RevealFolderInput,
   RevealFolderResponse,
   QueueRunEntry,
@@ -26,6 +28,8 @@ import type {
   RunProcessingConfigInput,
   RunSummary,
   Settings,
+  StorageOverview,
+  TempCleanupResponse,
   TrackDetail,
   TrackSummary,
   UpdateImportDraftInput,
@@ -103,6 +107,28 @@ export function updateSettings(settings: Omit<Settings, 'profiles'>) {
   })
 }
 
+export function getStorageOverview() {
+  return fetchJson<StorageOverview>('/api/storage')
+}
+
+export function cleanupTempStorage() {
+  return fetchJson<TempCleanupResponse>('/api/storage/cleanup/temp', {
+    method: 'POST',
+  })
+}
+
+export function cleanupExportBundles() {
+  return fetchJson<ExportBundleCleanupResponse>('/api/storage/cleanup/export-bundles', {
+    method: 'POST',
+  })
+}
+
+export function cleanupNonKeeperRunsLibrary() {
+  return fetchJson<NonKeeperCleanupResponse>('/api/storage/cleanup/non-keeper-runs', {
+    method: 'POST',
+  })
+}
+
 // --- Tracks ---
 
 export function getTracks() {
@@ -137,6 +163,10 @@ export function cancelRun(runId: string) {
 
 export function retryRun(runId: string) {
   return fetchJson<{ run: RunSummary }>(`/api/runs/${runId}/retry`, { method: 'POST' })
+}
+
+export function stepUpRun(runId: string) {
+  return fetchJson<{ run: RunSummary }>(`/api/runs/${runId}/step-up`, { method: 'POST' })
 }
 
 export function dismissRun(runId: string) {

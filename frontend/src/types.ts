@@ -3,6 +3,7 @@ export type ProcessingProfile = {
   label: string
   description: string
   model_filename: string
+  quality_tier: number
 }
 
 export type RunProcessingConfig = {
@@ -18,11 +19,42 @@ export type RunProcessingConfigInput = {
 }
 
 export type Settings = {
-  output_directory: string
-  model_cache_directory: string
+  storage: {
+    database_path: string
+    uploads_directory: string
+    outputs_directory: string
+    exports_directory: string
+    temp_directory: string
+    model_cache_directory: string
+  }
+  retention: {
+    temp_max_age_hours: number
+    export_bundle_max_age_days: number
+  }
   default_preset: string
   export_mp3_bitrate: string
   profiles: ProcessingProfile[]
+}
+
+export type StorageBucketKey =
+  | 'database'
+  | 'uploads'
+  | 'outputs'
+  | 'export_bundles'
+  | 'temp'
+  | 'model_cache'
+
+export type StorageBucket = {
+  key: StorageBucketKey
+  label: string
+  path: string
+  total_bytes: number
+  reclaimable_bytes: number
+}
+
+export type StorageOverview = {
+  items: StorageBucket[]
+  total_bytes: number
 }
 
 export type BinaryStatus = {
@@ -246,6 +278,23 @@ export type BatchPurgeNonKeepersResponse = {
   deleted_run_count: number
   bytes_reclaimed: number
   skipped_track_ids: string[]
+}
+
+export type TempCleanupResponse = {
+  deleted_entry_count: number
+  bytes_reclaimed: number
+}
+
+export type ExportBundleCleanupResponse = {
+  deleted_bundle_count: number
+  bytes_reclaimed: number
+}
+
+export type NonKeeperCleanupResponse = {
+  purged_track_count: number
+  skipped_track_count: number
+  deleted_run_count: number
+  bytes_reclaimed: number
 }
 
 export type ExportRunSelector = 'keeper' | 'latest'

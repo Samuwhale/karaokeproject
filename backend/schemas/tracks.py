@@ -9,6 +9,7 @@ class ProcessingProfileResponse(BaseModel):
     label: str
     description: str
     model_filename: str
+    quality_tier: int
 
 
 class RunProcessingConfigRequest(BaseModel):
