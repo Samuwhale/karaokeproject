@@ -95,6 +95,7 @@ class Run(TimestampMixin, Base):
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     last_active_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    mix_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     track: Mapped[Track] = relationship(back_populates="runs")
     artifacts: Mapped[list[RunArtifact]] = relationship(

@@ -21,6 +21,8 @@ AUDIO_ARTIFACT_KINDS: frozenset[str] = frozenset(
         "export-audio-wav",
         "export-audio-mp3",
         "export-vocals",
+        "export-mix-wav",
+        "export-mix-mp3",
     }
 )
 

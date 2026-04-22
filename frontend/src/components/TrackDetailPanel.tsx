@@ -5,9 +5,11 @@ import type {
   RevealFolderInput,
   RunArtifact,
   RunDetail,
+  RunMixStemEntry,
   RunProcessingConfigInput,
   TrackDetail,
 } from '../types'
+import { isMixableArtifactKind } from '../types'
 import { CompareView } from './CompareView'
 import { ConfirmInline } from './feedback/ConfirmInline'
 import { ProgressBar } from './feedback/ProgressBar'
@@ -15,6 +17,7 @@ import { RunStepper } from './feedback/RunStepper'
 import { Skeleton } from './feedback/Skeleton'
 import { Spinner } from './feedback/Spinner'
 import { formatSize } from './metrics'
+import { MixPanel } from './mix/MixPanel'
 import { RUN_STATUS_LABELS } from './runStatus'
 import { WaveformPreview } from './WaveformPreview'
 
@@ -37,6 +40,7 @@ type TrackDetailPanelProps = {
   steppingUpRunId: string | null
   settingKeeper: boolean
   savingNoteRunId: string | null
+  savingMixRunId: string | null
   updatingTrack: boolean
   onSelectRun: (runId: string) => void
   onCreateRun: (trackId: string, processing: RunProcessingConfigInput) => Promise<void>
@@ -46,6 +50,7 @@ type TrackDetailPanelProps = {
   onSetKeeper: (trackId: string, runId: string | null) => Promise<void>
   onPurgeNonKeepers: (trackId: string) => void
   onSetRunNote: (runId: string, note: string) => Promise<void>
+  onSaveMix: (trackId: string, runId: string, stems: RunMixStemEntry[]) => Promise<void>
   onUpdateTrack: (trackId: string, payload: { title?: string; artist?: string | null }) => Promise<void>
   onDeleteTrack: (trackId: string) => void
   onToggleCompare: (runId: string) => void
@@ -153,6 +158,7 @@ export function TrackDetailPanel({
   steppingUpRunId,
   settingKeeper,
   savingNoteRunId,
+  savingMixRunId,
   updatingTrack,
   onSelectRun,
   onCreateRun,
@@ -162,6 +168,7 @@ export function TrackDetailPanel({
   onSetKeeper,
   onPurgeNonKeepers,
   onSetRunNote,
+  onSaveMix,
   onUpdateTrack,
   onDeleteTrack,
   onToggleCompare,
@@ -222,6 +229,10 @@ export function TrackDetailPanel({
 
   const keeperRunId = track.keeper_run_id
   const keeperLabel = resolveKeeperLabel(track)
+  const keeperRun = keeperRunId ? track.runs.find((run) => run.id === keeperRunId) ?? null : null
+  const keeperHasMixableStems = keeperRun
+    ? keeperRun.artifacts.some((artifact) => isMixableArtifactKind(artifact.kind))
+    : false
   const nextTier =
     selectedRun && selectedRun.status === 'completed' && !track.keeper_run_id
       ? resolveNextTier(profiles, selectedRun.processing.profile_key)
@@ -415,26 +426,34 @@ export function TrackDetailPanel({
       ) : null}
 
       {keeperRunId ? (
-        <div className="final-row">
-          <div className="final-row-meta">
-            <span className="final-row-label">Final</span>
-            <strong>{keeperLabel ?? '—'}</strong>
+        <div className="final-stage">
+          <div className="final-row">
+            <div className="final-row-meta">
+              <strong>{keeperLabel ?? 'Selected final run'}</strong>
+            </div>
+            <div className="final-row-actions">
+              <button type="button" className="button-primary" onClick={onOpenExport}>
+                Export…
+              </button>
+              {nonKeeperTerminal.length ? (
+                <ConfirmInline
+                  label={`Delete ${nonKeeperTerminal.length} other${nonKeeperTerminal.length === 1 ? '' : 's'}${reclaimLabel}`}
+                  pendingLabel="Cleaning…"
+                  confirmLabel="Delete other runs"
+                  cancelLabel="Keep them"
+                  prompt={`Delete ${nonKeeperTerminal.length} non-final run${nonKeeperTerminal.length === 1 ? '' : 's'}?`}
+                  onConfirm={() => onPurgeNonKeepers(trackId)}
+                />
+              ) : null}
+            </div>
           </div>
-          <div className="final-row-actions">
-            <button type="button" className="button-primary" onClick={onOpenExport}>
-              Export…
-            </button>
-            {nonKeeperTerminal.length ? (
-              <ConfirmInline
-                label={`Delete ${nonKeeperTerminal.length} other${nonKeeperTerminal.length === 1 ? '' : 's'}${reclaimLabel}`}
-                pendingLabel="Cleaning…"
-                confirmLabel="Delete other runs"
-                cancelLabel="Keep them"
-                prompt={`Delete ${nonKeeperTerminal.length} non-final run${nonKeeperTerminal.length === 1 ? '' : 's'}?`}
-                onConfirm={() => onPurgeNonKeepers(trackId)}
-              />
-            ) : null}
-          </div>
+          {keeperRun && keeperHasMixableStems ? (
+            <MixPanel
+              run={keeperRun}
+              saving={savingMixRunId === keeperRun.id}
+              onSave={(stems) => onSaveMix(trackId, keeperRun.id, stems)}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -675,7 +694,15 @@ export function TrackDetailPanel({
             </p>
           )}
 
-          {bothCompleted && compareRun ? <CompareView runA={selectedRun} runB={compareRun} /> : null}
+          {bothCompleted && compareRun ? (
+            <CompareView
+              runA={selectedRun}
+              runB={compareRun}
+              keeperRunId={keeperRunId}
+              settingKeeper={settingKeeper}
+              onSetKeeper={(runId) => onSetKeeper(trackId, runId)}
+            />
+          ) : null}
         </>
       ) : null}
     </section>

@@ -1,7 +1,10 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+MIX_GAIN_DB_MIN = -24.0
+MIX_GAIN_DB_MAX = 12.0
 
 
 class ProcessingProfileResponse(BaseModel):
@@ -65,9 +68,25 @@ class RunSummaryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class RunMixStemEntry(BaseModel):
+    artifact_id: str
+    gain_db: float = Field(default=0.0, ge=MIX_GAIN_DB_MIN, le=MIX_GAIN_DB_MAX)
+    muted: bool = False
+
+
+class RunMixState(BaseModel):
+    stems: list[RunMixStemEntry] = []
+    is_default: bool = True
+
+
+class RunMixInput(BaseModel):
+    stems: list[RunMixStemEntry]
+
+
 class RunDetailResponse(RunSummaryResponse):
     metadata_json: dict[str, Any]
     artifacts: list[RunArtifactResponse]
+    mix: RunMixState
 
 
 class TrackSummaryResponse(BaseModel):
@@ -84,6 +103,7 @@ class TrackSummaryResponse(BaseModel):
     latest_run: RunSummaryResponse | None
     run_count: int
     keeper_run_id: str | None = None
+    has_custom_mix: bool = False
 
 
 class TrackDetailResponse(BaseModel):

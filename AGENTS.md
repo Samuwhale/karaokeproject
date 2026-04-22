@@ -27,3 +27,5 @@ Prefer fewer visible elements, clearer hierarchy, and more whitespace over dense
 Do not add informational pills, chips, or badges just to restate nearby content
 
 Only use pills or badges when they carry meaningful status, filtering, or interaction value that would otherwise be unclear
+
+Do not run the app, start the dev server, or open a browser for visual validation unless the user explicitly asks you to. A clean typecheck and build is sufficient by default. Call out untested UX assumptions in writing instead of trying to verify them yourself.

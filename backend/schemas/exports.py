@@ -12,6 +12,8 @@ class ExportArtifactKind(StrEnum):
     instrumental_wav = "instrumental-wav"
     instrumental_mp3 = "instrumental-mp3"
     vocals_wav = "vocals-wav"
+    mix_wav = "mix-wav"
+    mix_mp3 = "mix-mp3"
     source = "source"
     metadata = "metadata"
 

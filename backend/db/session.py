@@ -23,6 +23,7 @@ _COLUMN_ADDITIONS: tuple[tuple[str, str, str], ...] = (
     ("run_artifacts", "metrics_json", "JSON NULL"),
     ("runs", "last_active_status", "VARCHAR(32) NULL"),
     ("runs", "dismissed_at", "DATETIME NULL"),
+    ("runs", "mix_json", "JSON NULL"),
     ("app_settings", "uploads_directory", "VARCHAR(512) NULL"),
     ("app_settings", "exports_directory", "VARCHAR(512) NULL"),
     ("app_settings", "temp_directory", "VARCHAR(512) NULL"),

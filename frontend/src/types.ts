@@ -112,9 +112,31 @@ export type RunArtifact = {
   metrics: ArtifactMetrics | null
 }
 
+export type RunMixStemEntry = {
+  artifact_id: string
+  gain_db: number
+  muted: boolean
+}
+
+export type RunMixState = {
+  stems: RunMixStemEntry[]
+  is_default: boolean
+}
+
+export const MIX_GAIN_DB_MIN = -24
+export const MIX_GAIN_DB_MAX = 12
+
+export const MIXABLE_ARTIFACT_KINDS = ['instrumental', 'vocals', 'extra-stem'] as const
+export type MixableArtifactKind = (typeof MIXABLE_ARTIFACT_KINDS)[number]
+
+export function isMixableArtifactKind(kind: string): kind is MixableArtifactKind {
+  return (MIXABLE_ARTIFACT_KINDS as readonly string[]).includes(kind)
+}
+
 export type RunDetail = RunSummary & {
   metadata_json: Record<string, unknown>
   artifacts: RunArtifact[]
+  mix: RunMixState
 }
 
 export type TrackSummary = {
@@ -131,6 +153,7 @@ export type TrackSummary = {
   latest_run: RunSummary | null
   run_count: number
   keeper_run_id: string | null
+  has_custom_mix: boolean
 }
 
 export type TrackDetail = {
@@ -303,6 +326,8 @@ export type ExportArtifactKind =
   | 'instrumental-wav'
   | 'instrumental-mp3'
   | 'vocals-wav'
+  | 'mix-wav'
+  | 'mix-mp3'
   | 'source'
   | 'metadata'
 

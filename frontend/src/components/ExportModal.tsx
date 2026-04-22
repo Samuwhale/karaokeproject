@@ -23,8 +23,10 @@ type ExportModalProps = {
 }
 
 const ARTIFACT_OPTIONS: { value: ExportArtifactKind; label: string; description: string }[] = [
-  { value: 'instrumental-wav', label: 'Instrumental WAV', description: 'Lossless vocals-removed mix' },
+  { value: 'mix-mp3', label: 'Mix MP3', description: 'Final mix with your balance applied' },
+  { value: 'mix-wav', label: 'Mix WAV', description: 'Lossless final mix with your balance applied' },
   { value: 'instrumental-mp3', label: 'Instrumental MP3', description: 'Compressed vocals-removed mix' },
+  { value: 'instrumental-wav', label: 'Instrumental WAV', description: 'Lossless vocals-removed mix' },
   { value: 'vocals-wav', label: 'Vocals WAV', description: 'Separated lead vocal' },
   { value: 'source', label: 'Source audio', description: 'Original imported file' },
   { value: 'metadata', label: 'Metadata JSON', description: 'Run + track metadata' },
@@ -50,9 +52,33 @@ export function ExportModal({
   onReveal,
 }: ExportModalProps) {
   const [runSelector, setRunSelector] = useState<ExportRunSelector>('keeper')
-  const [artifacts, setArtifacts] = useState<Set<ExportArtifactKind>>(
-    () => new Set(['instrumental-mp3']),
+  const anySelectedHasCustomMix = useMemo(
+    () =>
+      tracks.some((track) => selectedTrackIds.includes(track.id) && track.has_custom_mix),
+    [tracks, selectedTrackIds],
   )
+  const [artifacts, setArtifacts] = useState<Set<ExportArtifactKind>>(
+    () => new Set([anySelectedHasCustomMix ? 'mix-mp3' : 'instrumental-mp3']),
+  )
+
+  useEffect(() => {
+    // When the modal opens against a new selection, reset default artifact
+    // choice based on whether anything in the selection has a custom mix.
+    if (!open) return
+    setArtifacts((current) => {
+      if (current.size !== 1) return current
+      const [only] = Array.from(current)
+      if (anySelectedHasCustomMix && only === 'instrumental-mp3') {
+        return new Set(['mix-mp3'])
+      }
+      if (!anySelectedHasCustomMix && only === 'mix-mp3') {
+        return new Set(['instrumental-mp3'])
+      }
+      return current
+    })
+    // Intentionally only react when the modal opens or the selection's mix
+    // state changes, not on every user edit.
+  }, [open, anySelectedHasCustomMix])
   const [mode, setMode] = useState<ExportOutputMode>('single-bundle')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ExportBundleResponse | null>(null)
@@ -154,6 +180,16 @@ export function ExportModal({
   const skippedCount = plan?.skipped_track_count ?? 0
   const usingFallback = plan?.tracks_using_latest_fallback ?? 0
   const usingKeeper = plan?.tracks_using_keeper ?? 0
+  const keeperHint =
+    plan && selectedTracks.length > 0 && runSelector === 'keeper'
+      ? skippedCount > 0
+        ? includedCount > 0
+          ? `${includedCount} of ${selectedTracks.length} selected track${selectedTracks.length === 1 ? '' : 's'} are ready. Review Included below for anything that still needs a final or completed run.`
+          : 'No selected tracks are ready from Final run yet. Review Included below for what still needs a final or completed run.'
+        : usingFallback > 0
+          ? `${usingKeeper} will use the final run, ${usingFallback} will fall back to the latest completed run.`
+          : `All ${selectedTracks.length} selected track${selectedTracks.length === 1 ? '' : 's'} will use the final run.`
+      : null
 
   return (
     <div className="import-modal" role="dialog" aria-modal="true" aria-label="Export tracks">
@@ -246,13 +282,7 @@ export function ExportModal({
                     Latest completed
                   </button>
                 </div>
-                {selectedTracks.length > 0 && runSelector === 'keeper' ? (
-                  <p className="inline-hint">
-                    {usingFallback === 0
-                      ? `All ${selectedTracks.length} track${selectedTracks.length === 1 ? '' : 's'} have a final run marked.`
-                      : `${usingKeeper} will use the final run, ${usingFallback} will fall back to the latest completed run.`}
-                  </p>
-                ) : null}
+                {keeperHint ? <p className="inline-hint">{keeperHint}</p> : null}
               </section>
 
               <section className="export-section">

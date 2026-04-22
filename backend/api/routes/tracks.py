@@ -20,6 +20,7 @@ from backend.schemas.tracks import (
     PurgeNonKeepersResponse,
     QueueRunResponse,
     RunDetailResponse,
+    RunMixInput,
     SetKeeperRequest,
     SetRunNoteRequest,
     TrackDetailResponse,
@@ -44,6 +45,7 @@ from backend.services.tracks import (
     serialize_track_detail,
     serialize_track_summary,
     set_keeper_run,
+    set_run_mix,
     set_run_note,
     step_up_quality,
     update_track,
@@ -182,6 +184,25 @@ def step_up_run_endpoint(run_id: str, session: Session = Depends(get_db_session)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return CreateRunResponse(run=serialize_run_summary(run))
+
+
+@router.put(
+    "/tracks/{track_id}/runs/{run_id}/mix",
+    response_model=RunDetailResponse,
+)
+def set_run_mix_endpoint(
+    track_id: str,
+    run_id: str,
+    payload: RunMixInput,
+    session: Session = Depends(get_db_session),
+) -> RunDetailResponse:
+    try:
+        run = set_run_mix(session, track_id, run_id, payload)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return serialize_run_detail(run)
 
 
 @router.put("/tracks/{track_id}/keeper", response_model=TrackDetailResponse)

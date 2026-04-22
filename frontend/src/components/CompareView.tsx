@@ -12,6 +12,9 @@ import {
 type CompareViewProps = {
   runA: RunDetail
   runB: RunDetail
+  keeperRunId: string | null
+  settingKeeper: boolean
+  onSetKeeper: (runId: string) => void | Promise<void>
 }
 
 const OVERLAY_KIND_ORDER = ['instrumental', 'export-audio-mp3', 'vocals', 'source'] as const
@@ -74,17 +77,49 @@ function matchedMetrics(runA: RunDetail, runB: RunDetail): {
   return null
 }
 
-export function CompareView({ runA, runB }: CompareViewProps) {
+export function CompareView({
+  runA,
+  runB,
+  keeperRunId,
+  settingKeeper,
+  onSetKeeper,
+}: CompareViewProps) {
   const matched = matchedMetrics(runA, runB)
   const metricsA = matched?.metricsA ?? null
   const metricsB = matched?.metricsB ?? null
   const pairs = pairedArtifacts(runA, runB)
+
+  function renderKeeperButton(run: RunDetail) {
+    const isKeeper = keeperRunId === run.id
+    return (
+      <button
+        type="button"
+        className={`button-secondary compare-keeper-action ${isKeeper ? 'compare-keeper-active' : ''}`}
+        disabled={settingKeeper}
+        onClick={() => void onSetKeeper(run.id)}
+        title={isKeeper ? 'Already marked as final' : 'Mark this run as final'}
+      >
+        {isKeeper ? '★ Final' : 'Set as final'}
+      </button>
+    )
+  }
 
   return (
     <section className="compare-view">
       <header className="compare-view-head">
         <h3>Compare</h3>
       </header>
+
+      <div className="compare-pick">
+        <div className="compare-pick-cell">
+          <span>{runA.processing.profile_label}</span>
+          {renderKeeperButton(runA)}
+        </div>
+        <div className="compare-pick-cell">
+          <span>{runB.processing.profile_label}</span>
+          {renderKeeperButton(runB)}
+        </div>
+      </div>
 
       <table className="compare-table">
         <thead>

@@ -59,6 +59,7 @@ function App() {
     settingKeeper,
     backfillingMetrics,
     savingNoteRunId,
+    savingMixRunId,
     updatingTrack,
     batching,
     setSelectedRunId,
@@ -83,6 +84,7 @@ function App() {
     handlePurgeNonKeepers,
     handleBackfillMetrics,
     handleSetRunNote,
+    handleSaveMix,
     handleUpdateTrack,
     handleDeleteTrack,
     handleToggleCompare,
@@ -300,6 +302,7 @@ function App() {
               steppingUpRunId={steppingUpRunId}
               settingKeeper={settingKeeper}
               savingNoteRunId={savingNoteRunId}
+              savingMixRunId={savingMixRunId}
               updatingTrack={updatingTrack}
               onSelectRun={(runId) => {
                 startTransition(() => {
@@ -313,6 +316,7 @@ function App() {
               onSetKeeper={handleSetKeeper}
               onPurgeNonKeepers={handlePurgeNonKeepers}
               onSetRunNote={handleSetRunNote}
+              onSaveMix={handleSaveMix}
               onUpdateTrack={handleUpdateTrack}
               onDeleteTrack={handleDeleteTrack}
               onToggleCompare={handleToggleCompare}

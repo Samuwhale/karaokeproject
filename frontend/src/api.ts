@@ -25,6 +25,7 @@ import type {
   ResolveLocalImportResponse,
   ResolveYouTubeImportResponse,
   RunDetail,
+  RunMixStemEntry,
   RunProcessingConfigInput,
   RunSummary,
   Settings,
@@ -175,6 +176,14 @@ export function dismissRun(runId: string) {
 
 export function measureRun(runId: string) {
   return fetchJson<RunDetail>(`/api/runs/${runId}/measure`, { method: 'POST' })
+}
+
+export function updateRunMix(trackId: string, runId: string, stems: RunMixStemEntry[]) {
+  return fetchJson<RunDetail>(`/api/tracks/${trackId}/runs/${runId}/mix`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stems }),
+  })
 }
 
 export function setRunNote(runId: string, note: string) {

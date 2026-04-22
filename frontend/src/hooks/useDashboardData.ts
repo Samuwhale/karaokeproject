@@ -33,6 +33,7 @@ import {
   setRunNote,
   stepUpRun,
   updateImportDraft,
+  updateRunMix,
   updateSettings,
   updateTrack,
 } from '../api'
@@ -46,6 +47,7 @@ import type {
   NonKeeperCleanupResponse,
   QueueRunEntry,
   RevealFolderInput,
+  RunMixStemEntry,
   RunProcessingConfigInput,
   Settings,
   StorageOverview,
@@ -154,6 +156,7 @@ export function useDashboardData() {
   const [settingKeeper, setSettingKeeper] = useState(false)
   const [backfillingMetrics, setBackfillingMetrics] = useState(false)
   const [savingNoteRunId, setSavingNoteRunId] = useState<string | null>(null)
+  const [savingMixRunId, setSavingMixRunId] = useState<string | null>(null)
   const [updatingTrack, setUpdatingTrack] = useState(false)
   const [batching, setBatching] = useState(false)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set())
@@ -576,6 +579,7 @@ export function useDashboardData() {
     setSettingKeeper(true)
     try {
       await setKeeperRun(trackId, runId)
+      if (runId) setCompareRunId(null)
       pushToast('success', runId ? 'Marked as final.' : 'Cleared final.')
       await refreshDashboard()
     } catch (error) {
@@ -690,6 +694,19 @@ export function useDashboardData() {
 
   function handleDeleteTrack(trackId: string) {
     scheduleTrackDelete([trackId])
+  }
+
+  async function handleSaveMix(trackId: string, runId: string, stems: RunMixStemEntry[]) {
+    setSavingMixRunId(runId)
+    try {
+      await updateRunMix(trackId, runId, stems)
+      await refreshDashboard()
+    } catch (error) {
+      pushToast('error', getErrorMessage(error))
+      throw error
+    } finally {
+      setSavingMixRunId(null)
+    }
   }
 
   async function handleSetRunNote(runId: string, note: string) {
@@ -1033,6 +1050,7 @@ export function useDashboardData() {
     settingKeeper,
     backfillingMetrics,
     savingNoteRunId,
+    savingMixRunId,
     updatingTrack,
     batching,
     setSelectedTrackId,
@@ -1058,6 +1076,7 @@ export function useDashboardData() {
     handlePurgeNonKeepers,
     handleBackfillMetrics,
     handleSetRunNote,
+    handleSaveMix,
     handleUpdateTrack,
     handleDeleteTrack,
     handleToggleCompare,

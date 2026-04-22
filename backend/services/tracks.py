@@ -23,9 +23,14 @@ from backend.db.models import (
     Track,
 )
 from backend.schemas.tracks import (
+    MIX_GAIN_DB_MAX,
+    MIX_GAIN_DB_MIN,
     ArtifactMetricsResponse,
     RunArtifactResponse,
     RunDetailResponse,
+    RunMixInput,
+    RunMixState,
+    RunMixStemEntry,
     RunSummaryResponse,
     TrackDetailResponse,
     TrackSummaryResponse,
@@ -142,17 +147,97 @@ def serialize_run_summary(run: Run) -> RunSummaryResponse:
     )
 
 
+MIXABLE_ARTIFACT_KINDS: frozenset[str] = frozenset({"instrumental", "vocals", "extra-stem"})
+
+
+def mixable_artifacts(run: Run) -> list[RunArtifact]:
+    return [artifact for artifact in run.artifacts if artifact.kind in MIXABLE_ARTIFACT_KINDS]
+
+
+def _is_default_stem(entry: dict[str, Any] | RunMixStemEntry) -> bool:
+    gain = getattr(entry, "gain_db", None)
+    muted = getattr(entry, "muted", None)
+    if gain is None and isinstance(entry, dict):
+        gain = entry.get("gain_db")
+        muted = entry.get("muted")
+    return abs(float(gain or 0.0)) < 0.01 and not bool(muted)
+
+
+def serialize_run_mix(run: Run) -> RunMixState:
+    raw = run.mix_json or {}
+    stems_raw = raw.get("stems") if isinstance(raw, dict) else None
+    stems: list[RunMixStemEntry] = []
+    if isinstance(stems_raw, list):
+        for entry in stems_raw:
+            if not isinstance(entry, dict):
+                continue
+            artifact_id = entry.get("artifact_id")
+            if not isinstance(artifact_id, str):
+                continue
+            gain = float(entry.get("gain_db") or 0.0)
+            gain = max(MIX_GAIN_DB_MIN, min(MIX_GAIN_DB_MAX, gain))
+            stems.append(
+                RunMixStemEntry(
+                    artifact_id=artifact_id,
+                    gain_db=gain,
+                    muted=bool(entry.get("muted") or False),
+                )
+            )
+    is_default = all(_is_default_stem(entry) for entry in stems)
+    return RunMixState(stems=stems, is_default=is_default)
+
+
 def serialize_run_detail(run: Run) -> RunDetailResponse:
     return RunDetailResponse(
         **serialize_run_summary(run).model_dump(),
         metadata_json=run.metadata_json or {},
         artifacts=[serialize_run_artifact(artifact) for artifact in run.artifacts],
+        mix=serialize_run_mix(run),
     )
+
+
+def set_run_mix(session: Session, track_id: str, run_id: str, payload: RunMixInput) -> Run:
+    track = get_track(session, track_id)
+    if track is None:
+        raise LookupError(f"Track '{track_id}' does not exist.")
+
+    run = session.get(Run, run_id, options=[selectinload(Run.artifacts)])
+    if run is None or run.track_id != track.id:
+        raise ValueError("Run does not belong to this track.")
+    if run.status != RunStatus.completed.value:
+        raise ValueError("Only completed runs can have a mix.")
+
+    mixable_ids = {artifact.id for artifact in mixable_artifacts(run)}
+    seen: set[str] = set()
+    normalized: list[dict[str, Any]] = []
+    for entry in payload.stems:
+        if entry.artifact_id not in mixable_ids:
+            raise ValueError(f"Artifact '{entry.artifact_id}' is not a mixable stem for this run.")
+        if entry.artifact_id in seen:
+            raise ValueError(f"Duplicate mix entry for artifact '{entry.artifact_id}'.")
+        seen.add(entry.artifact_id)
+        normalized.append(
+            {
+                "artifact_id": entry.artifact_id,
+                "gain_db": float(entry.gain_db),
+                "muted": bool(entry.muted),
+            }
+        )
+
+    run.mix_json = {"version": 1, "stems": normalized}
+    session.commit()
+    session.refresh(run)
+    return run
 
 
 def serialize_track_summary(track: Track) -> TrackSummaryResponse:
     runs = _sorted_runs(track)
     latest_run = runs[0] if runs else None
+    has_custom_mix = False
+    if track.keeper_run_id:
+        keeper = next((run for run in runs if run.id == track.keeper_run_id), None)
+        if keeper is not None:
+            has_custom_mix = not serialize_run_mix(keeper).is_default
     return TrackSummaryResponse(
         id=track.id,
         title=track.title,
@@ -167,6 +252,7 @@ def serialize_track_summary(track: Track) -> TrackSummaryResponse:
         latest_run=serialize_run_summary(latest_run) if latest_run else None,
         run_count=len(runs),
         keeper_run_id=track.keeper_run_id,
+        has_custom_mix=has_custom_mix,
     )
 
 
