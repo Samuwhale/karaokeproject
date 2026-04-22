@@ -14,7 +14,11 @@ import type {
   Diagnostics,
   ExportBundleInput,
   ExportBundleResponse,
+  ExportPlanInput,
+  ExportPlanResponse,
   ImportDraft,
+  RevealFolderInput,
+  RevealFolderResponse,
   QueueRunEntry,
   ResolveLocalImportResponse,
   ResolveYouTubeImportResponse,
@@ -135,6 +139,10 @@ export function retryRun(runId: string) {
   return fetchJson<{ run: RunSummary }>(`/api/runs/${runId}/retry`, { method: 'POST' })
 }
 
+export function dismissRun(runId: string) {
+  return fetchJson<{ run: RunSummary }>(`/api/runs/${runId}/dismiss`, { method: 'POST' })
+}
+
 export function measureRun(runId: string) {
   return fetchJson<RunDetail>(`/api/runs/${runId}/measure`, { method: 'POST' })
 }
@@ -235,6 +243,16 @@ export function confirmImportDrafts(payload: ConfirmImportDraftsInput) {
 
 export function createExportBundle(payload: ExportBundleInput) {
   return postJson<ExportBundleResponse>('/api/exports/bundle', payload)
+}
+
+export function planExportBundle(payload: ExportPlanInput) {
+  return postJson<ExportPlanResponse>('/api/exports/plan', payload)
+}
+
+// --- System ---
+
+export function revealFolder(payload: RevealFolderInput) {
+  return postJson<RevealFolderResponse>('/api/system/reveal', payload)
 }
 
 // --- Admin ---

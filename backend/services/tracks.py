@@ -131,6 +131,8 @@ def serialize_run_summary(run: Run) -> RunSummaryResponse:
         created_at=run.created_at,
         updated_at=run.updated_at,
         note=_run_note(run),
+        last_active_status=run.last_active_status,
+        dismissed_at=run.dismissed_at,
     )
 
 
@@ -251,7 +253,7 @@ def create_run(track: Track, processing: dict[str, str]) -> Run:
         preset=processing["profile_key"],
         status=RunStatus.queued.value,
         progress=0.0,
-        status_message="Queued for processing",
+        status_message="",
         metadata_json={"processing": processing},
     )
     run.artifacts.append(
@@ -296,6 +298,8 @@ def set_run_state(
     run.progress = progress
     run.status_message = status_message
     run.error_message = error_message
+    if status.value in IN_PROGRESS_RUN_STATUSES:
+        run.last_active_status = status.value
     return run
 
 
@@ -320,7 +324,7 @@ def claim_next_run(session: Session) -> Run | None:
         run,
         status=RunStatus.preparing,
         progress=0.05,
-        status_message="Claimed by worker",
+        status_message="",
     )
     session.flush()
     return run
@@ -334,7 +338,7 @@ def recover_orphaned_runs(session: Session) -> int:
             run,
             status=RunStatus.failed,
             progress=run.progress,
-            status_message="Worker restarted mid-run",
+            status_message="",
             error_message="Worker restarted before this run could finish.",
         )
     if orphaned:
@@ -357,14 +361,14 @@ def request_run_cancellation(session: Session, run_id: str) -> Run:
             run,
             status=RunStatus.cancelled,
             progress=run.progress,
-            status_message="Cancelled before processing started",
+            status_message="",
             error_message=None,
         )
     else:
         metadata = dict(run.metadata_json or {})
         metadata["cancellation_requested"] = True
         run.metadata_json = metadata
-        run.status_message = "Cancellation requested; stopping at next stage"
+        run.status_message = "Stopping at next stage"
 
     session.commit()
     return run
@@ -380,12 +384,25 @@ def mark_run_cancelled(run: Run) -> None:
         run,
         status=RunStatus.cancelled,
         progress=run.progress,
-        status_message="Cancelled",
+        status_message="",
         error_message=None,
     )
     metadata = dict(run.metadata_json or {})
     metadata.pop("cancellation_requested", None)
     run.metadata_json = metadata
+
+
+def dismiss_run(session: Session, run_id: str) -> Run:
+    run = session.get(Run, run_id, options=[selectinload(Run.track), selectinload(Run.artifacts)])
+    if run is None:
+        raise LookupError(f"Run '{run_id}' does not exist.")
+    if run.status not in TERMINAL_RUN_STATUSES:
+        raise ValueError("Only completed, failed, or cancelled runs can be dismissed from the queue.")
+    if run.dismissed_at is None:
+        run.dismissed_at = datetime.utcnow()
+        session.commit()
+        session.refresh(run)
+    return run
 
 
 def retry_run(session: Session, run_id: str) -> Run:
@@ -396,6 +413,11 @@ def retry_run(session: Session, run_id: str) -> Run:
     stored_processing = (source_run.metadata_json or {}).get("processing")
     if not isinstance(stored_processing, dict) or "profile_key" not in stored_processing:
         raise ValueError("This run does not have a stored processing config to retry from.")
+
+    # Drop the failed/cancelled source run from the queue view so it doesn't
+    # sit next to the retry that replaces it.
+    if source_run.status in TERMINAL_RUN_STATUSES and source_run.dismissed_at is None:
+        source_run.dismissed_at = datetime.utcnow()
 
     track = source_run.track
     processing: dict[str, str] = {str(key): str(value) for key, value in stored_processing.items()}

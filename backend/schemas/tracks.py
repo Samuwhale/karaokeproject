@@ -58,6 +58,8 @@ class RunSummaryResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     note: str = ""
+    last_active_status: str | None = None
+    dismissed_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

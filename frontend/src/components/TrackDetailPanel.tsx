@@ -521,7 +521,10 @@ export function TrackDetailPanel({
           />
 
           <div className="run-stepper-wrap">
-            <RunStepper status={selectedRun.status} />
+            <RunStepper
+              status={selectedRun.status}
+              lastActiveStatus={selectedRun.last_active_status}
+            />
           </div>
 
           {isActiveRun ? (

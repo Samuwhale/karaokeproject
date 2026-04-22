@@ -55,6 +55,8 @@ export type RunSummary = {
   created_at: string
   updated_at: string
   note: string
+  last_active_status: string | null
+  dismissed_at: string | null
 }
 
 export type ArtifactMetrics = {
@@ -275,4 +277,48 @@ export type ExportBundleResponse = {
   byte_count: number
   included_track_count: number
   skipped: ExportBundleSkip[]
+}
+
+export type ExportPlanInput = {
+  track_ids: string[]
+  run_selector: ExportRunSelector
+  artifacts: ExportArtifactKind[]
+  mode: ExportOutputMode
+}
+
+export type ExportPlanArtifact = {
+  kind: ExportArtifactKind
+  present: boolean
+  size_bytes: number | null
+  missing_reason: string | null
+}
+
+export type ExportPlanTrack = {
+  track_id: string
+  track_title: string
+  run_id: string | null
+  run_selector_used: ExportRunSelector | null
+  fallback_to_latest: boolean
+  artifacts: ExportPlanArtifact[]
+  skip_reason: string | null
+}
+
+export type ExportPlanResponse = {
+  tracks: ExportPlanTrack[]
+  included_track_count: number
+  total_bytes: number
+  skipped_track_count: number
+  tracks_using_keeper: number
+  tracks_using_latest_fallback: number
+}
+
+export type RevealFolderKind = 'exports' | 'outputs' | 'track-outputs'
+
+export type RevealFolderInput = {
+  kind: RevealFolderKind
+  track_id?: string | null
+}
+
+export type RevealFolderResponse = {
+  path: string
 }

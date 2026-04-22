@@ -1,3 +1,5 @@
+from enum import StrEnum
+
 from pydantic import BaseModel
 
 
@@ -17,3 +19,18 @@ class DiagnosticsResponse(BaseModel):
     issues: list[str]
     data_directories: dict[str, str]
     url_import_ready: bool
+
+
+class RevealFolderKind(StrEnum):
+    exports = "exports"
+    outputs = "outputs"
+    track_outputs = "track-outputs"
+
+
+class RevealFolderRequest(BaseModel):
+    kind: RevealFolderKind
+    track_id: str | None = None
+
+
+class RevealFolderResponse(BaseModel):
+    path: str

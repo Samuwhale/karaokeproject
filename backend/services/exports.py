@@ -16,6 +16,10 @@ from backend.schemas.exports import (
     ExportBundleResponse,
     ExportBundleSkip,
     ExportOutputMode,
+    ExportPlanArtifact,
+    ExportPlanRequest,
+    ExportPlanResponse,
+    ExportPlanTrack,
     ExportRunSelector,
 )
 from backend.services.tracks import get_track
@@ -51,15 +55,65 @@ def bundle_path(runtime_settings: RuntimeSettings, job_id: str) -> Path:
     return _bundle_root(runtime_settings) / f"{job_id}.zip"
 
 
-def _select_run(track: Track, selector: ExportRunSelector) -> Run | None:
+def _select_run(
+    track: Track, selector: ExportRunSelector
+) -> tuple[Run | None, bool]:
+    """Return (run, fell_back_to_latest). fell_back_to_latest is True iff the
+    selector was 'keeper' but the track had no keeper set, so we used the
+    latest completed run instead.
+    """
     if selector == ExportRunSelector.keeper and track.keeper_run_id:
         for run in track.runs:
             if run.id == track.keeper_run_id:
-                return run
+                return run, False
     completed = [run for run in track.runs if run.status == RunStatus.completed.value]
     if not completed:
-        return None
-    return sorted(completed, key=lambda run: run.created_at, reverse=True)[0]
+        return None, False
+    latest = sorted(completed, key=lambda run: run.created_at, reverse=True)[0]
+    fell_back = selector == ExportRunSelector.keeper
+    return latest, fell_back
+
+
+@dataclass(frozen=True)
+class _ResolvedArtifact:
+    kind: ExportArtifactKind
+    file: _ResolvedFile | None
+    present: bool
+    size_bytes: int | None
+    missing_reason: str | None
+
+
+def _resolve_artifact(
+    track: Track, run: Run, kind: ExportArtifactKind
+) -> _ResolvedArtifact:
+    if kind == ExportArtifactKind.source:
+        source_path = Path(track.source_path)
+        if not source_path.is_file():
+            return _ResolvedArtifact(kind, None, False, None, "source file is not on disk")
+        return _ResolvedArtifact(
+            kind,
+            _ResolvedFile(arcname=f"source{source_path.suffix}", path=source_path),
+            True,
+            source_path.stat().st_size,
+            None,
+        )
+
+    artifact_kind = _RUN_ARTIFACT_KIND[kind]
+    artifact = next((a for a in run.artifacts if a.kind == artifact_kind), None)
+    if artifact is None:
+        return _ResolvedArtifact(kind, None, False, None, "not produced by this run")
+
+    artifact_path = Path(artifact.path)
+    if not artifact_path.is_file():
+        return _ResolvedArtifact(kind, None, False, None, "file missing on disk")
+
+    return _ResolvedArtifact(
+        kind,
+        _ResolvedFile(arcname=f"{kind.value}{artifact_path.suffix}", path=artifact_path),
+        True,
+        artifact_path.stat().st_size,
+        None,
+    )
 
 
 def _resolve_track_files(
@@ -70,42 +124,12 @@ def _resolve_track_files(
     """Return (files_to_include, missing_artifact_reasons) for one track."""
     files: list[_ResolvedFile] = []
     missing: list[str] = []
-
     for kind in requested:
-        if kind == ExportArtifactKind.source:
-            source_path = Path(track.source_path)
-            if source_path.is_file():
-                files.append(
-                    _ResolvedFile(
-                        arcname=f"source{source_path.suffix}",
-                        path=source_path,
-                    )
-                )
-            else:
-                missing.append("source file is not on disk")
-            continue
-
-        artifact_kind = _RUN_ARTIFACT_KIND[kind]
-        artifact = next(
-            (a for a in run.artifacts if a.kind == artifact_kind),
-            None,
-        )
-        if artifact is None:
-            missing.append(f"no '{artifact_kind}' artifact")
-            continue
-
-        artifact_path = Path(artifact.path)
-        if not artifact_path.is_file():
-            missing.append(f"'{artifact_kind}' file missing on disk")
-            continue
-
-        files.append(
-            _ResolvedFile(
-                arcname=f"{kind.value}{artifact_path.suffix}",
-                path=artifact_path,
-            )
-        )
-
+        resolved = _resolve_artifact(track, run, kind)
+        if resolved.file is not None:
+            files.append(resolved.file)
+        else:
+            missing.append(resolved.missing_reason or "unavailable")
     return files, missing
 
 
@@ -138,7 +162,7 @@ def build_export_bundle(
             )
             continue
 
-        run = _select_run(track, payload.run_selector)
+        run, _fallback = _select_run(track, payload.run_selector)
         if run is None:
             skipped.append(
                 ExportBundleSkip(
@@ -212,6 +236,115 @@ def _make_inner_zip(files: list[_ResolvedFile]) -> bytes:
         for resolved in files:
             zf.write(resolved.path, arcname=resolved.arcname)
     return buffer.getvalue()
+
+
+def plan_export_bundle(
+    session: Session,
+    payload: ExportPlanRequest,
+) -> ExportPlanResponse:
+    """Return a read-only manifest of what an export would produce.
+
+    Surfaces per-track / per-artifact presence so the user can see what they
+    will actually get before committing to the zip.
+    """
+    tracks: list[ExportPlanTrack] = []
+    total_bytes = 0
+    included = 0
+    skipped = 0
+    using_keeper = 0
+    using_latest_fallback = 0
+
+    for track_id in payload.track_ids:
+        track = get_track(session, track_id)
+        if track is None:
+            tracks.append(
+                ExportPlanTrack(
+                    track_id=track_id,
+                    track_title="(deleted)",
+                    run_id=None,
+                    run_selector_used=None,
+                    fallback_to_latest=False,
+                    artifacts=[],
+                    skip_reason="track no longer exists",
+                )
+            )
+            skipped += 1
+            continue
+
+        run, fell_back = _select_run(track, payload.run_selector)
+        if run is None:
+            tracks.append(
+                ExportPlanTrack(
+                    track_id=track_id,
+                    track_title=track.title,
+                    run_id=None,
+                    run_selector_used=None,
+                    fallback_to_latest=False,
+                    artifacts=[],
+                    skip_reason=(
+                        "no keeper run set"
+                        if payload.run_selector == ExportRunSelector.keeper
+                        else "no completed run yet"
+                    ),
+                )
+            )
+            skipped += 1
+            continue
+
+        selector_used = (
+            ExportRunSelector.latest if fell_back else payload.run_selector
+        )
+        if payload.run_selector == ExportRunSelector.keeper:
+            if fell_back:
+                using_latest_fallback += 1
+            else:
+                using_keeper += 1
+
+        resolved_artifacts: list[ExportPlanArtifact] = []
+        track_bytes = 0
+        any_present = False
+        for kind in payload.artifacts:
+            resolved = _resolve_artifact(track, run, kind)
+            resolved_artifacts.append(
+                ExportPlanArtifact(
+                    kind=resolved.kind,
+                    present=resolved.present,
+                    size_bytes=resolved.size_bytes,
+                    missing_reason=resolved.missing_reason,
+                )
+            )
+            if resolved.present and resolved.size_bytes is not None:
+                track_bytes += resolved.size_bytes
+                any_present = True
+
+        if any_present:
+            included += 1
+            total_bytes += track_bytes
+            skip_reason = None
+        else:
+            skipped += 1
+            skip_reason = "no requested artifacts are available"
+
+        tracks.append(
+            ExportPlanTrack(
+                track_id=track_id,
+                track_title=track.title,
+                run_id=run.id,
+                run_selector_used=selector_used,
+                fallback_to_latest=fell_back,
+                artifacts=resolved_artifacts,
+                skip_reason=skip_reason,
+            )
+        )
+
+    return ExportPlanResponse(
+        tracks=tracks,
+        included_track_count=included,
+        total_bytes=total_bytes,
+        skipped_track_count=skipped,
+        tracks_using_keeper=using_keeper,
+        tracks_using_latest_fallback=using_latest_fallback,
+    )
 
 
 def _default_filename(mode: ExportOutputMode, track_count: int) -> str:

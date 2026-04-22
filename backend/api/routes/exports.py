@@ -4,8 +4,13 @@ from sqlalchemy.orm import Session
 
 from backend.api.dependencies import get_db_session, get_settings_dependency
 from backend.core.config import RuntimeSettings
-from backend.schemas.exports import ExportBundleRequest, ExportBundleResponse
-from backend.services.exports import build_export_bundle, bundle_path
+from backend.schemas.exports import (
+    ExportBundleRequest,
+    ExportBundleResponse,
+    ExportPlanRequest,
+    ExportPlanResponse,
+)
+from backend.services.exports import build_export_bundle, bundle_path, plan_export_bundle
 
 router = APIRouter(tags=["exports"])
 
@@ -20,6 +25,14 @@ def create_export_bundle(
         return build_export_bundle(session, runtime_settings, payload)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/exports/plan", response_model=ExportPlanResponse)
+def create_export_plan(
+    payload: ExportPlanRequest,
+    session: Session = Depends(get_db_session),
+) -> ExportPlanResponse:
+    return plan_export_bundle(session, payload)
 
 
 @router.get("/exports/bundle/{job_id}")

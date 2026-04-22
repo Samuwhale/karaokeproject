@@ -84,10 +84,12 @@ class Run(TimestampMixin, Base):
     preset: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(32), default=RunStatus.queued.value)
     progress: Mapped[float] = mapped_column(Float, default=0.0)
-    status_message: Mapped[str] = mapped_column(String(255), default="Queued for processing")
+    status_message: Mapped[str] = mapped_column(String(255), default="")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_directory: Mapped[str | None] = mapped_column(String(512), nullable=True)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    last_active_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
 
     track: Mapped[Track] = relationship(back_populates="runs")
     artifacts: Mapped[list[RunArtifact]] = relationship(

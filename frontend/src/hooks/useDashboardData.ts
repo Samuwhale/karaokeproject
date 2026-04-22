@@ -14,6 +14,7 @@ import {
   createRun,
   deleteTrack,
   discardImportDraft,
+  dismissRun,
   getActiveRuns,
   getDiagnostics,
   getSettings,
@@ -24,6 +25,7 @@ import {
   resolveLocalImport,
   resolveYouTubeImport,
   retryRun,
+  revealFolder,
   setKeeperRun,
   setRunNote,
   updateImportDraft,
@@ -37,6 +39,7 @@ import type {
   Diagnostics,
   ImportDraft,
   QueueRunEntry,
+  RevealFolderInput,
   RunProcessingConfigInput,
   Settings,
   TrackDetail,
@@ -318,9 +321,6 @@ export function useDashboardData() {
       )
       setActiveSurface('inbox')
       await refreshDashboard()
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
     } finally {
       setResolvingYoutubeImport(false)
     }
@@ -336,9 +336,6 @@ export function useDashboardData() {
       )
       setActiveSurface('inbox')
       await refreshDashboard()
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
     } finally {
       setResolvingLocalImport(false)
     }
@@ -451,6 +448,30 @@ export function useDashboardData() {
       throw error
     } finally {
       setCancellingRunId(null)
+    }
+  }
+
+  async function handleDismissRun(runId: string) {
+    try {
+      await dismissRun(runId)
+      setSelectedQueueRunIds((current) => {
+        if (!current.has(runId)) return current
+        const next = new Set(current)
+        next.delete(runId)
+        return next
+      })
+      await refreshDashboard()
+    } catch (error) {
+      pushToast('error', getErrorMessage(error))
+      throw error
+    }
+  }
+
+  async function handleRevealFolder(payload: RevealFolderInput) {
+    try {
+      await revealFolder(payload)
+    } catch (error) {
+      pushToast('error', getErrorMessage(error))
     }
   }
 
@@ -758,6 +779,8 @@ export function useDashboardData() {
     handleCreateRun,
     handleCancelRun,
     handleRetryRun,
+    handleDismissRun,
+    handleRevealFolder,
     handleSaveSettings,
     handleSetKeeper,
     handlePurgeNonKeepers,

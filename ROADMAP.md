@@ -4,9 +4,18 @@
 
 KaraokeProject is a local-first stem separation tool.
 
-Right now the product is for a solo creator who needs a clear local workflow for importing tracks, running separation, reviewing outcomes, and exporting usable results.
+Right now the product is for a solo creator who needs a clear local workflow for importing tracks, running separation, reviewing outcomes, shaping the final stem balance, and exporting usable results.
 
 Karaoke is not the present product focus. It is a possible future expansion, not the current product identity.
+
+The near-term product should be understood as a stem workflow tool:
+
+1. import a track
+2. run separation
+3. compare outcomes
+4. choose the keeper
+5. adjust the final stem balance
+6. export the result
 
 ## Principles
 
@@ -15,6 +24,7 @@ Karaoke is not the present product focus. It is a possible future expansion, not
 - optimize for one person using the tool directly on their own machine
 - use clean seams around storage, jobs, and domain logic without introducing premature hosted abstractions
 - improve outcomes without turning the product into a cluttered browser workstation
+- deepen the finish of the core loop before expanding into adjacent product surfaces
 - avoid infrastructure work before the local product is stable enough to carry forward
 
 ## Phase 1. Tighten The Local Workflow
@@ -48,20 +58,22 @@ Why this phase exists:
 - stronger output quality matters more than broadening the product too early
 - the local tool should become trustworthy before it becomes wider
 
-## Phase 3. Strengthen Review And Export Decisions
+## Phase 3. Review, Mix, And Export
 
 Focus:
 
 - better compare flow across runs
 - clearer keeper selection
-- more useful notes and decision support around runs
-- stronger confidence in final output selection
+- clearer transition from chosen run to final output shaping
+- simple per-stem mixing controls for the chosen result
+- stronger confidence in the final balance before export
 - cleaner export choices for the result the user actually wants
 
 Why this phase exists:
 
 - separation is only useful if the user can confidently choose the best result
-- review and export should feel like the end of one clear task, not a loose collection of controls
+- the product should support light output shaping without turning into a browser DAW
+- review, mixing, and export should feel like the end of one clear task, not a loose collection of controls
 - this deepens the product without pushing it toward workstation sprawl
 
 ## Future Direction
@@ -83,6 +95,21 @@ Do not expand early into:
 - browser-based audio workstation behavior
 - infrastructure-heavy architecture before the local product earns it
 - broad creative tooling that weakens the stem separation core
+
+Mixing support is in scope when it stays narrowly focused on final output shaping, such as:
+
+- per-stem volume adjustment
+- mute and solo controls
+- previewing the resulting balance
+- exporting the rendered mix
+
+Do not treat this as a reason to add:
+
+- timeline editing
+- arrangement tools
+- plugin-style effects chains
+- automation lanes
+- general DAW routing
 
 ## Related Docs
 

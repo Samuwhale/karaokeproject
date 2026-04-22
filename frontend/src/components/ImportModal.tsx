@@ -35,38 +35,47 @@ export function ImportModal({
   const [localFiles, setLocalFiles] = useState<File[]>([])
   const [dragActive, setDragActive] = useState(false)
   const [youtubeUrl, setYoutubeUrl] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const urlInputRef = useRef<HTMLInputElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (!open) return
+    setError(null)
     if (source !== 'youtube') return
     urlInputRef.current?.focus()
   }, [open, source])
+
+  function errorMessage(raw: unknown): string {
+    if (raw instanceof Error && raw.message) return raw.message
+    return 'Import failed. Check the URL or files and try again.'
+  }
 
   async function handleResolveYoutubeSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const trimmed = youtubeUrl.trim()
     if (!trimmed) return
+    setError(null)
     try {
       await onResolveYouTube(trimmed)
       setYoutubeUrl('')
       onClose()
-    } catch {
-      /* parent surfaces the error via toast */
+    } catch (raw) {
+      setError(errorMessage(raw))
     }
   }
 
   async function handleResolveLocalSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!localFiles.length) return
+    setError(null)
     try {
       await onResolveLocalImport(localFiles)
       setLocalFiles([])
       if (fileInputRef.current) fileInputRef.current.value = ''
       onClose()
-    } catch {
-      /* parent surfaces the error via toast */
+    } catch (raw) {
+      setError(errorMessage(raw))
     }
   }
 
@@ -74,11 +83,18 @@ export function ImportModal({
     event.preventDefault()
     event.stopPropagation()
     setDragActive(false)
-    const dropped = Array.from(event.dataTransfer.files).filter((file) =>
-      /^(audio|video)\//.test(file.type),
-    )
-    if (dropped.length === 0) return
-    setLocalFiles(dropped)
+    const all = Array.from(event.dataTransfer.files)
+    const accepted = all.filter((file) => /^(audio|video)\//.test(file.type))
+    if (accepted.length === 0) {
+      setError(
+        all.length === 0
+          ? 'No files were dropped.'
+          : 'None of those files look like audio or video.',
+      )
+      return
+    }
+    setError(null)
+    setLocalFiles(accepted)
   }
 
   function handleDragOver(event: DragEvent<HTMLDivElement>) {
@@ -96,6 +112,7 @@ export function ImportModal({
   const handleClose = () => {
     setLocalFiles([])
     setDragActive(false)
+    setError(null)
     onClose()
   }
 
@@ -128,7 +145,10 @@ export function ImportModal({
               role="tab"
               aria-selected={source === 'youtube'}
               className={`segmented ${source === 'youtube' ? 'segmented-active' : ''}`}
-              onClick={() => setSource('youtube')}
+              onClick={() => {
+                setSource('youtube')
+                setError(null)
+              }}
             >
               YouTube
             </button>
@@ -137,11 +157,20 @@ export function ImportModal({
               role="tab"
               aria-selected={source === 'local'}
               className={`segmented ${source === 'local' ? 'segmented-active' : ''}`}
-              onClick={() => setSource('local')}
+              onClick={() => {
+                setSource('local')
+                setError(null)
+              }}
             >
               Files
             </button>
           </div>
+
+          {error ? (
+            <div className="import-error" role="alert">
+              {error}
+            </div>
+          ) : null}
 
           {source === 'youtube' ? (
             <form className="import-form" onSubmit={handleResolveYoutubeSubmit}>

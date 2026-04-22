@@ -33,6 +33,7 @@ from backend.services.settings import get_or_create_settings
 from backend.services.tracks import (
     create_run,
     delete_track,
+    dismiss_run,
     get_track,
     list_tracks,
     purge_non_keeper_runs,
@@ -209,14 +210,26 @@ def purge_non_keepers_endpoint(
 @router.get("/runs/active", response_model=list[QueueRunResponse])
 def list_active_runs(session: Session = Depends(get_db_session)) -> list[QueueRunResponse]:
     active_statuses = [RunStatus.queued.value, *IN_PROGRESS_RUN_STATUSES]
-    statement = (
+    terminal_statuses = [RunStatus.failed.value, RunStatus.cancelled.value]
+
+    active_statement = (
         select(Run)
         .options(selectinload(Run.track))
         .where(Run.status.in_(active_statuses))
         .order_by(Run.created_at.asc())
     )
+    # Recently-terminal runs stay visible until the user dismisses them so
+    # failures don't silently vanish from the queue.
+    terminal_statement = (
+        select(Run)
+        .options(selectinload(Run.track))
+        .where(Run.status.in_(terminal_statuses))
+        .where(Run.dismissed_at.is_(None))
+        .order_by(Run.updated_at.desc())
+    )
+
     entries: list[QueueRunResponse] = []
-    for run in session.scalars(statement):
+    for run in list(session.scalars(active_statement)) + list(session.scalars(terminal_statement)):
         track: Track | None = run.track
         entries.append(
             QueueRunResponse(
@@ -227,6 +240,17 @@ def list_active_runs(session: Session = Depends(get_db_session)) -> list[QueueRu
             )
         )
     return entries
+
+
+@router.post("/runs/{run_id}/dismiss", response_model=CreateRunResponse)
+def dismiss_run_endpoint(run_id: str, session: Session = Depends(get_db_session)) -> CreateRunResponse:
+    try:
+        run = dismiss_run(session, run_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return CreateRunResponse(run=serialize_run_summary(run))
 
 
 @router.post("/tracks/batch/queue", response_model=BatchQueueRunsResponse)

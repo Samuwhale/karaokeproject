@@ -47,7 +47,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             run,
             status=RunStatus.failed,
             progress=0.0,
-            status_message="Source file missing",
+            status_message="",
             error_message=f"Source file no longer exists: {source_path}",
         )
         session.commit()
@@ -66,10 +66,20 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         set_run_state(
             run,
             status=RunStatus.preparing,
-            progress=0.15,
-            status_message="Probing and normalizing source audio",
+            progress=0.1,
+            status_message="Probing source audio",
         )
+        session.commit()
         metadata = ffmpeg_adapter.probe(source_path)
+
+        _check_cancellation(session, run)
+        set_run_state(
+            run,
+            status=RunStatus.preparing,
+            progress=0.2,
+            status_message="Normalising loudness",
+        )
+        session.commit()
         normalized_path = work_directory / "normalized.wav"
         ffmpeg_adapter.normalize(source_path, normalized_path)
 
@@ -97,11 +107,12 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         session.commit()
 
         _check_cancellation(session, run)
+        profile_label = processing.get("profile_label") or processing.get("profile_key") or "stem model"
         set_run_state(
             run,
             status=RunStatus.separating,
-            progress=0.5,
-            status_message="Running local source separation",
+            progress=0.4,
+            status_message=f"Running {profile_label}",
         )
         session.commit()
 
@@ -149,8 +160,8 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         set_run_state(
             run,
             status=RunStatus.exporting,
-            progress=0.82,
-            status_message="Writing export bundle",
+            progress=0.8,
+            status_message="Copying stems",
         )
         session.commit()
 
@@ -160,14 +171,33 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         shutil.copy2(instrumental_path, instrumental_wav_export)
         shutil.copy2(vocals_path, vocals_wav_export)
 
+        _check_cancellation(session, run)
+        bitrate = processing["export_mp3_bitrate"]
+        set_run_state(
+            run,
+            status=RunStatus.exporting,
+            progress=0.88,
+            status_message=f"Encoding MP3 at {bitrate}",
+        )
+        session.commit()
+
         instrumental_mp3_export = export_directory / "instrumental.mp3"
         ffmpeg_adapter.convert_to_mp3(
             instrumental_wav_export,
             instrumental_mp3_export,
-            processing["export_mp3_bitrate"],
+            bitrate,
         )
         metadata_path = export_directory / "metadata.json"
         write_metadata_file(track, run, metadata_path)
+
+        _check_cancellation(session, run)
+        set_run_state(
+            run,
+            status=RunStatus.exporting,
+            progress=0.94,
+            status_message="Writing bundle",
+        )
+        session.commit()
 
         bundle_path = Path(runtime_settings.exports_dir) / f"{source_slug}-{run.id}.zip"
         bundle_files(
@@ -219,7 +249,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             run,
             status=RunStatus.completed,
             progress=1.0,
-            status_message="Ready for preview and export",
+            status_message="",
             error_message=None,
         )
         session.commit()
@@ -251,7 +281,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             run,
             status=RunStatus.failed,
             progress=run.progress,
-            status_message="Processing failed",
+            status_message="",
             error_message=str(error),
         )
         session.commit()
@@ -264,7 +294,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             run,
             status=RunStatus.failed,
             progress=run.progress,
-            status_message="Processing failed",
+            status_message="",
             error_message=f"Unexpected processing error: {error.__class__.__name__}: {error}",
         )
         session.commit()

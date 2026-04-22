@@ -19,6 +19,8 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 _COLUMN_ADDITIONS: tuple[tuple[str, str, str], ...] = (
     ("tracks", "keeper_run_id", "VARCHAR(32) NULL"),
     ("run_artifacts", "metrics_json", "JSON NULL"),
+    ("runs", "last_active_status", "VARCHAR(32) NULL"),
+    ("runs", "dismissed_at", "DATETIME NULL"),
 )
 
 

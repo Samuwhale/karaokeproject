@@ -12,11 +12,15 @@ const STAGE_INDEX = new Map(STAGES.map((stage, index) => [stage.key, index]))
 
 type RunStepperProps = {
   status: string
+  lastActiveStatus?: string | null
 }
 
-export function RunStepper({ status }: RunStepperProps) {
+export function RunStepper({ status, lastActiveStatus }: RunStepperProps) {
   const isFailed = status === 'failed' || status === 'cancelled'
   const activeIndex = STAGE_INDEX.get(status) ?? (isFailed ? -1 : 0)
+  const failureIndex = isFailed
+    ? STAGE_INDEX.get(lastActiveStatus ?? '') ?? 1
+    : -1
   const activeDescription = isFailed
     ? null
     : status === 'completed'
@@ -29,7 +33,9 @@ export function RunStepper({ status }: RunStepperProps) {
         {STAGES.map((stage, index) => {
           let state: 'done' | 'active' | 'pending' | 'failed' = 'pending'
           if (isFailed) {
-            state = index === 0 ? 'failed' : 'pending'
+            if (index < failureIndex) state = 'done'
+            else if (index === failureIndex) state = 'failed'
+            else state = 'pending'
           } else if (index < activeIndex) {
             state = 'done'
           } else if (index === activeIndex) {
@@ -37,7 +43,7 @@ export function RunStepper({ status }: RunStepperProps) {
           }
 
           const label =
-            isFailed && index === 0
+            isFailed && index === failureIndex
               ? status === 'cancelled'
                 ? 'Cancelled'
                 : 'Failed'
