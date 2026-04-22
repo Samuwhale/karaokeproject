@@ -2,16 +2,16 @@
 
 ## Product Direction
 
-KaraokeProject is a local-first stem separation tool.
+KaraokeProject is a local-first stem workflow tool.
 
 Right now the product is for a solo creator who needs a clear local workflow for importing tracks, running separation, reviewing outcomes, shaping the final stem balance, and exporting usable results.
 
-Karaoke is not the present product focus. It is a possible future expansion, not the current product identity.
+Karaoke is not the present product focus. It remains a possible future expansion, not the current product identity.
 
 The near-term product should be understood as a stem workflow tool:
 
 1. import a track
-2. run separation
+2. choose how to run separation
 3. compare outcomes
 4. choose the keeper
 5. adjust the final stem balance
@@ -28,56 +28,53 @@ The near-term product should be understood as a stem workflow tool:
 - deepen the finish of the core loop before expanding into adjacent product surfaces
 - avoid infrastructure work before the local product is stable enough to carry forward
 
-## Phase 1. Tighten The Local Workflow
+## Phase 1. Better Models
 
 Focus:
 
-- clearer import flow for local files and supported sources
-- clearer control over where local files are stored
-- more legible queue and processing state
-- stronger failure handling and recovery
-- clearer storage usage, retention, and cleanup controls
-- clearer export paths and final outputs
-- lower ambiguity about what will happen next
+- stronger built-in presets with clearer quality and speed tradeoffs
+- a hybrid model strategy with curated presets by default and direct model choice when needed
+- clearer rerun intent when the current output is not good enough
+- better defaults so most tracks start in the right place without extra setup
+- clearer language around what each model or preset is good at
 
 Why this phase exists:
 
-- the product already works locally
-- the main gap is workflow clarity, trust, and file lifecycle management, not surface area
-- future work should inherit a stronger local loop instead of compensating for a confusing one
+- the next meaningful gain is better output quality
+- better model choice matters more than adding broad new product surface area
+- the default flow should stay simple while still giving advanced users sharper control
 
-## Phase 2. Improve Separation Quality
+## Phase 2. Broader Stem Support
 
 Focus:
 
-- better presets and model choices
-- clearer rerun intent when quality is not good enough
-- stronger quality-first defaults
-- better control over outcome without adding unnecessary UI complexity
+- move beyond a vocal and instrumental mental model
+- preserve and present whatever stems a selected model produces
+- improve naming and review of multi-stem outputs so the result is easy to understand at a glance
+- make model-driven stem sets feel like a first-class workflow, not an edge case
+- keep export and review flows legible even when different runs produce different stem layouts
 
 Why this phase exists:
 
-- the next meaningful product gain is better separation quality
-- stronger output quality matters more than broadening the product too early
-- the local tool should become trustworthy before it becomes wider
+- better models are more valuable when the product can handle their full output cleanly
+- the product should adapt to model capabilities instead of forcing every run into a fixed stem shape
+- broader stem support deepens the core separation workflow without pushing the app toward DAW complexity
 
-## Phase 3. Review, Mix, And Export
+## Phase 3. Per-Stem Mixing
 
 Focus:
 
-- better compare flow across runs
-- clearer keeper selection
-- clearer transition from chosen run to final output shaping
-- simple per-stem mixing controls for the chosen result
-- stronger confidence in the final balance before export
-- cleaner export choices for the result the user actually wants
+- individual volume control for every available stem in the chosen run
+- mute and solo controls across all available stems
+- clear preview of the current stem balance before export
+- rendered mix export based on the chosen per-stem balance
+- a narrow final-shaping workflow that stays easy to understand and maintain
 
 Why this phase exists:
 
-- separation is only useful if the user can confidently choose the best result
-- the product should support light output shaping without turning into a browser DAW
-- review, mixing, and export should feel like the end of one clear task, not a loose collection of controls
-- this deepens the product without pushing it toward workstation sprawl
+- model-driven stem output is only useful if the user can shape the final balance clearly
+- mixing should apply across all available stems, not only vocals and instrumental
+- the product should support final output shaping without turning into a browser DAW
 
 ## Future Direction
 
@@ -92,22 +89,21 @@ These are intentionally future-facing directions, not current roadmap commitment
 
 ## Boundaries
 
+Near-term work is in scope when it strengthens the stem workflow clearly, such as:
+
+- stronger model choice with clear default presets and optional advanced control
+- preserving and presenting model-driven stem sets
+- per-stem volume adjustment
+- mute and solo controls
+- previewing the resulting balance
+- exporting the rendered mix
+
 Do not expand early into:
 
 - hosted accounts, billing, or remote job orchestration
 - browser-based audio workstation behavior
 - infrastructure-heavy architecture before the local product earns it
 - broad creative tooling that weakens the stem separation core
-
-Mixing support is in scope when it stays narrowly focused on final output shaping, such as:
-
-- per-stem volume adjustment
-- mute and solo controls
-- previewing the resulting balance
-- exporting the rendered mix
-
-Do not treat this as a reason to add:
-
 - timeline editing
 - arrangement tools
 - plugin-style effects chains

@@ -13,7 +13,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.core.config import RuntimeSettings
-from backend.core.constants import next_quality_tier
+from backend.core.constants import CUSTOM_PRESET_KEY
 from backend.db.models import (
     IN_PROGRESS_RUN_STATUSES,
     TERMINAL_RUN_STATUSES,
@@ -519,19 +519,33 @@ def retry_run(session: Session, run_id: str) -> Run:
     return new_run
 
 
-def step_up_quality(session: Session, run_id: str) -> Run:
+def rerun_with_preset(
+    session: Session,
+    run_id: str,
+    *,
+    profile_key: str,
+    model_filename: str | None = None,
+) -> Run:
     source_run = session.get(Run, run_id, options=[selectinload(Run.track)])
     if source_run is None:
         raise LookupError(f"Run '{run_id}' does not exist.")
     if source_run.status != RunStatus.completed.value:
-        raise ValueError("Only completed runs can be stepped up to higher quality.")
+        raise ValueError("Only completed runs can be re-run with another preset.")
 
     source_processing = resolve_run_processing(source_run)
-    higher = next_quality_tier(source_processing["profile_key"])
-    if higher is None:
-        raise ValueError("This run is already at the highest quality tier.")
+    if profile_key == CUSTOM_PRESET_KEY and model_filename is None:
+        raise ValueError("A model_filename is required when profile_key is 'custom'.")
+    if (
+        profile_key == source_processing["profile_key"]
+        and (profile_key != CUSTOM_PRESET_KEY or model_filename == source_processing["model_filename"])
+    ):
+        raise ValueError("Pick a different preset or model to re-run with.")
 
-    processing = build_processing_config(higher.key, source_processing["export_mp3_bitrate"])
+    processing = build_processing_config(
+        profile_key,
+        source_processing["export_mp3_bitrate"],
+        model_filename,
+    )
     new_run = create_run(source_run.track, processing)
     session.commit()
     session.refresh(new_run)

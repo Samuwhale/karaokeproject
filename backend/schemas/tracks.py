@@ -10,14 +10,17 @@ MIX_GAIN_DB_MAX = 12.0
 class ProcessingProfileResponse(BaseModel):
     key: str
     label: str
+    strength: str
     description: str
     model_filename: str
     quality_tier: int
+    speed_tier: int
 
 
 class RunProcessingConfigRequest(BaseModel):
     profile_key: str
     export_mp3_bitrate: str | None = None
+    model_filename: str | None = None
 
 
 class RunProcessingConfigResponse(BaseModel):
@@ -126,6 +129,11 @@ class TrackDetailResponse(BaseModel):
 
 class CreateRunRequest(BaseModel):
     processing: RunProcessingConfigRequest
+
+
+class RerunWithPresetRequest(BaseModel):
+    profile_key: str
+    model_filename: str | None = None
 
 
 class CreateRunResponse(BaseModel):

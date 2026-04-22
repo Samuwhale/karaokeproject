@@ -1,10 +1,14 @@
 export type ProcessingProfile = {
   key: string
   label: string
+  strength: string
   description: string
   model_filename: string
   quality_tier: number
+  speed_tier: number
 }
+
+export const CUSTOM_PROFILE_KEY = 'custom'
 
 export type RunProcessingConfig = {
   profile_key: string
@@ -16,6 +20,12 @@ export type RunProcessingConfig = {
 export type RunProcessingConfigInput = {
   profile_key: string
   export_mp3_bitrate: string
+  model_filename?: string | null
+}
+
+export type RerunPresetOverride = {
+  profile_key: string
+  model_filename?: string | null
 }
 
 export type Settings = {

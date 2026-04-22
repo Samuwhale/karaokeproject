@@ -50,7 +50,7 @@ function App() {
     creatingRun,
     cancellingRunId,
     retryingRunId,
-    steppingUpRunId,
+    rerunningRunId,
     savingSettings,
     cleaningTempStorage,
     cleaningExportBundles,
@@ -73,7 +73,7 @@ function App() {
     handleCreateRun,
     handleCancelRun,
     handleRetryRun,
-    handleStepUpRun,
+    handleRerunWithPreset,
     handleDismissRun,
     handleRevealFolder,
     handleSaveSettings,
@@ -299,7 +299,7 @@ function App() {
               creatingRun={creatingRun}
               cancellingRunId={cancellingRunId}
               retryingRunId={retryingRunId}
-              steppingUpRunId={steppingUpRunId}
+              rerunningRunId={rerunningRunId}
               settingKeeper={settingKeeper}
               savingNoteRunId={savingNoteRunId}
               savingMixRunId={savingMixRunId}
@@ -312,7 +312,7 @@ function App() {
               onCreateRun={handleCreateRun}
               onCancelRun={handleCancelRun}
               onRetryRun={handleRetryRun}
-              onStepUpRun={handleStepUpRun}
+              onRerunWithPreset={handleRerunWithPreset}
               onSetKeeper={handleSetKeeper}
               onPurgeNonKeepers={handlePurgeNonKeepers}
               onSetRunNote={handleSetRunNote}

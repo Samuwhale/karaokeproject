@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import type {
   ProcessingProfile,
+  RerunPresetOverride,
   RevealFolderInput,
   RunArtifact,
   RunDetail,
@@ -9,7 +10,7 @@ import type {
   RunProcessingConfigInput,
   TrackDetail,
 } from '../types'
-import { isMixableArtifactKind } from '../types'
+import { CUSTOM_PROFILE_KEY, isMixableArtifactKind } from '../types'
 import { CompareView } from './CompareView'
 import { ConfirmInline } from './feedback/ConfirmInline'
 import { ProgressBar } from './feedback/ProgressBar'
@@ -37,7 +38,7 @@ type TrackDetailPanelProps = {
   creatingRun: boolean
   cancellingRunId: string | null
   retryingRunId: string | null
-  steppingUpRunId: string | null
+  rerunningRunId: string | null
   settingKeeper: boolean
   savingNoteRunId: string | null
   savingMixRunId: string | null
@@ -46,7 +47,7 @@ type TrackDetailPanelProps = {
   onCreateRun: (trackId: string, processing: RunProcessingConfigInput) => Promise<void>
   onCancelRun: (runId: string) => Promise<void>
   onRetryRun: (runId: string) => Promise<void>
-  onStepUpRun: (runId: string) => Promise<void>
+  onRerunWithPreset: (runId: string, override: RerunPresetOverride) => Promise<void>
   onSetKeeper: (trackId: string, runId: string | null) => Promise<void>
   onPurgeNonKeepers: (trackId: string) => void
   onSetRunNote: (runId: string, note: string) => Promise<void>
@@ -123,14 +124,25 @@ function resolveProfile(profiles: ProcessingProfile[], profileKey: string) {
   return profiles.find((profile) => profile.key === profileKey) ?? null
 }
 
-function resolveNextTier(profiles: ProcessingProfile[], profileKey: string) {
+function resolveAlternativePresets(profiles: ProcessingProfile[], profileKey: string) {
   const current = resolveProfile(profiles, profileKey)
-  if (!current) return null
-  const higher = profiles.filter((profile) => profile.quality_tier > current.quality_tier)
-  if (!higher.length) return null
-  return higher.reduce((best, candidate) =>
-    candidate.quality_tier < best.quality_tier ? candidate : best,
-  )
+  const threshold = current?.quality_tier ?? 0
+  return profiles
+    .filter((profile) => profile.key !== profileKey && profile.quality_tier >= threshold)
+    .sort((left, right) => {
+      if (left.quality_tier !== right.quality_tier) return left.quality_tier - right.quality_tier
+      return left.label.localeCompare(right.label)
+    })
+}
+
+const MODEL_FILENAME_SUFFIXES = ['.ckpt', '.onnx', '.pth']
+
+function isValidCustomModelFilename(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  if (trimmed.includes('/') || trimmed.includes('\\') || trimmed.startsWith('.')) return false
+  const lower = trimmed.toLowerCase()
+  return MODEL_FILENAME_SUFFIXES.some((suffix) => lower.endsWith(suffix))
 }
 
 function totalRunBytes(run: RunDetail) {
@@ -155,7 +167,7 @@ export function TrackDetailPanel({
   creatingRun,
   cancellingRunId,
   retryingRunId,
-  steppingUpRunId,
+  rerunningRunId,
   settingKeeper,
   savingNoteRunId,
   savingMixRunId,
@@ -164,7 +176,7 @@ export function TrackDetailPanel({
   onCreateRun,
   onCancelRun,
   onRetryRun,
-  onStepUpRun,
+  onRerunWithPreset,
   onSetKeeper,
   onPurgeNonKeepers,
   onSetRunNote,
@@ -180,10 +192,12 @@ export function TrackDetailPanel({
   const [titleDraft, setTitleDraft] = useState('')
   const [artistDraft, setArtistDraft] = useState('')
   const [renderFormOpen, setRenderFormOpen] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   useEffect(() => {
     setEditing(false)
     setRenderFormOpen(false)
+    setAdvancedOpen(false)
   }, [track?.id])
 
   const processingKey = `${defaultProfileKey}|${defaultMp3Bitrate}`
@@ -192,6 +206,7 @@ export function TrackDetailPanel({
     values: {
       profile_key: defaultProfileKey,
       export_mp3_bitrate: defaultMp3Bitrate,
+      model_filename: '',
     },
   })
   const nextProcessing =
@@ -200,6 +215,7 @@ export function TrackDetailPanel({
       : {
           profile_key: defaultProfileKey,
           export_mp3_bitrate: defaultMp3Bitrate,
+          model_filename: '',
         }
 
   if (!track) {
@@ -222,8 +238,11 @@ export function TrackDetailPanel({
   const packageArtifact = getPackageArtifact(selectedRun)
   const trackId = track.id
   const nextProfile = resolveProfile(profiles, nextProcessing.profile_key)
+  const isCustomProfile = nextProcessing.profile_key === CUSTOM_PROFILE_KEY
+  const customModelFilename = (nextProcessing.model_filename ?? '').trim()
+  const customModelValid = !isCustomProfile || isValidCustomModelFilename(customModelFilename)
   const bitrateValid = BITRATE_PATTERN.test(nextProcessing.export_mp3_bitrate)
-  const canSubmit = bitrateValid && !creatingRun
+  const canSubmit = bitrateValid && customModelValid && !creatingRun
   const isActiveRun = selectedRun ? ACTIVE_RUN_STATUSES.has(selectedRun.status) : false
   const isFailedRun = selectedRun ? RETRYABLE_RUN_STATUSES.has(selectedRun.status) : false
 
@@ -233,10 +252,10 @@ export function TrackDetailPanel({
   const keeperHasMixableStems = keeperRun
     ? keeperRun.artifacts.some((artifact) => isMixableArtifactKind(artifact.kind))
     : false
-  const nextTier =
+  const alternativePresets =
     selectedRun && selectedRun.status === 'completed' && !track.keeper_run_id
-      ? resolveNextTier(profiles, selectedRun.processing.profile_key)
-      : null
+      ? resolveAlternativePresets(profiles, selectedRun.processing.profile_key)
+      : []
   const filteredRuns = track.runs.filter((run) => {
     if (runFilter === 'completed') return run.status === 'completed'
     if (runFilter === 'failed') return run.status === 'failed'
@@ -261,8 +280,21 @@ export function TrackDetailPanel({
   const showFinalCta = completedRunCount > 0 && !keeperRunId
 
   async function handleCreateRun() {
-    await onCreateRun(trackId, nextProcessing)
+    const payload: RunProcessingConfigInput = {
+      profile_key: nextProcessing.profile_key,
+      export_mp3_bitrate: nextProcessing.export_mp3_bitrate,
+    }
+    if (nextProcessing.profile_key === CUSTOM_PROFILE_KEY) {
+      payload.model_filename = (nextProcessing.model_filename ?? '').trim()
+    }
+    await onCreateRun(trackId, payload)
     setRenderFormOpen(false)
+    setAdvancedOpen(false)
+  }
+
+  function openRenderFormAdvanced() {
+    setRenderFormOpen(true)
+    setAdvancedOpen(true)
   }
 
   async function handleToggleKeeper(runId: string) {
@@ -372,18 +404,21 @@ export function TrackDetailPanel({
             <span>Profile</span>
             <select
               value={nextProcessing.profile_key}
-              onChange={(event) =>
+              onChange={(event) => {
+                const nextKey = event.target.value
                 setNextProcessingState({
                   sourceKey: processingKey,
-                  values: { ...nextProcessing, profile_key: event.target.value },
+                  values: { ...nextProcessing, profile_key: nextKey },
                 })
-              }
+                if (nextKey === CUSTOM_PROFILE_KEY) setAdvancedOpen(true)
+              }}
             >
               {profiles.map((profile) => (
                 <option key={profile.key} value={profile.key}>
-                  {profile.label}
+                  {profile.label} — {profile.strength}
                 </option>
               ))}
+              <option value={CUSTOM_PROFILE_KEY}>Custom model — advanced</option>
             </select>
           </label>
           <label className="field">
@@ -402,6 +437,52 @@ export function TrackDetailPanel({
             />
             {!bitrateValid ? <span className="field-error">{BITRATE_HINT}</span> : null}
           </label>
+          {nextProfile ? (
+            <p className="profile-meta">
+              <strong>{nextProfile.strength}.</strong> {nextProfile.description}
+            </p>
+          ) : isCustomProfile ? (
+            <p className="profile-meta">
+              <strong>Custom model.</strong> Use any audio-separator model filename. You are on your own for quality.
+            </p>
+          ) : null}
+          <div className="render-form-advanced">
+            {!advancedOpen ? (
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => setAdvancedOpen(true)}
+              >
+                Advanced…
+              </button>
+            ) : (
+              <label className="field">
+                <span>Model filename</span>
+                <input
+                  type="text"
+                  placeholder="e.g. model_bs_roformer_ep_368_sdr_12.9628.ckpt"
+                  value={nextProcessing.model_filename ?? ''}
+                  aria-invalid={isCustomProfile && !customModelValid}
+                  disabled={!isCustomProfile}
+                  onChange={(event) =>
+                    setNextProcessingState({
+                      sourceKey: processingKey,
+                      values: { ...nextProcessing, model_filename: event.target.value },
+                    })
+                  }
+                />
+                {isCustomProfile && !customModelValid ? (
+                  <span className="field-error">Enter a bare filename ending in .ckpt, .onnx, or .pth.</span>
+                ) : (
+                  <span className="field-hint">
+                    {isCustomProfile
+                      ? 'Used with the Custom model profile. Must match a filename audio-separator can resolve.'
+                      : 'Only used when Profile is set to Custom model.'}
+                  </span>
+                )}
+              </label>
+            )}
+          </div>
           <div className="render-form-actions">
             <button
               type="button"
@@ -415,13 +496,15 @@ export function TrackDetailPanel({
               <button
                 type="button"
                 className="button-secondary"
-                onClick={() => setRenderFormOpen(false)}
+                onClick={() => {
+                  setRenderFormOpen(false)
+                  setAdvancedOpen(false)
+                }}
               >
                 Cancel
               </button>
             ) : null}
           </div>
-          {nextProfile ? <p className="profile-meta">{nextProfile.description}</p> : null}
         </div>
       ) : null}
 
@@ -653,24 +736,38 @@ export function TrackDetailPanel({
             </div>
           ) : null}
 
-          {nextTier ? (
-            <div className="step-up-row">
-              <div className="step-up-row-meta">
-                <strong>Want higher quality?</strong>
-                <span>Re-run on {nextTier.label}. Slower, typically cleaner.</span>
+          {alternativePresets.length ? (
+            <div className="rerun-card">
+              <div className="rerun-card-meta">
+                <strong>Not quite right? Try another preset.</strong>
+                <span>Queues a new run on the same source. Slower presets usually take longer.</span>
               </div>
-              <button
-                type="button"
-                className="button-secondary"
-                disabled={steppingUpRunId === selectedRun.id}
-                onClick={() => void onStepUpRun(selectedRun.id)}
-              >
-                {steppingUpRunId === selectedRun.id ? (
-                  <><Spinner /> Queueing</>
-                ) : (
-                  `Try ${nextTier.label}`
-                )}
-              </button>
+              <div className="rerun-card-options">
+                {alternativePresets.map((preset) => (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    className="button-secondary"
+                    disabled={rerunningRunId === selectedRun.id}
+                    onClick={() =>
+                      void onRerunWithPreset(selectedRun.id, { profile_key: preset.key })
+                    }
+                  >
+                    {rerunningRunId === selectedRun.id ? (
+                      <><Spinner /> Queueing</>
+                    ) : (
+                      `Try ${preset.label} — ${preset.strength.toLowerCase()}`
+                    )}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={openRenderFormAdvanced}
+                >
+                  Advanced…
+                </button>
+              </div>
             </div>
           ) : null}
 

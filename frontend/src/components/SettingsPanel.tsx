@@ -156,10 +156,19 @@ export function SettingsPanel({
             >
               {settings.profiles.map((preset) => (
                 <option key={preset.key} value={preset.key}>
-                  {preset.label}
+                  {preset.label} — {preset.strength}
                 </option>
               ))}
             </select>
+            {(() => {
+              const current = settings.profiles.find((preset) => preset.key === draft.default_preset)
+              if (!current) return null
+              return (
+                <span className="field-hint">
+                  <strong>{current.strength}.</strong> {current.description} Used for new renders unless you change it per track.
+                </span>
+              )
+            })()}
           </label>
 
           <label className="field">

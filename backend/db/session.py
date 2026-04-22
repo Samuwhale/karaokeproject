@@ -35,13 +35,15 @@ _COLUMN_ADDITIONS: tuple[tuple[str, str, str], ...] = (
 _PRESET_KEY_RENAMES: dict[str, str] = {
     "fast-preview": "preview",
     "balanced": "standard",
-    "clean-instrumental": "maximum",
+    "clean-instrumental": "high",
+    "maximum": "high",
 }
 
 _PRESET_LABEL_RENAMES: dict[str, str] = {
     "Fast Preview": "Preview",
     "Balanced": "Standard",
-    "Clean Instrumental": "Maximum",
+    "Clean Instrumental": "High",
+    "Maximum": "High",
 }
 
 

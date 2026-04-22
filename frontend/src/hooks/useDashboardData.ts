@@ -25,13 +25,13 @@ import {
   getTracks,
   listImportDrafts,
   purgeNonKeeperRuns,
+  rerunWithPreset,
   resolveLocalImport,
   resolveYouTubeImport,
   retryRun,
   revealFolder,
   setKeeperRun,
   setRunNote,
-  stepUpRun,
   updateImportDraft,
   updateRunMix,
   updateSettings,
@@ -46,6 +46,7 @@ import type {
   ImportDraft,
   NonKeeperCleanupResponse,
   QueueRunEntry,
+  RerunPresetOverride,
   RevealFolderInput,
   RunMixStemEntry,
   RunProcessingConfigInput,
@@ -146,7 +147,7 @@ export function useDashboardData() {
   const [creatingRun, setCreatingRun] = useState(false)
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null)
   const [retryingRunId, setRetryingRunId] = useState<string | null>(null)
-  const [steppingUpRunId, setSteppingUpRunId] = useState<string | null>(null)
+  const [rerunningRunId, setRerunningRunId] = useState<string | null>(null)
   const [savingSettings, setSavingSettings] = useState(false)
   const [cleaningTempStorage, setCleaningTempStorage] = useState(false)
   const [cleaningExportBundles, setCleaningExportBundles] = useState(false)
@@ -560,18 +561,18 @@ export function useDashboardData() {
     }
   }
 
-  async function handleStepUpRun(runId: string) {
-    setSteppingUpRunId(runId)
+  async function handleRerunWithPreset(runId: string, override: RerunPresetOverride) {
+    setRerunningRunId(runId)
     try {
-      const result = await stepUpRun(runId)
-      pushToast('success', 'Queued a higher-quality render.')
+      const result = await rerunWithPreset(runId, override)
+      pushToast('success', 'Queued another render.')
       await refreshDashboard()
       setSelectedRunId(result.run.id)
     } catch (error) {
       pushToast('error', getErrorMessage(error))
       throw error
     } finally {
-      setSteppingUpRunId(null)
+      setRerunningRunId(null)
     }
   }
 
@@ -1041,7 +1042,7 @@ export function useDashboardData() {
     creatingRun,
     cancellingRunId,
     retryingRunId,
-    steppingUpRunId,
+    rerunningRunId,
     savingSettings,
     cleaningTempStorage,
     cleaningExportBundles,
@@ -1065,7 +1066,7 @@ export function useDashboardData() {
     handleCreateRun,
     handleCancelRun,
     handleRetryRun,
-    handleStepUpRun,
+    handleRerunWithPreset,
     handleDismissRun,
     handleRevealFolder,
     handleSaveSettings,

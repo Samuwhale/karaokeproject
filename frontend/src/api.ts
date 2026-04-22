@@ -22,6 +22,7 @@ import type {
   RevealFolderInput,
   RevealFolderResponse,
   QueueRunEntry,
+  RerunPresetOverride,
   ResolveLocalImportResponse,
   ResolveYouTubeImportResponse,
   RunDetail,
@@ -166,8 +167,8 @@ export function retryRun(runId: string) {
   return fetchJson<{ run: RunSummary }>(`/api/runs/${runId}/retry`, { method: 'POST' })
 }
 
-export function stepUpRun(runId: string) {
-  return fetchJson<{ run: RunSummary }>(`/api/runs/${runId}/step-up`, { method: 'POST' })
+export function rerunWithPreset(runId: string, override: RerunPresetOverride) {
+  return postJson<{ run: RunSummary }>(`/api/runs/${runId}/rerun`, override)
 }
 
 export function dismissRun(runId: string) {
