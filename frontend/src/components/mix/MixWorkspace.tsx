@@ -1,42 +1,28 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-import { CompareView } from '../CompareView'
 import { ConfirmInline } from '../feedback/ConfirmInline'
 import { ProgressBar } from '../feedback/ProgressBar'
 import { RunStepper } from '../feedback/RunStepper'
 import { Spinner } from '../feedback/Spinner'
+import { MixExportPopover } from './MixExportPopover'
 import { MixPanel } from './MixPanel'
 import { OutputIntentPicker } from './OutputIntent'
-import { ModelPicker } from '../ModelPicker'
-import { isValidModelFilename } from '../modelPickerShared'
-import { ExportBuilder, type ExportPreset } from '../export/ExportBuilder'
 import { RUN_STATUS_SHORT_LABELS, isActiveRunStatus } from '../runStatus'
 import { resolveSelectedRun } from '../../runSelection'
-import { CUSTOM_PROFILE_KEY } from '../../types'
 import { isStemKind } from '../../stems'
 import type {
-  CachedModel,
   ProcessingProfile,
   RevealFolderInput,
   RunDetail,
   RunMixStemEntry,
   RunProcessingConfigInput,
   TrackDetail,
-  TrackSummary,
 } from '../../types'
-
-const RETRYABLE_RUN_STATUSES = new Set(['failed', 'cancelled'])
-
-type DraftState<T> = {
-  sourceKey: string
-  values: T
-}
 
 type MixWorkspaceProps = {
   track: TrackDetail | null
   selectedRunId: string | null
   profiles: ProcessingProfile[]
-  cachedModels: CachedModel[]
   defaultProfileKey: string
   defaultBitrate: string
   creatingRun: boolean
@@ -60,6 +46,14 @@ type MixWorkspaceProps = {
   onError: (message: string) => void
 }
 
+type Popover = null | 'versions' | 'export' | 'menu'
+
+const RETRYABLE_STATUSES = new Set(['failed', 'cancelled'])
+
+function formatStatus(status: string) {
+  return RUN_STATUS_SHORT_LABELS[status] ?? status
+}
+
 function formatTimestampShort(value: string) {
   return new Date(value).toLocaleString(undefined, {
     month: 'short',
@@ -69,134 +63,325 @@ function formatTimestampShort(value: string) {
   })
 }
 
-function formatDuration(seconds: number | null) {
-  if (seconds === null) return '—'
-  const total = Math.round(seconds)
-  const minutes = Math.floor(total / 60)
-  const remaining = (total % 60).toString().padStart(2, '0')
-  return `${minutes}:${remaining}`
-}
-
-function statusLabel(status: string) {
-  return RUN_STATUS_SHORT_LABELS[status] ?? status
-}
-
-function selectedRunSummary(run: RunDetail | null) {
-  if (!run) return 'No version selected'
-  return `${run.processing.profile_label} · ${statusLabel(run.status)}`
-}
-
-function stemCount(run: RunDetail) {
-  return run.artifacts.filter((artifact) => isStemKind(artifact.kind)).length
-}
-
 function isMixableRun(run: RunDetail) {
   return run.status === 'completed' && run.artifacts.some((artifact) => isStemKind(artifact.kind))
 }
 
-function buildTrackSummary(track: TrackDetail, run: RunDetail): TrackSummary {
+function versionLabel(run: RunDetail | null) {
+  if (!run) return { label: 'No version', detail: 'Queue a split' }
   return {
-    id: track.id,
-    title: track.title,
-    artist: track.artist,
-    source_type: track.source_type,
-    source_url: track.source_url,
-    thumbnail_url: track.thumbnail_url,
-    source_filename: track.source_filename,
-    duration_seconds: track.duration_seconds,
-    created_at: track.created_at,
-    updated_at: track.updated_at,
-    latest_run: track.runs[0] ?? null,
-    run_count: track.runs.length,
-    keeper_run_id: track.keeper_run_id,
-    has_custom_mix: !run.mix.is_default,
+    label: run.processing.profile_label,
+    detail: formatStatus(run.status),
   }
 }
 
-function MixExportPanel({
-  track,
-  run,
-  defaultBitrate,
-  onReveal,
-  onError,
-}: {
-  track: TrackDetail
-  run: RunDetail | null
-  defaultBitrate: string
-  onReveal: (payload: RevealFolderInput) => void | Promise<void>
-  onError: (message: string) => void
-}) {
-  const [preset, setPreset] = useState<ExportPreset>('final-mix')
-
-  useEffect(() => {
-    setPreset('final-mix')
-  }, [run?.id, track.id])
-
-  if (!run || run.status !== 'completed') {
-    return <p className="kp-inspector-copy">Export unlocks after the selected version finishes.</p>
-  }
-
-  const summary =
-    preset === 'final-mix'
-      ? 'Current mix uses the saved stem balance from this version.'
-      : preset === 'stems-for-editing'
-        ? 'All stems exports the raw separated files. Mix changes do not alter those stems.'
-        : 'Mix + stems includes both the saved mix and the raw separated stems from this version.'
-
+function Chevron() {
   return (
-    <div className="kp-mix-export-panel">
-      <div className="kp-export-choice-list" role="group" aria-label="Single-song export presets">
-        <button
-          type="button"
-          className={preset === 'final-mix' ? 'kp-export-choice kp-export-choice-active' : 'kp-export-choice'}
-          onClick={() => setPreset('final-mix')}
-        >
-          <strong>Current mix</strong>
-          <span>Saved balance only</span>
-        </button>
-        <button
-          type="button"
-          className={
-            preset === 'stems-for-editing' ? 'kp-export-choice kp-export-choice-active' : 'kp-export-choice'
-          }
-          onClick={() => setPreset('stems-for-editing')}
-        >
-          <strong>All stems</strong>
-          <span>Raw separated files</span>
-        </button>
-        <button
-          type="button"
-          className={preset === 'full-package' ? 'kp-export-choice kp-export-choice-active' : 'kp-export-choice'}
-          onClick={() => setPreset('full-package')}
-        >
-          <strong>Mix + stems</strong>
-          <span>Saved mix plus raw stems</span>
-        </button>
-      </div>
-
-      <ExportBuilder
-        key={`${track.id}:${run.id}:${preset}`}
-        tracks={[buildTrackSummary(track, run)]}
-        selectedTrackIds={[track.id]}
-        defaultBitrate={defaultBitrate}
-        runIds={{ [track.id]: run.id }}
-        initialPreset={preset}
-        lockPreset
-        hidePackaging
-        forceMode="single-bundle"
-        mixSummary={summary}
-        onError={onError}
-        onReveal={onReveal}
-      />
-    </div>
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+      <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 
-export function MixWorkspace({
+function Ellipsis() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden>
+      <circle cx="4" cy="9" r="1.4" />
+      <circle cx="9" cy="9" r="1.4" />
+      <circle cx="14" cy="9" r="1.4" />
+    </svg>
+  )
+}
+
+function BackArrow() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path d="M8.5 3L4.5 7L8.5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+type VersionsPopoverProps = {
+  track: TrackDetail
+  selectedRun: RunDetail | null
+  profiles: ProcessingProfile[]
+  defaultProfileKey: string
+  creatingRun: boolean
+  cancellingRunId: string | null
+  retryingRunId: string | null
+  deletingRunId: string | null
+  settingKeeper: boolean
+  onClose: () => void
+  onSelectRun: (runId: string) => void
+  onCreateRun: (processing: RunProcessingConfigInput) => Promise<unknown>
+  onCancelRun: (runId: string) => Promise<void>
+  onRetryRun: (runId: string) => Promise<unknown>
+  onDeleteRun: (runId: string) => Promise<void>
+  onSetKeeper: (runId: string | null) => Promise<void>
+}
+
+function VersionsPopover({
+  track,
+  selectedRun,
+  profiles,
+  defaultProfileKey,
+  creatingRun,
+  cancellingRunId,
+  retryingRunId,
+  deletingRunId,
+  settingKeeper,
+  onClose,
+  onSelectRun,
+  onCreateRun,
+  onCancelRun,
+  onRetryRun,
+  onDeleteRun,
+  onSetKeeper,
+}: VersionsPopoverProps) {
+  const activeProfile = profiles.some((profile) => profile.key === defaultProfileKey)
+    ? defaultProfileKey
+    : profiles[0]?.key ?? defaultProfileKey
+  const [profileKey, setProfileKey] = useState(activeProfile)
+  const keeperId = track.keeper_run_id
+  const selectedId = selectedRun?.id ?? null
+  const selectedIsKeeper = !!selectedRun && keeperId === selectedRun.id
+  const canDeleteSelected =
+    !!selectedRun && selectedRun.id !== keeperId && !isActiveRunStatus(selectedRun.status)
+
+  async function queueSplit() {
+    const result = await onCreateRun({ profile_key: profileKey })
+    if (result && typeof result === 'object' && 'run' in result) {
+      const runId = (result as { run: { id: string } }).run.id
+      onSelectRun(runId)
+    }
+    onClose()
+  }
+
+  return (
+    <>
+      <div className="popover-backdrop" onClick={onClose} aria-hidden />
+      <div className="popover popover-center popover-wide" role="dialog" aria-label="Versions">
+        <div className="popover-title">Versions</div>
+        {track.runs.length === 0 ? (
+          <p className="export-pop-intro">No splits yet. Queue the first one below.</p>
+        ) : (
+          <div className="popover-list" role="list">
+            {track.runs.map((run) => {
+              const isActive = run.id === selectedId
+              const isKeeper = run.id === keeperId
+              const detail = `${formatStatus(run.status)} · ${formatTimestampShort(run.updated_at)}${isKeeper ? ' · Final' : ''}`
+              const state = isActiveRunStatus(run.status)
+                ? `${Math.round(run.progress)}%`
+                : formatStatus(run.status)
+              return (
+                <button
+                  key={run.id}
+                  type="button"
+                  className={`popover-row ${isActive ? 'is-active' : ''}`}
+                  onClick={() => {
+                    onSelectRun(run.id)
+                    onClose()
+                  }}
+                >
+                  <span className="popover-row-copy">
+                    <strong>{run.processing.profile_label}</strong>
+                    <span>{detail}</span>
+                  </span>
+                  <span className="popover-row-state">{state}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {selectedRun && isActiveRunStatus(selectedRun.status) ? (
+          <ConfirmInline
+            label="Cancel split"
+            pendingLabel="Cancelling…"
+            confirmLabel="Cancel version"
+            cancelLabel="Keep running"
+            prompt="Cancel this version?"
+            pending={cancellingRunId === selectedRun.id}
+            onConfirm={() => onCancelRun(selectedRun.id)}
+          />
+        ) : null}
+
+        {selectedRun && RETRYABLE_STATUSES.has(selectedRun.status) ? (
+          <div className="popover-foot">
+            <button
+              type="button"
+              className="button-primary"
+              onClick={() => void onRetryRun(selectedRun.id)}
+            >
+              {retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry split'}
+            </button>
+          </div>
+        ) : null}
+
+        {selectedRun && selectedRun.status === 'completed' ? (
+          <div className="popover-foot">
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={settingKeeper}
+              onClick={() => void onSetKeeper(selectedIsKeeper ? null : selectedRun.id)}
+            >
+              {selectedIsKeeper ? 'Clear final' : 'Mark as final'}
+            </button>
+            {canDeleteSelected ? (
+              <ConfirmInline
+                label="Delete version"
+                pendingLabel="Deleting…"
+                confirmLabel="Delete"
+                cancelLabel="Keep it"
+                prompt="Delete this version?"
+                pending={deletingRunId === selectedRun.id}
+                onConfirm={() => onDeleteRun(selectedRun.id)}
+              />
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="popover-foot">
+          <select
+            className="library-sort"
+            value={profileKey}
+            onChange={(event) => setProfileKey(event.target.value)}
+            aria-label="Split profile"
+          >
+            {profiles.map((profile) => (
+              <option key={profile.key} value={profile.key}>
+                {profile.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="button-primary"
+            disabled={creatingRun}
+            onClick={() => void queueSplit()}
+          >
+            {creatingRun ? (
+              <>
+                <Spinner /> Queueing…
+              </>
+            ) : (
+              'Queue split'
+            )}
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+type OverflowMenuProps = {
+  track: TrackDetail
+  updatingTrack: boolean
+  onClose: () => void
+  onReveal: () => void | Promise<void>
+  onUpdateTrack: (payload: { title?: string; artist?: string | null }) => Promise<void>
+  onDeleteTrack: () => void
+}
+
+function OverflowMenu({ track, updatingTrack, onClose, onReveal, onUpdateTrack, onDeleteTrack }: OverflowMenuProps) {
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(track.title)
+  const [artist, setArtist] = useState(track.artist ?? '')
+
+  async function saveEdits() {
+    const nextTitle = title.trim()
+    const nextArtist = artist.trim()
+    if (!nextTitle) return
+    await onUpdateTrack({ title: nextTitle, artist: nextArtist ? nextArtist : null })
+    setEditing(false)
+    onClose()
+  }
+
+  return (
+    <>
+      <div className="popover-backdrop" onClick={onClose} aria-hidden />
+      <div className="popover popover-right" role="dialog" aria-label="Track options">
+        {editing ? (
+          <div className="rename-form">
+            <label>
+              Title
+              <input type="text" value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
+            </label>
+            <label>
+              Artist
+              <input
+                type="text"
+                value={artist}
+                placeholder="Optional"
+                onChange={(event) => setArtist(event.target.value)}
+              />
+            </label>
+            <div className="rename-form-actions">
+              <button type="button" className="button-link" onClick={() => setEditing(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button-primary"
+                disabled={updatingTrack || !title.trim()}
+                onClick={() => void saveEdits()}
+              >
+                {updatingTrack ? <Spinner /> : 'Save'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="menu">
+            <button type="button" className="menu-item" onClick={() => setEditing(true)}>
+              Rename…
+            </button>
+            <button
+              type="button"
+              className="menu-item"
+              onClick={() => {
+                void onReveal()
+                onClose()
+              }}
+            >
+              Reveal source folder
+            </button>
+            <ConfirmInline
+              label="Delete song…"
+              pendingLabel="Deleting…"
+              confirmLabel={`Delete "${track.title}"`}
+              cancelLabel="Keep"
+              prompt={`Delete "${track.title}" and all its versions?`}
+              onConfirm={async () => {
+                onDeleteTrack()
+                onClose()
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+export function MixWorkspace(props: MixWorkspaceProps) {
+  if (!props.track) {
+    return (
+      <section className="mix">
+        <div className="mix-empty">
+          <strong>No song selected</strong>
+          <p>Choose a song from Library to open its mix workspace.</p>
+        </div>
+      </section>
+    )
+  }
+  return <MixWorkspaceContent {...props} track={props.track} />
+}
+
+function MixWorkspaceContent({
   track,
   selectedRunId,
   profiles,
-  cachedModels,
   defaultProfileKey,
   defaultBitrate,
   creatingRun,
@@ -218,429 +403,173 @@ export function MixWorkspace({
   onDeleteTrack,
   onReveal,
   onError,
-}: MixWorkspaceProps) {
-  const [compareRunId, setCompareRunId] = useState<string | null>(null)
-  const [editing, setEditing] = useState(false)
-  const [titleDraft, setTitleDraft] = useState('')
-  const [artistDraft, setArtistDraft] = useState('')
-  const [nextProcessingState, setNextProcessingState] = useState<DraftState<RunProcessingConfigInput>>({
-    sourceKey: defaultProfileKey,
-    values: {
-      profile_key: defaultProfileKey,
-      model_filename: '',
-    },
-  })
-
-  useEffect(() => {
-    if (!track) return
-    setCompareRunId(null)
-    setEditing(false)
-    setTitleDraft(track.title)
-    setArtistDraft(track.artist ?? '')
-    setNextProcessingState({
-      sourceKey: defaultProfileKey,
-      values: {
-        profile_key: defaultProfileKey,
-        model_filename: '',
-      },
-    })
-  }, [defaultProfileKey, track])
-
-  if (!track) {
-    return (
-      <section className="kp-mix-route kp-page">
-        <div className="kp-mix-empty">
-          <strong>No song selected</strong>
-          <p>Choose a song from Songs to open its mix workspace.</p>
-        </div>
-      </section>
-    )
-  }
-
-  const currentTrack = track
-  const selectedRun = resolveSelectedRun(currentTrack, selectedRunId)
-  const completedRuns = currentTrack.runs.filter((run) => run.status === 'completed')
-  const compareRun =
-    compareRunId && selectedRun && compareRunId !== selectedRun.id
-      ? currentTrack.runs.find((run) => run.id === compareRunId) ?? null
-      : null
+}: MixWorkspaceProps & { track: TrackDetail }) {
+  const [popover, setPopover] = useState<Popover>(null)
+  const selectedRun = resolveSelectedRun(track, selectedRunId)
   const mixable = selectedRun ? isMixableRun(selectedRun) : false
-  const keeperSelected = !!selectedRun && currentTrack.keeper_run_id === selectedRun.id
-  const splitQueueRuns = currentTrack.runs.filter((run) => run.status !== 'completed')
-  const nextProcessing =
-    nextProcessingState.sourceKey === defaultProfileKey
-      ? nextProcessingState.values
-      : { profile_key: defaultProfileKey, model_filename: '' }
-  const isCustomProfile = nextProcessing.profile_key === CUSTOM_PROFILE_KEY
-  const customModelValid = !isCustomProfile || isValidModelFilename(nextProcessing.model_filename ?? '')
-  const canDeleteSelectedRun =
-    !!selectedRun &&
-    selectedRun.id !== currentTrack.keeper_run_id &&
-    !isActiveRunStatus(selectedRun.status)
+  const version = versionLabel(selectedRun)
+  const canExport = !!selectedRun && selectedRun.status === 'completed'
 
-  async function handleCreate() {
-    const result = await onCreateRun(currentTrack.id, nextProcessing)
-    if (result && typeof result === 'object' && 'run' in result) {
-      onSelectRun((result as { run: { id: string } }).run.id)
+  const mixRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === 'Escape' && popover) setPopover(null)
     }
-  }
-
-  async function handleSaveEdits() {
-    await onUpdateTrack(currentTrack.id, {
-      title: titleDraft.trim(),
-      artist: artistDraft.trim() ? artistDraft.trim() : null,
-    })
-    setEditing(false)
-  }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [popover])
 
   return (
-    <section className="kp-mix-route kp-page kp-mix-route-live">
-      <div className="kp-mix-workspace">
-        <div className="kp-mix-canvas">
-          <header className="kp-mix-session-bar kp-mix-session-bar-minimal">
-            <button type="button" className="kp-back-link" onClick={onBackToSongs}>
-              Songs
-            </button>
-            <div className="kp-mix-session-copy">
-              <h1>{track.title}</h1>
-              <p>
-                {currentTrack.artist ?? 'Unknown artist'} · {formatDuration(currentTrack.duration_seconds)} ·{' '}
-                {selectedRun ? selectedRunSummary(selectedRun) : 'Choose or queue a version'}
-              </p>
-            </div>
-          </header>
-
-          {selectedRun ? (
-            mixable ? (
-              <MixPanel
-                key={`${track.id}:${selectedRun.id}`}
-                run={selectedRun}
-                saving={savingMixRunId === selectedRun.id}
-                onSave={(stems) => onSaveMix(track.id, selectedRun.id, stems)}
-              />
-            ) : (
-              <section className="kp-mix-blocked">
-                <strong>{selectedRunSummary(selectedRun)}</strong>
-                {isActiveRunStatus(selectedRun.status) ? (
-                  <>
-                    <p>The selected version is still processing. Mixing unlocks here as soon as the split finishes.</p>
-                    <RunStepper status={selectedRun.status} lastActiveStatus={selectedRun.last_active_status} />
-                    <ProgressBar value={selectedRun.progress} label={selectedRun.status_message} />
-                  </>
-                ) : RETRYABLE_RUN_STATUSES.has(selectedRun.status) ? (
-                  <>
-                    <p>{selectedRun.error_message || 'Retry this version or queue a cleaner split from the version panel.'}</p>
-                    <button
-                      type="button"
-                      className="button-primary"
-                      onClick={() => void onRetryRun(selectedRun.id)}
-                    >
-                      {retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry split'}
-                    </button>
-                  </>
-                ) : (
-                  <p>This version finished without mixable stems. Queue another split from the inspector.</p>
-                )}
-              </section>
-            )
-          ) : (
-            <section className="kp-mix-blocked">
-              <strong>No version selected</strong>
-              <p>Queue the first split from the inspector, then come back here when the version is ready.</p>
-            </section>
-          )}
+    <section className="mix" ref={mixRef}>
+      <header className="mix-top">
+        <div className="mix-top-left">
+          <button type="button" className="mix-back" onClick={onBackToSongs}>
+            <BackArrow />
+            Library
+          </button>
         </div>
-
-        <aside className="kp-mix-inspector">
-          <section className="kp-inspector-section">
-            <header className="kp-section-header">
-              <div>
-                <h2>Version</h2>
-                <p>Keep version choice, compare, reruns, and session completion in one place.</p>
-              </div>
-            </header>
-
-            {selectedRun ? (
-              <div className="kp-inspector-summary">
-                <strong>{selectedRun.processing.profile_label}</strong>
-                <span>{statusLabel(selectedRun.status)} · Updated {formatTimestampShort(selectedRun.updated_at)}</span>
-              </div>
-            ) : (
-              <p className="kp-inspector-copy">No version selected yet.</p>
-            )}
-
-            {selectedRun ? (
-              <div className="kp-version-list" role="list" aria-label="Song versions">
-                {track.runs.map((run) => {
-                  const selected = selectedRun.id === run.id
-                  const finalVersion = track.keeper_run_id === run.id
-                  return (
-                    <button
-                      key={run.id}
-                      type="button"
-                      role="listitem"
-                      className={selected ? 'kp-version-row kp-version-row-active' : 'kp-version-row'}
-                      onClick={() => onSelectRun(run.id)}
-                    >
-                      <span>
-                        <strong>{run.processing.profile_label}</strong>
-                        <small>
-                          {statusLabel(run.status)}
-                          {finalVersion ? ' · Final' : ''}
-                        </small>
-                      </span>
-                      <span>{stemCount(run)} stems</span>
-                    </button>
-                  )
-                })}
-              </div>
-            ) : null}
-
-            {selectedRun && isActiveRunStatus(selectedRun.status) ? (
-              <div className="kp-version-state">
-                <ProgressBar value={selectedRun.progress} label={selectedRun.status_message} />
-                <ConfirmInline
-                  label="Cancel split"
-                  pendingLabel="Cancelling…"
-                  confirmLabel="Cancel version"
-                  cancelLabel="Keep running"
-                  prompt="Cancel this version?"
-                  pending={cancellingRunId === selectedRun.id}
-                  onConfirm={() => onCancelRun(selectedRun.id)}
-                />
-              </div>
-            ) : null}
-
-            {selectedRun && RETRYABLE_RUN_STATUSES.has(selectedRun.status) ? (
-              <div className="kp-version-state">
-                <p className="kp-inline-error">{selectedRun.error_message || 'This split needs attention before it can be mixed.'}</p>
-                <button type="button" className="button-primary" onClick={() => void onRetryRun(selectedRun.id)}>
-                  {retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry split'}
-                </button>
-              </div>
-            ) : null}
-
-            {selectedRun && mixable ? (
-              <OutputIntentPicker
-                run={selectedRun}
+        <div className="mix-top-title">
+          <strong>{track.title}</strong>
+          <span>{track.artist ?? 'Unknown artist'}</span>
+        </div>
+        <div className="mix-top-right">
+          <span className="popover-anchor">
+            <button
+              type="button"
+              className={`mix-version-trigger ${popover === 'versions' ? 'is-open' : ''}`}
+              onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
+              aria-haspopup="dialog"
+              aria-expanded={popover === 'versions'}
+            >
+              <strong>{version.label}</strong>
+              <span>· {version.detail}</span>
+              <Chevron />
+            </button>
+            {popover === 'versions' ? (
+              <VersionsPopover
+                track={track}
+                selectedRun={selectedRun}
                 profiles={profiles}
-                saving={savingMixRunId === selectedRun.id}
-                onApplyTemplate={(stems) => onSaveMix(track.id, selectedRun.id, stems)}
-                onRerunWithProfile={(profileKey) => onCreateRun(track.id, { profile_key: profileKey })}
+                defaultProfileKey={defaultProfileKey}
+                creatingRun={creatingRun}
+                cancellingRunId={cancellingRunId}
+                retryingRunId={retryingRunId}
+                deletingRunId={deletingRunId}
+                settingKeeper={settingKeeper}
+                onClose={() => setPopover(null)}
+                onSelectRun={onSelectRun}
+                onCreateRun={(processing) => onCreateRun(track.id, processing)}
+                onCancelRun={onCancelRun}
+                onRetryRun={onRetryRun}
+                onDeleteRun={onDeleteRun}
+                onSetKeeper={(runId) => onSetKeeper(track.id, runId)}
               />
             ) : null}
-
-            {selectedRun && completedRuns.length > 1 ? (
-              <>
-                <label className="field">
-                  <span>Compare with</span>
-                  <select
-                    value={compareRunId ?? ''}
-                    onChange={(event) => setCompareRunId(event.target.value || null)}
-                  >
-                    <option value="">No compare target</option>
-                    {completedRuns
-                      .filter((run) => run.id !== selectedRun.id)
-                      .map((run) => (
-                        <option key={run.id} value={run.id}>
-                          {run.processing.profile_label} · {formatTimestampShort(run.updated_at)}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-
-                {compareRun ? (
-                  <details className="kp-disclosure">
-                    <summary>Compare versions</summary>
-                    <div className="kp-disclosure-body">
-                      <CompareView
-                        runA={selectedRun}
-                        runB={compareRun}
-                        metricsReady
-                        currentIsFinal={currentTrack.keeper_run_id === selectedRun.id}
-                        comparedIsFinal={currentTrack.keeper_run_id === compareRun.id}
-                        onUseCurrent={() => void onSetKeeper(currentTrack.id, selectedRun.id)}
-                        onUseCompared={() => void onSetKeeper(currentTrack.id, compareRun.id)}
-                      />
-                    </div>
-                  </details>
-                ) : null}
-              </>
+          </span>
+          <span className="popover-anchor">
+            <button
+              type="button"
+              className="button-primary"
+              onClick={() => setPopover(popover === 'export' ? null : 'export')}
+              disabled={!canExport}
+              aria-haspopup="dialog"
+              aria-expanded={popover === 'export'}
+              title={canExport ? undefined : 'Export unlocks after the selected version finishes.'}
+            >
+              Export
+            </button>
+            {popover === 'export' && selectedRun && canExport ? (
+              <MixExportPopover
+                track={track}
+                run={selectedRun}
+                defaultBitrate={defaultBitrate}
+                onClose={() => setPopover(null)}
+                onReveal={onReveal}
+                onError={onError}
+              />
             ) : null}
+          </span>
+          <span className="popover-anchor">
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setPopover(popover === 'menu' ? null : 'menu')}
+              aria-haspopup="menu"
+              aria-expanded={popover === 'menu'}
+              aria-label="Song options"
+            >
+              <Ellipsis />
+            </button>
+            {popover === 'menu' ? (
+              <OverflowMenu
+                track={track}
+                updatingTrack={updatingTrack}
+                onClose={() => setPopover(null)}
+                onReveal={() => onReveal({ kind: 'track-outputs', track_id: track.id })}
+                onUpdateTrack={(payload) => onUpdateTrack(track.id, payload)}
+                onDeleteTrack={() => onDeleteTrack(track.id)}
+              />
+            ) : null}
+          </span>
+        </div>
+      </header>
 
-            <details className="kp-disclosure" open>
-              <summary>Queue another split</summary>
-              <div className="kp-disclosure-body">
-                {splitQueueRuns.length > 0 ? (
-                  <div className="kp-inline-run-list">
-                    {splitQueueRuns.map((run) => (
-                      <article key={run.id} className="kp-inline-run-row">
-                        <span>
-                          <strong>{run.processing.profile_label}</strong>
-                          <small>{statusLabel(run.status)}</small>
-                        </span>
-                        <span>
-                          {isActiveRunStatus(run.status)
-                            ? `${Math.round(run.progress)}%`
-                            : formatTimestampShort(run.updated_at)}
-                        </span>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="kp-inspector-copy">No other versions are running right now.</p>
-                )}
+      {mixable && selectedRun ? (
+        <OutputIntentPicker
+          run={selectedRun}
+          saving={savingMixRunId === selectedRun.id}
+          onApplyTemplate={(stems) => onSaveMix(track.id, selectedRun.id, stems)}
+        />
+      ) : (
+        <div />
+      )}
 
-                <div className="kp-render-form">
-                  <ModelPicker
-                    profileKey={nextProcessing.profile_key}
-                    modelFilename={nextProcessing.model_filename ?? ''}
-                    profiles={profiles}
-                    cachedModels={cachedModels}
-                    labelId="mix-workspace-render-form"
-                    onProfileChange={(nextKey) =>
-                      setNextProcessingState({
-                        sourceKey: defaultProfileKey,
-                        values: { ...nextProcessing, profile_key: nextKey },
-                      })
-                    }
-                    onModelFilenameChange={(next) =>
-                      setNextProcessingState({
-                        sourceKey: defaultProfileKey,
-                        values: { ...nextProcessing, model_filename: next },
-                      })
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="button-primary"
-                    disabled={!customModelValid || creatingRun}
-                    onClick={() => void handleCreate()}
-                  >
-                    {creatingRun ? (
-                      <>
-                        <Spinner /> Queueing…
-                      </>
-                    ) : currentTrack.runs.length === 0 ? (
-                      'Start split'
-                    ) : (
-                      'Queue version'
-                    )}
-                  </button>
-                </div>
-              </div>
-            </details>
-
-            {selectedRun ? (
-              <div className="kp-version-actions">
+      {selectedRun && mixable ? (
+        <MixPanel
+          key={`${track.id}:${selectedRun.id}`}
+          run={selectedRun}
+          saving={savingMixRunId === selectedRun.id}
+          onSave={(stems) => onSaveMix(track.id, selectedRun.id, stems)}
+        />
+      ) : (
+        <div className="mix-blocked">
+          {selectedRun ? (
+            isActiveRunStatus(selectedRun.status) ? (
+              <>
+                <strong>Splitting {selectedRun.processing.profile_label}</strong>
+                <RunStepper status={selectedRun.status} lastActiveStatus={selectedRun.last_active_status} />
+                <ProgressBar value={selectedRun.progress} label={selectedRun.status_message} />
+                <p>Mixing unlocks as soon as the split finishes.</p>
+              </>
+            ) : RETRYABLE_STATUSES.has(selectedRun.status) ? (
+              <>
+                <strong>This split didn't complete</strong>
+                <p>{selectedRun.error_message || 'Retry this version or queue another one.'}</p>
                 <button
                   type="button"
                   className="button-primary"
-                  disabled={settingKeeper}
-                  onClick={() => void onSetKeeper(currentTrack.id, keeperSelected ? null : selectedRun.id)}
+                  onClick={() => void onRetryRun(selectedRun.id)}
                 >
-                  {keeperSelected ? 'Clear final version' : 'Mark this as final'}
+                  {retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry split'}
                 </button>
-                {canDeleteSelectedRun ? (
-                  <ConfirmInline
-                    label="Delete version"
-                    pendingLabel="Deleting…"
-                    confirmLabel="Delete version"
-                    cancelLabel="Keep it"
-                    prompt="Delete this version and its output files?"
-                    pending={deletingRunId === selectedRun.id}
-                    onConfirm={() => onDeleteRun(selectedRun.id)}
-                  />
-                ) : null}
-              </div>
-            ) : null}
-          </section>
-
-          <section className="kp-inspector-section">
-            <header className="kp-section-header">
-              <div>
-                <h2>Export</h2>
-                <p>Choose the output intent first, then open more settings only if you need them.</p>
-              </div>
-            </header>
-            <MixExportPanel
-              track={currentTrack}
-              run={selectedRun}
-              defaultBitrate={defaultBitrate}
-              onReveal={onReveal}
-              onError={onError}
-            />
-          </section>
-
-          <section className="kp-inspector-section">
-            <header className="kp-section-header">
-              <div>
-                <h2>Song</h2>
-                <p>Keep metadata and source context tidy without crowding the mix surface.</p>
-              </div>
-            </header>
-
-            <div className="kp-song-facts">
-              <strong>{currentTrack.source_filename}</strong>
-              <span>
-                {currentTrack.source_type === 'youtube' ? 'YouTube source' : currentTrack.source_format} ·{' '}
-                {formatDuration(currentTrack.duration_seconds)}
-              </span>
-            </div>
-
-            {editing ? (
-              <div className="kp-edit-form">
-                <label className="field">
-                  <span>Title</span>
-                  <input type="text" value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} />
-                </label>
-                <label className="field">
-                  <span>Artist</span>
-                  <input
-                    type="text"
-                    placeholder="Optional"
-                    value={artistDraft}
-                    onChange={(event) => setArtistDraft(event.target.value)}
-                  />
-                </label>
-                <div className="kp-inline-actions">
-                  <button
-                    type="button"
-                    className="button-primary"
-                    disabled={updatingTrack || !titleDraft.trim()}
-                    onClick={() => void handleSaveEdits()}
-                  >
-                    {updatingTrack ? (
-                      <>
-                        <Spinner /> Saving…
-                      </>
-                    ) : (
-                      'Save'
-                    )}
-                  </button>
-                  <button type="button" className="button-secondary" onClick={() => setEditing(false)}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
+              </>
             ) : (
-              <div className="kp-inline-actions">
-                <button type="button" className="button-secondary" onClick={() => setEditing(true)}>
-                  Rename
-                </button>
-                <ConfirmInline
-                  label="Delete song"
-                  pendingLabel="Deleting…"
-                  confirmLabel="Delete song"
-                  cancelLabel="Keep it"
-                  prompt={`Delete "${currentTrack.title}" and all its versions?`}
-                  onConfirm={() => onDeleteTrack(currentTrack.id)}
-                />
-              </div>
-            )}
-          </section>
-        </aside>
-      </div>
+              <>
+                <strong>No mixable stems</strong>
+                <p>This version finished without stems. Queue another split from Versions.</p>
+              </>
+            )
+          ) : (
+            <>
+              <strong>No version yet</strong>
+              <p>Queue the first split from Versions to start mixing.</p>
+              <button type="button" className="button-primary" onClick={() => setPopover('versions')}>
+                Open Versions
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </section>
   )
 }

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 
-import type { ProcessingProfile, RunDetail, RunMixStemEntry } from '../../types'
+import type { RunDetail, RunMixStemEntry } from '../../types'
+import { isStemKind } from '../../stems'
 import {
   INTENTS,
   type OutputIntent,
@@ -11,129 +12,79 @@ import {
 
 type OutputIntentPickerProps = {
   run: RunDetail
-  profiles: ProcessingProfile[]
-  onApplyTemplate: (stems: RunMixStemEntry[]) => void | Promise<void>
-  onRerunWithProfile: (profileKey: string) => void
   saving: boolean
-  compact?: boolean
+  onApplyTemplate: (stems: RunMixStemEntry[]) => void | Promise<void>
 }
 
-type PendingIntentState = {
-  runId: string
-  value: OutputIntent
+function resolveResetTemplate(run: RunDetail): RunMixStemEntry[] {
+  return run.artifacts
+    .filter((artifact) => isStemKind(artifact.kind))
+    .map((artifact) => ({ artifact_id: artifact.id, gain_db: 0, muted: false }))
 }
 
-export function OutputIntentPicker({
-  run,
-  profiles,
-  onApplyTemplate,
-  onRerunWithProfile,
-  saving,
-  compact = false,
-}: OutputIntentPickerProps) {
-  const inferredIntent = inferIntent(run)
-  const [pendingIntent, setPendingIntent] = useState<PendingIntentState | null>(null)
-  const supportedIntents = useMemo(
-    () => INTENTS.filter((spec) => isIntentSupported(spec, run)),
-    [run],
-  )
-  const activeIntent = pendingIntent?.runId === run.id ? pendingIntent.value : inferredIntent
-  const activeIntentSpec = useMemo(
-    () => INTENTS.find((spec) => spec.value === activeIntent) ?? null,
-    [activeIntent],
-  )
-  const rerunSuggestions = useMemo(
-    () =>
-      INTENTS.filter((spec) => !isIntentSupported(spec, run))
-        .map((spec) => ({
-          spec,
-          fallback: spec.requiresProfile
-            ? profiles.find((profile) => profile.key === spec.requiresProfile) ?? null
-            : null,
-        }))
-        .filter(
-          (item): item is { spec: (typeof INTENTS)[number]; fallback: ProcessingProfile } =>
-            item.fallback !== null,
-        ),
-    [profiles, run],
-  )
+function isResetMix(run: RunDetail) {
+  if (!run.mix.stems.length) return true
+  return run.mix.stems.every((entry) => Math.abs(entry.gain_db) < 0.05 && !entry.muted)
+}
 
-  async function handleApplyIntent(intent: OutputIntent) {
+export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputIntentPickerProps) {
+  const inferred = inferIntent(run)
+  const [pendingIntent, setPendingIntent] = useState<OutputIntent | 'reset' | null>(null)
+  const activeIntent = saving && pendingIntent ? pendingIntent : inferred
+  const atRest = !inferred && isResetMix(run)
+  const supported = useMemo(() => INTENTS.filter((spec) => isIntentSupported(spec, run)), [run])
+
+  async function applyIntent(intent: OutputIntent) {
     const template = resolveIntentTemplate(intent, run.artifacts)
     if (!template) return
-
-    setPendingIntent({ runId: run.id, value: intent })
+    setPendingIntent(intent)
     try {
       await onApplyTemplate(template)
-    } catch {
-      setPendingIntent((current) =>
-        current?.runId === run.id && current.value === intent ? null : current,
-      )
+    } finally {
+      setPendingIntent((current) => (current === intent ? null : current))
     }
   }
 
+  async function applyReset() {
+    setPendingIntent('reset')
+    try {
+      await onApplyTemplate(resolveResetTemplate(run))
+    } finally {
+      setPendingIntent((current) => (current === 'reset' ? null : current))
+    }
+  }
+
+  const buttons: Array<
+    | { kind: 'intent'; value: OutputIntent; label: string; active: boolean }
+    | { kind: 'reset'; active: boolean }
+  > = [
+    ...supported.map((spec) => ({
+      kind: 'intent' as const,
+      value: spec.value,
+      label: spec.label,
+      active: activeIntent === spec.value,
+    })),
+    { kind: 'reset' as const, active: atRest && activeIntent === null },
+  ]
+
   return (
-    <div className={`output-intent ${compact ? 'output-intent-compact' : ''}`}>
-      <div className="output-intent-head">
-        <div className="output-intent-copy">
-          <h3 className="subsection-head">Mix presets</h3>
-          {!compact ? (
-            <p className="output-intent-summary">
-              Start from the closest proven result, then fine-tune the stem balance in the mixer.
-            </p>
-          ) : null}
-        </div>
-        <span className="output-intent-state" aria-live="polite">
-          {saving
-            ? activeIntentSpec
-              ? `Saving ${activeIntentSpec.label.toLowerCase()}…`
-              : 'Saving changes…'
-            : activeIntentSpec
-              ? `${activeIntentSpec.label} loaded.`
-              : 'The current balance is custom.'}
+    <div className="mix-presets" role="group" aria-label="Starting balance">
+      {buttons.map((button, index) => (
+        <span key={button.kind === 'intent' ? button.value : 'reset'} style={{ display: 'contents' }}>
+          {index > 0 ? <span className="mix-preset-sep" aria-hidden>·</span> : null}
+          <button
+            type="button"
+            className={`mix-preset ${button.active ? 'is-active' : ''}`}
+            aria-pressed={button.active}
+            onClick={() => {
+              if (button.kind === 'intent') void applyIntent(button.value)
+              else void applyReset()
+            }}
+          >
+            {button.kind === 'intent' ? button.label : 'Reset'}
+          </button>
         </span>
-      </div>
-
-      <div className="output-intent-options" role="group" aria-label="Quick mix presets">
-        {supportedIntents.map((spec) => {
-          const isActive = spec.value === activeIntent
-          return (
-            <button
-              key={spec.value}
-              type="button"
-              aria-pressed={isActive}
-              className={`output-intent-option ${isActive ? 'active' : ''}`}
-              onClick={() => {
-                void handleApplyIntent(spec.value)
-              }}
-            >
-              <span className="output-intent-option-label">{spec.label}</span>
-              {!compact ? <span className="output-intent-option-desc">{spec.description}</span> : null}
-            </button>
-          )
-        })}
-      </div>
-
-      {rerunSuggestions.length > 0 ? (
-        <details className="output-intent-reruns">
-          <summary>Need another kind of split?</summary>
-          <div className="output-intent-reruns-body">
-            <p>Queue a more suitable version instead of forcing the current split to do too much.</p>
-            <div className="output-intent-reruns-actions">
-              {rerunSuggestions.map(({ spec, fallback }) => (
-                <button
-                  key={spec.value}
-                  type="button"
-                  className="button-secondary"
-                  onClick={() => onRerunWithProfile(fallback.key)}
-                >
-                  Queue {spec.label.toLowerCase()} version
-                </button>
-              ))}
-            </div>
-          </div>
-        </details>
-      ) : null}
+      ))}
     </div>
   )
 }

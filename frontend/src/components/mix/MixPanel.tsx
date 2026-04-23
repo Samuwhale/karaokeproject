@@ -3,9 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RunArtifact, RunDetail, RunMixStemEntry } from '../../types'
 import { MIX_GAIN_DB_MAX, MIX_GAIN_DB_MIN } from '../../types'
 import { compareStemKinds, isStemKind } from '../../stems'
-import { Spinner } from '../feedback/Spinner'
 import { MixScrubber } from './MixScrubber'
 import { useStemMixer } from './useStemMixer'
+import { stemIcon, stemTone } from './stemIcons'
 
 type MixPanelProps = {
   run: RunDetail
@@ -51,10 +51,6 @@ function initialStems(run: RunDetail): StemRow[] {
   })
 }
 
-function isDefaultMix(stems: StemRow[]) {
-  return stems.every((stem) => Math.abs(stem.gain_db) < 0.01 && !stem.muted)
-}
-
 function equalsPersisted(stems: StemRow[], mixStems: RunMixStemEntry[]) {
   const byId = new Map(mixStems.map((entry) => [entry.artifact_id, entry]))
   for (const stem of stems) {
@@ -68,7 +64,7 @@ function equalsPersisted(stems: StemRow[], mixStems: RunMixStemEntry[]) {
 }
 
 function formatGain(db: number) {
-  if (Math.abs(db) < 0.05) return '0 dB'
+  if (Math.abs(db) < 0.05) return '0.0 dB'
   const sign = db > 0 ? '+' : ''
   return `${sign}${db.toFixed(1)} dB`
 }
@@ -81,19 +77,32 @@ function formatTime(seconds: number) {
   return `${minutes}:${remaining}`
 }
 
-function stripTone(label: string) {
-  switch (label.toLowerCase()) {
-    case 'vocals':
-      return 'Lead'
-    case 'drums':
-      return 'Rhythm'
-    case 'bass':
-      return 'Low end'
-    case 'other':
-      return 'Texture'
-    default:
-      return 'Stem'
+function PlayGlyph() {
+  return (
+    <svg viewBox="0 0 18 18" fill="currentColor" aria-hidden>
+      <path d="M4 2.5v13l12-6.5z" />
+    </svg>
+  )
+}
+
+function PauseGlyph() {
+  return (
+    <svg viewBox="0 0 18 18" fill="currentColor" aria-hidden>
+      <rect x="4" y="3" width="4" height="12" rx="1" />
+      <rect x="10" y="3" width="4" height="12" rx="1" />
+    </svg>
+  )
+}
+
+function faderFillStyle(gainDb: number): React.CSSProperties {
+  const center = 50
+  const denominator = gainDb >= 0 ? MIX_GAIN_DB_MAX : Math.abs(MIX_GAIN_DB_MIN)
+  const fraction = (gainDb / denominator) * 50
+  if (gainDb >= 0) {
+    return { left: `${center}%`, width: `${Math.max(0, fraction)}%` }
   }
+  const width = Math.max(0, Math.abs(fraction))
+  return { left: `${center - width}%`, width: `${width}%` }
 }
 
 export function MixPanel({ run, onSave, saving }: MixPanelProps) {
@@ -122,7 +131,6 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
   }, [onSave])
 
   const dirty = !equalsPersisted(stems, run.mix.stems)
-  const showsDefault = isDefaultMix(stems)
 
   const mixerStems = useMemo(
     () =>
@@ -189,12 +197,6 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
     })
   }
 
-  function handleReset() {
-    const next = stems.map((stem) => ({ ...stem, gain_db: 0, muted: false, soloed: false }))
-    setStems(next)
-    scheduleSave(next)
-  }
-
   function handleTogglePlay() {
     if (mixer.isPlaying) mixer.pause()
     else mixer.play()
@@ -202,101 +204,51 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
 
   const playDisabled = mixer.loadState !== 'ready'
   const anySoloed = stems.some((stem) => stem.soloed)
-  const statusLabel =
+  const saveLabel =
     saving || saveState === 'saving'
-      ? 'Saving changes…'
+      ? 'Saving…'
       : saveState === 'failed'
         ? 'Save failed'
         : saveState === 'pending' || dirty
-          ? 'Changes pending'
-          : showsDefault
-            ? 'Default balance'
-            : 'Custom balance saved'
+          ? 'Saving…'
+          : 'saved ✓'
+  const saveClass =
+    saveState === 'failed'
+      ? 'is-error'
+      : saving || saveState === 'saving' || saveState === 'pending' || dirty
+        ? 'is-saving'
+        : ''
 
   return (
-    <section className="kp-mix-panel">
-      <section className="kp-mix-transport">
-        <div className="kp-mix-transport-main">
-          <div className="kp-mix-transport-controls">
-            <button
-              type="button"
-              className="button-primary kp-mix-play"
-              onClick={handleTogglePlay}
-              disabled={playDisabled}
-              aria-label={mixer.isPlaying ? 'Pause preview' : 'Play preview'}
-            >
-              {mixer.loadState === 'loading' ? (
-                <>
-                  <Spinner /> Loading
-                </>
-              ) : mixer.isPlaying ? (
-                'Pause'
-              ) : (
-                'Play'
-              )}
-            </button>
-          </div>
+    <>
+      <div className="mix-canvas">
+        <div className="mix-channels" role="group" aria-label="Stem mixer">
+          {stems.map((stem, index) => {
+            const silenced = stem.muted || (anySoloed && !stem.soloed)
+            const fillStyle = faderFillStyle(stem.gain_db)
 
-          <div className="kp-mix-clock">
-            <strong>{formatTime(mixer.currentTime)}</strong>
-            <span>{formatTime(mixer.duration)}</span>
-          </div>
-
-          <div className="kp-mix-transport-side">
-            <span className="kp-mix-status" aria-live="polite">
-              {saving || saveState === 'saving' ? (
-                <>
-                  <Spinner /> {statusLabel}
-                </>
-              ) : (
-                statusLabel
-              )}
-            </span>
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={handleReset}
-              disabled={showsDefault && stems.every((stem) => !stem.soloed)}
-            >
-              Reset balance
-            </button>
-            {saveState === 'failed' && retryPayload ? (
-              <button type="button" className="button-secondary" onClick={() => void persistMix(retryPayload)}>
-                Retry save
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        <MixScrubber
-          peaks={overviewPeaks}
-          currentTime={mixer.currentTime}
-          duration={mixer.duration}
-          onSeek={mixer.seek}
-          disabled={playDisabled || mixer.duration === 0}
-        />
-      </section>
-
-      {saveError ? <p className="kp-inline-error">{saveError}</p> : null}
-      {mixer.error ? <p className="kp-inline-error">{mixer.error}</p> : null}
-
-      <div className="kp-strip-bank" role="group" aria-label="Stem mixer">
-        {stems.map((stem, index) => {
-          const silenced = stem.muted || (anySoloed && !stem.soloed)
-
-          return (
-            <section
-              key={stem.artifact_id}
-              className={`kp-strip ${silenced ? 'kp-strip-muted' : ''}`}
-            >
-              <header className="kp-strip-head">
-                <strong>{stem.label}</strong>
-                <span>{stripTone(stem.label)}</span>
-              </header>
-
-              <div className="kp-strip-body">
-                <span>{MIX_GAIN_DB_MAX} dB</span>
-                <label className="kp-strip-fader">
+            return (
+              <div
+                key={stem.artifact_id}
+                className={`channel ${stem.muted ? 'is-muted' : ''} ${silenced ? 'is-silenced' : ''}`}
+              >
+                <button
+                  type="button"
+                  className="channel-icon"
+                  onClick={() => updateStem(index, { muted: !stem.muted })}
+                  aria-pressed={stem.muted}
+                  aria-label={`${stem.muted ? 'Unmute' : 'Mute'} ${stem.label}`}
+                  title={stem.muted ? `Unmute ${stem.label}` : `Mute ${stem.label}`}
+                >
+                  {stemIcon(stem.label)}
+                </button>
+                <div className="channel-name">
+                  <strong>{stem.label}</strong>
+                  <span>{stemTone(stem.label)}</span>
+                </div>
+                <label className="channel-fader">
+                  <span className="channel-fader-center" aria-hidden />
+                  <span className="channel-fader-fill" style={fillStyle} aria-hidden />
                   <input
                     type="range"
                     min={MIX_GAIN_DB_MIN}
@@ -305,38 +257,74 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                     value={stem.gain_db}
                     onChange={(event) => updateStem(index, { gain_db: Number(event.target.value) })}
                     onDoubleClick={() => updateStem(index, { gain_db: 0 })}
-                    className="kp-strip-slider"
                     aria-label={`${stem.label} gain`}
                   />
                 </label>
-                <span>{MIX_GAIN_DB_MIN} dB</span>
+                <span className="channel-gain">{formatGain(stem.gain_db)}</span>
+                <button
+                  type="button"
+                  className={`channel-solo ${stem.soloed ? 'is-active' : ''}`}
+                  onClick={() => updateStem(index, { soloed: !stem.soloed })}
+                  aria-pressed={stem.soloed}
+                  title={stem.soloed ? `Unsolo ${stem.label}` : `Solo ${stem.label}`}
+                >
+                  S
+                </button>
               </div>
-
-              <footer className="kp-strip-footer">
-                <strong>{formatGain(stem.gain_db)}</strong>
-                <div className="kp-strip-actions">
-                  <button
-                    type="button"
-                    className={stem.muted ? 'kp-strip-toggle kp-strip-toggle-active' : 'kp-strip-toggle'}
-                    onClick={() => updateStem(index, { muted: !stem.muted })}
-                    aria-pressed={stem.muted}
-                  >
-                    Mute
-                  </button>
-                  <button
-                    type="button"
-                    className={stem.soloed ? 'kp-strip-toggle kp-strip-toggle-active' : 'kp-strip-toggle'}
-                    onClick={() => updateStem(index, { soloed: !stem.soloed })}
-                    aria-pressed={stem.soloed}
-                  >
-                    Solo
-                  </button>
-                </div>
-              </footer>
-            </section>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
-    </section>
+
+      <div className="mix-transport">
+        <button
+          type="button"
+          className="mix-play"
+          onClick={handleTogglePlay}
+          disabled={playDisabled}
+          aria-label={mixer.isPlaying ? 'Pause preview' : 'Play preview'}
+        >
+          {mixer.isPlaying ? <PauseGlyph /> : <PlayGlyph />}
+        </button>
+        <span className="mix-time">{formatTime(mixer.currentTime)}</span>
+        <div className="mix-scrubber-wrap">
+          <MixScrubber
+            peaks={overviewPeaks}
+            currentTime={mixer.currentTime}
+            duration={mixer.duration}
+            onSeek={mixer.seek}
+            disabled={playDisabled || mixer.duration === 0}
+          />
+        </div>
+        <span className="mix-time">{formatTime(mixer.duration)}</span>
+        <span className={`mix-save-state ${saveClass}`} aria-live="polite">
+          {saveState === 'failed' && retryPayload ? (
+            <>
+              <span>{saveLabel}</span>
+              <button
+                type="button"
+                className="button-link"
+                onClick={() => void persistMix(retryPayload)}
+              >
+                Retry
+              </button>
+            </>
+          ) : (
+            saveLabel
+          )}
+        </span>
+      </div>
+
+      {saveError ? (
+        <div className="mix-save-state is-error" style={{ padding: '0 32px 8px' }}>
+          {saveError}
+        </div>
+      ) : null}
+      {mixer.error ? (
+        <div className="mix-save-state is-error" style={{ padding: '0 32px 8px' }}>
+          {mixer.error}
+        </div>
+      ) : null}
+    </>
   )
 }

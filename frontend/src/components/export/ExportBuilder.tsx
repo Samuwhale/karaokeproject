@@ -241,20 +241,20 @@ export function ExportBuilder({
   const currentMixSummary = mixSummary ?? defaultMixSummary(selectedTracks, usesExplicitRunSelection)
   const quickExportSummary = [
     preset === 'final-mix'
-      ? `Current mix: ${mixdownFormat.toUpperCase()}`
+      ? `Edited mix: ${mixdownFormat.toUpperCase()}`
       : preset === 'stems-for-editing'
-        ? `All stems: ${stemFormat.toUpperCase()}`
-        : `Mix ${mixdownFormat.toUpperCase()} + stems ${stemFormat.toUpperCase()}`,
+        ? `Raw stems: ${stemFormat.toUpperCase()}`
+        : `Edited mix ${mixdownFormat.toUpperCase()} + raw stems ${stemFormat.toUpperCase()}`,
     showPackaging ? (mode === 'single-bundle' ? 'One zip' : 'Zip per track') : null,
   ]
     .filter(Boolean)
     .join(' · ')
   const presetLabel =
     preset === 'final-mix'
-      ? 'Current mix'
+      ? 'Edited mix'
       : preset === 'stems-for-editing'
-        ? 'All stems'
-        : 'Mix + stems'
+        ? 'Raw stems'
+        : 'Mix + raw stems'
   const blockingReason =
     !selectedTrackIds.length
           ? 'Choose at least one track to export.'
@@ -327,7 +327,7 @@ export function ExportBuilder({
         )}
         {!lockPreset && stemOptions.length === 0 && (preset === 'stems-for-editing' || preset === 'full-package') ? (
           <p className="export-inline-warning">
-            This selection does not have separated stems, so only Current mix can be exported right now.
+            This selection does not have separated stems, so only Edited mix can be exported right now.
           </p>
         ) : null}
         {lockPreset ? (
@@ -336,10 +336,10 @@ export function ExportBuilder({
               <strong>{presetLabel}</strong>
               <span>
                 {preset === 'final-mix'
-                  ? 'Build the saved mix only.'
+                  ? 'Build the edited mix only.'
                   : preset === 'stems-for-editing'
                     ? 'Build the raw separated stems only.'
-                    : 'Build the saved mix plus the raw stems together.'}
+                    : 'Build the edited mix plus the raw stems together.'}
               </span>
             </div>
           </div>
@@ -350,7 +350,7 @@ export function ExportBuilder({
               className={`export-preset ${preset === 'final-mix' ? 'export-preset-active' : ''}`}
               onClick={() => setPreset('final-mix')}
             >
-              <strong>Current mix</strong>
+              <strong>Edited mix</strong>
               <span>Build the saved mix only.</span>
             </button>
             <button
@@ -359,7 +359,7 @@ export function ExportBuilder({
               onClick={() => setPreset('stems-for-editing')}
               disabled={stemOptions.length === 0}
             >
-              <strong>All stems</strong>
+              <strong>Raw stems</strong>
               <span>Build the raw separated stems only.</span>
             </button>
             <button
@@ -368,8 +368,8 @@ export function ExportBuilder({
               onClick={() => setPreset('full-package')}
               disabled={stemOptions.length === 0}
             >
-              <strong>Mix + stems</strong>
-              <span>Build the saved mix plus the raw stems together.</span>
+              <strong>Mix + raw stems</strong>
+              <span>Build the edited mix plus the raw stems together.</span>
             </button>
           </div>
         )}

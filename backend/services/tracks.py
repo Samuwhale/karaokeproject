@@ -125,10 +125,9 @@ def serialize_run_artifact(artifact: RunArtifact) -> RunArtifactResponse:
     )
 
 
-def _run_note(run: Run) -> str:
-    metadata = run.metadata_json or {}
-    note = metadata.get("note")
-    return note.strip() if isinstance(note, str) else ""
+def _touch_track(track: Track | None) -> None:
+    if track is not None:
+        track.updated_at = datetime.utcnow()
 
 
 def serialize_run_summary(run: Run) -> RunSummaryResponse:
@@ -142,7 +141,6 @@ def serialize_run_summary(run: Run) -> RunSummaryResponse:
         output_directory=run.output_directory,
         created_at=run.created_at,
         updated_at=run.updated_at,
-        note=_run_note(run),
         last_active_status=run.last_active_status,
         dismissed_at=run.dismissed_at,
     )
@@ -242,6 +240,7 @@ def set_run_mix(session: Session, track_id: str, run_id: str, payload: RunMixInp
         )
 
     run.mix_json = {"version": 1, "stems": normalized}
+    _touch_track(track)
     session.commit()
     session.refresh(run)
     return run
@@ -360,7 +359,7 @@ def create_run(track: Track, processing: dict[str, str]) -> Run:
     if session is not None:
         prune_terminal_runs_without_stems(session, track)
 
-    track.updated_at = datetime.utcnow()
+    _touch_track(track)
     run = Run(
         track_id=track.id,
         profile_key=processing["profile_key"],
@@ -413,6 +412,8 @@ def set_run_state(
     run.error_message = error_message
     if status.value in IN_PROGRESS_RUN_STATUSES:
         run.last_active_status = status.value
+    if status.value in TERMINAL_RUN_STATUSES:
+        _touch_track(run.track)
     return run
 
 
@@ -528,7 +529,7 @@ def delete_run(session: Session, run_id: str) -> None:
         raise ValueError("Clear the final version before deleting this run.")
 
     if run.track is not None:
-        run.track.updated_at = datetime.utcnow()
+        _touch_track(run.track)
 
     _delete_run_files(run, include_source=False)
     session.delete(run)
@@ -574,36 +575,17 @@ def prune_terminal_runs_without_stems(session: Session, track: Track) -> int:
     return deleted
 
 
-RUN_NOTE_MAX_LENGTH = 280
-
-
-def set_run_note(session: Session, run_id: str, note: str) -> Run:
-    run = session.get(Run, run_id, options=[selectinload(Run.track), selectinload(Run.artifacts)])
-    if run is None:
-        raise LookupError(f"Run '{run_id}' does not exist.")
-
-    cleaned = note.strip()
-    if len(cleaned) > RUN_NOTE_MAX_LENGTH:
-        raise ValueError(f"Note cannot exceed {RUN_NOTE_MAX_LENGTH} characters.")
-
-    metadata = dict(run.metadata_json or {})
-    if cleaned:
-        metadata["note"] = cleaned
-    else:
-        metadata.pop("note", None)
-    run.metadata_json = metadata
-    session.commit()
-    session.refresh(run)
-    return run
-
-
 def set_keeper_run(session: Session, track_id: str, run_id: str | None) -> Track:
     track = get_track(session, track_id)
     if track is None:
         raise LookupError(f"Track '{track_id}' does not exist.")
 
+    if track.keeper_run_id == run_id:
+        return track
+
     if run_id is None:
         track.keeper_run_id = None
+        _touch_track(track)
         session.commit()
         session.refresh(track)
         return track
@@ -615,22 +597,10 @@ def set_keeper_run(session: Session, track_id: str, run_id: str | None) -> Track
         raise ValueError("Only completed runs can be marked as the keeper.")
 
     track.keeper_run_id = run.id
+    _touch_track(track)
     session.commit()
     session.refresh(track)
     return track
-
-
-def _directory_size(path: Path) -> int:
-    if not path.exists():
-        return 0
-    total = 0
-    for entry in path.rglob("*"):
-        if entry.is_file():
-            try:
-                total += entry.stat().st_size
-            except OSError:
-                continue
-    return total
 
 
 def update_track(
@@ -644,46 +614,33 @@ def update_track(
     if track is None:
         raise LookupError(f"Track '{track_id}' does not exist.")
 
+    did_change = False
+
     if title is not None:
         clean_title = title.strip()
         if not clean_title:
             raise ValueError("Title cannot be empty.")
-        track.title = clean_title
-        metadata = dict(track.metadata_json or {})
-        metadata["source_slug"] = _slugify(clean_title)
-        track.metadata_json = metadata
+        if clean_title != track.title:
+            track.title = clean_title
+            metadata = dict(track.metadata_json or {})
+            metadata["source_slug"] = _slugify(clean_title)
+            track.metadata_json = metadata
+            did_change = True
 
     if artist is not UNSET:
         clean_artist = artist.strip() if isinstance(artist, str) else None
         clean_artist = clean_artist or None
-        track.artist = clean_artist
+        if clean_artist != track.artist:
+            track.artist = clean_artist
+            did_change = True
 
+    if not did_change:
+        return track
+
+    _touch_track(track)
     session.commit()
     session.refresh(track)
     return track
-
-
-def delete_track(
-    session: Session,
-    track_id: str,
-) -> None:
-    track = get_track(session, track_id)
-    if track is None:
-        raise LookupError(f"Track '{track_id}' does not exist.")
-
-    if any(run.status in IN_PROGRESS_RUN_STATUSES for run in track.runs):
-        raise ValueError("Cancel or wait for in-progress runs before deleting this track.")
-
-    source_path = Path(track.source_path) if track.source_path else None
-
-    for run in list(track.runs):
-        _delete_run_files(run, include_source=False)
-
-    session.delete(track)
-    session.commit()
-
-    if source_path is not None and source_path.exists():
-        source_path.unlink(missing_ok=True)
 
 
 def purge_non_keeper_runs(
@@ -711,8 +668,45 @@ def purge_non_keeper_runs(
         deleted += 1
 
     if deleted:
+        _touch_track(track)
         session.commit()
     return deleted, reclaimed
+
+
+def delete_track(
+    session: Session,
+    track_id: str,
+) -> None:
+    track = get_track(session, track_id)
+    if track is None:
+        raise LookupError(f"Track '{track_id}' does not exist.")
+
+    if any(run.status in IN_PROGRESS_RUN_STATUSES for run in track.runs):
+        raise ValueError("Cancel or wait for in-progress runs before deleting this track.")
+
+    source_path = Path(track.source_path) if track.source_path else None
+
+    for run in list(track.runs):
+        _delete_run_files(run, include_source=False)
+
+    session.delete(track)
+    session.commit()
+
+    if source_path is not None and source_path.exists():
+        source_path.unlink(missing_ok=True)
+
+
+def _directory_size(path: Path) -> int:
+    if not path.exists():
+        return 0
+    total = 0
+    for entry in path.rglob("*"):
+        if entry.is_file():
+            try:
+                total += entry.stat().st_size
+            except OSError:
+                continue
+    return total
 
 
 def _measure_paths(paths: Iterable[Path]) -> int:

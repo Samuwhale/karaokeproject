@@ -128,8 +128,8 @@ function ImportFlowDialogContent({
       <div className="import-modal-panel import-flow-panel" ref={panelRef} tabIndex={-1}>
         <header className="import-modal-head">
           <div className="import-flow-head-copy">
-            <h2>Add songs</h2>
-            <p>Add sources here, then review them in Songs before you start splitting.</p>
+            <h2>Add sources</h2>
+            <p>Stage local files or a YouTube link here, then finish the decisions in Review queue before anything enters the library.</p>
           </div>
           <div className="import-flow-head-actions">
             <button ref={closeButtonRef} type="button" className="button-secondary" onClick={handleClose}>
@@ -147,7 +147,7 @@ function ImportFlowDialogContent({
 
           {stagedImports.length > 0 ? (
             <p className="import-flow-note">
-              {stagedImports.length} staged source{stagedImports.length === 1 ? '' : 's'} already waiting in Songs.
+              {stagedImports.length} staged source{stagedImports.length === 1 ? '' : 's'} already waiting in Import review.
             </p>
           ) : null}
 
@@ -155,7 +155,7 @@ function ImportFlowDialogContent({
             <section className="import-flow-section">
               <div className="import-flow-section-head">
                 <h3>YouTube link</h3>
-                <p>Paste one link now. You can rename it and resolve duplicates in Songs.</p>
+                <p>Paste one link now. Titles, duplicates, and batch decisions happen in Review queue.</p>
               </div>
               <label className="field">
                 <span>YouTube URL</span>
@@ -195,7 +195,7 @@ function ImportFlowDialogContent({
             <section className="import-flow-section">
               <div className="import-flow-section-head">
                 <h3>Local files</h3>
-                <p>Drop files here now, then finish the batch in Songs.</p>
+                <p>Drop files here now, then confirm the batch in Review queue.</p>
               </div>
               <div
                 className={`drop-zone ${dragActive ? 'drop-zone-active' : ''}`}

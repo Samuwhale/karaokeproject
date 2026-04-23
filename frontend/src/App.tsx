@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Navigate, NavLink, Route, Routes, useLocation, useMatch, useNavigate } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useMatch, useNavigate } from 'react-router-dom'
 
 import './App.css'
 import './redesign.css'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ImportFlowDialog } from './components/ImportFlowDialog'
+import { ImportsOverlay } from './components/imports/ImportsOverlay'
+import { BatchExportOverlay } from './components/export/BatchExportOverlay'
 import { SettingsDrawer } from './components/SettingsDrawer'
 import { ToastStack } from './components/feedback/ToastStack'
 import { MixWorkspace } from './components/mix/MixWorkspace'
@@ -15,6 +17,7 @@ import type { Connection } from './hooks/useDashboardData'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { filterImportableMediaFiles } from './importableMedia'
 import { buildMixPath, buildSongsPath, parseSongsView } from './routes'
+import type { SongsView } from './routes'
 import { resolveSelectedRun } from './runSelection'
 import type { RunProcessingConfigInput, TrackSummary } from './types'
 
@@ -22,15 +25,14 @@ function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const mixMatch = useMatch('/mix/:trackId')
-  const songsActive = location.pathname === '/songs'
   const mixActive = !!mixMatch
   const mixTrackId = mixMatch?.params.trackId ?? null
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const mixRunId = mixActive ? searchParams.get('run') : null
-  const songsView = useMemo(
-    () => (songsActive ? parseSongsView(new URLSearchParams(location.search)) : parseSongsView(new URLSearchParams())),
-    [songsActive, location.search],
-  )
+  const routeSongsView = useMemo(() => parseSongsView(new URLSearchParams(location.search)), [location.search])
+  const navigationState = location.state as { songsView?: SongsView } | null
+  const rememberedSongsView = navigationState?.songsView ?? parseSongsView(new URLSearchParams())
+  const songsView = !mixActive ? routeSongsView : rememberedSongsView
 
   const dashboard = useDashboardData({ trackId: mixTrackId })
   const {
@@ -40,7 +42,6 @@ function App() {
     tracks,
     drafts,
     queueRuns,
-    cachedModels,
     selectedTrack,
     toasts,
     dismissToast,
@@ -70,7 +71,6 @@ function App() {
     handleCancelRun,
     handleRetryRun,
     handleDeleteRun,
-    handleDismissRun,
     handleRevealFolder,
     handleSaveSettings,
     handleCleanupTempStorage,
@@ -88,6 +88,8 @@ function App() {
     'preferences',
   )
   const [importOpen, setImportOpen] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [batchExportIds, setBatchExportIds] = useState<string[] | null>(null)
   const [dragOverlayActive, setDragOverlayActive] = useState(false)
   const dragCounterRef = useRef(0)
 
@@ -107,12 +109,12 @@ function App() {
     setSettingsOpen(true)
   }
 
-  function openSongs(view = songsView) {
-    navigate(buildSongsPath(view))
+  function openSongs(view = rememberedSongsView) {
+    navigate(buildSongsPath(view), { state: { songsView: view } })
   }
 
   function openMix(trackId: string, options?: { runId?: string | null }) {
-    navigate(buildMixPath(trackId, { runId: options?.runId ?? null }))
+    navigate(buildMixPath(trackId, { runId: options?.runId ?? null }), { state: { songsView } })
   }
 
   function openTrackWorkspace(track: TrackSummary, options?: { runId?: string | null }) {
@@ -124,7 +126,7 @@ function App() {
     if (!mixActive) return
     const trackKnown = mixTrackId ? tracks.some((track) => track.id === mixTrackId) : false
     if (hasFirstSync && !selectedTrack && !trackKnown) {
-      navigate('/songs', { replace: true })
+      navigate(buildSongsPath(songsView), { replace: true, state: { songsView } })
       return
     }
     if (!selectedTrack) return
@@ -135,9 +137,20 @@ function App() {
     })
 
     if (`${location.pathname}${location.search}` !== nextPath) {
-      navigate(nextPath, { replace: true })
+      navigate(nextPath, { replace: true, state: { songsView } })
     }
-  }, [hasFirstSync, location.pathname, location.search, mixActive, mixRunId, mixTrackId, navigate, selectedTrack, tracks])
+  }, [
+    hasFirstSync,
+    location.pathname,
+    location.search,
+    mixActive,
+    mixRunId,
+    mixTrackId,
+    navigate,
+    selectedTrack,
+    songsView,
+    tracks,
+  ])
 
   useEffect(() => {
     if (importOpen) return
@@ -171,15 +184,10 @@ function App() {
       const files = filterImportableMediaFiles(event.dataTransfer?.files ?? [])
       if (files.length) {
         handleResolveLocalImport(files)
-          .then(() =>
-            navigate(
-              buildSongsPath({
-                mode: 'needs-attention',
-                search: '',
-                sort: 'recent',
-              }),
-            ),
-          )
+          .then(() => {
+            if (mixActive) openSongs()
+            setReviewOpen(true)
+          })
           .catch(() => undefined)
         return
       }
@@ -198,7 +206,7 @@ function App() {
       dragCounterRef.current = 0
       setDragOverlayActive(false)
     }
-  }, [handleResolveLocalImport, importOpen, navigate, pushToast])
+  }, [handleResolveLocalImport, importOpen, mixActive, pushToast])
 
   useEffect(() => {
     function onPaste(event: ClipboardEvent) {
@@ -212,21 +220,16 @@ function App() {
       if (!text || !/^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\b/i.test(text)) return
       event.preventDefault()
       handleResolveYouTube(text)
-        .then(() =>
-          navigate(
-            buildSongsPath({
-              mode: 'needs-attention',
-              search: '',
-              sort: 'recent',
-            }),
-          ),
-        )
+        .then(() => {
+          if (mixActive) openSongs()
+          setReviewOpen(true)
+        })
         .catch(() => undefined)
     }
 
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
-  }, [handleResolveYouTube, navigate])
+  }, [handleResolveYouTube, mixActive])
 
   function selectAdjacentTrack(offset: number) {
     if (!browseTracks.length) return
@@ -258,136 +261,110 @@ function App() {
     onEscape: () => {
       if (settingsOpen) setSettingsOpen(false)
       else if (importOpen) setImportOpen(false)
+      else if (reviewOpen) setReviewOpen(false)
+      else if (batchExportIds) setBatchExportIds(null)
     },
   })
 
-  const anyDialogOpen = settingsOpen || importOpen
-  const showRailStatus = setupRequired || connection.state !== 'ready'
-  const suiteMainClassName = `suite-main ${mixActive ? 'suite-main-fixed-workspace' : ''}`
-  const appShellClassName = `app-shell ${mixActive ? 'app-shell-mix-focus' : ''}`
+  const anyDialogOpen = settingsOpen || importOpen || reviewOpen || !!batchExportIds
 
   return (
     <ErrorBoundary>
-      <div className={appShellClassName}>
-        <aside className="shell-rail" inert={anyDialogOpen || undefined}>
-          <div className="shell-rail-brand">
-            <strong>Karaoke</strong>
-            <span>Mix workspace</span>
-          </div>
+      <div className="shell">
+        {!mixActive ? (
+          <header className="app-top" inert={anyDialogOpen || undefined}>
+            <strong className="app-top-brand">Karaoke</strong>
+            <div className="app-top-actions">
+              {setupRequired ? (
+                <button
+                  type="button"
+                  className="topbar-chip topbar-chip-warn"
+                  onClick={() => openSettings('maintenance')}
+                >
+                  <span className="topbar-dot topbar-dot-warn" />
+                  finish setup
+                </button>
+              ) : null}
+              <ConnectionDot connection={connection} hasFirstSync={hasFirstSync} />
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => openSettings('preferences')}
+                aria-label="Settings"
+                title="Settings"
+              >
+                <GearIcon />
+              </button>
+              <button type="button" className="button-primary" onClick={() => setImportOpen(true)}>
+                Add songs
+              </button>
+            </div>
+          </header>
+        ) : null}
 
-          <nav className="shell-rail-nav" aria-label="Primary navigation">
-            <NavLink to="/songs" className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}>
-              <LibraryIcon />
-              <span>Songs</span>
-            </NavLink>
-          </nav>
-
-          <div className="shell-rail-footer">
-            <button type="button" className="button-primary shell-rail-add" onClick={() => setImportOpen(true)}>
-              Add songs
-            </button>
-            {showRailStatus ? (
-              <StatusChip
-                className="shell-rail-status"
-                connection={connection}
-                setupRequired={setupRequired}
-                onOpenSettings={() => openSettings(setupRequired ? 'maintenance' : 'preferences')}
-              />
-            ) : null}
-            <button
-              type="button"
-              className="shell-rail-settings"
-              onClick={() => openSettings('preferences')}
-            >
-              <GearIcon />
-              <span>Settings</span>
-            </button>
-          </div>
-        </aside>
-
-        <div className={`shell-canvas ${mixActive ? 'shell-canvas-focus-mode' : ''}`}>
-          <main className={suiteMainClassName} inert={anyDialogOpen || undefined}>
-            <Routes>
-              <Route path="/" element={<Navigate to="/songs" replace />} />
-              <Route
-                path="/songs"
-                element={
-                  <SongsPage
-                    view={songsView}
-                    tracks={tracks}
-                    currentTrackId={mixTrackId}
-                    stagedImports={drafts}
-                    queueRuns={queueRuns}
-                    profiles={settings?.profiles ?? []}
-                    defaultProfileKey={defaultProcessing.profile_key}
-                    confirmingDrafts={confirmingDrafts}
-                    cancellingRunId={cancellingRunId}
-                    retryingRunId={retryingRunId}
-                    onViewChange={openSongs}
-                    onOpenTrack={(track, options) => openTrackWorkspace(track, options)}
-                    onAddSongs={() => setImportOpen(true)}
-                    onCancelRun={handleCancelRun}
-                    onRetryRun={async (runId) => {
-                      await handleRetryRun(runId)
-                    }}
-                    onDismissRun={handleDismissRun}
-                    onUpdateStagedImport={handleUpdateDraft}
-                    onDiscardStagedImport={handleDiscardDraft}
-                    onConfirmStagedImports={async (payload) => {
-                      await handleConfirmDrafts(payload)
-                      navigate(
-                        buildSongsPath({
-                          mode: payload.queue ? 'needs-attention' : 'library',
-                          search: '',
-                          sort: 'recent',
-                        }),
-                      )
-                    }}
-                  />
-                }
-              />
-              <Route
-                path="/mix/:trackId"
-                element={
-                  <MixWorkspace
-                    track={selectedTrack}
-                    selectedRunId={mixRunId}
-                    profiles={settings?.profiles ?? []}
-                    cachedModels={cachedModels}
-                    defaultProfileKey={defaultProcessing.profile_key}
-                    defaultBitrate={defaultBitrate}
-                    creatingRun={creatingRun}
-                    cancellingRunId={cancellingRunId}
-                    retryingRunId={retryingRunId}
-                    deletingRunId={deletingRunId}
-                    settingKeeper={settingKeeper}
-                    savingMixRunId={savingMixRunId}
-                    updatingTrack={updatingTrack}
-                    onBackToSongs={() => openSongs()}
-                    onSelectRun={(runId) => {
-                      if (!selectedTrack) return
-                      openMix(selectedTrack.id, { runId })
-                    }}
-                    onCreateRun={handleCreateRun}
-                    onCancelRun={handleCancelRun}
-                    onRetryRun={handleRetryRun}
-                    onDeleteRun={handleDeleteRun}
-                    onSetKeeper={handleSetKeeper}
-                    onSaveMix={handleSaveMix}
-                    onUpdateTrack={handleUpdateTrack}
-                    onDeleteTrack={(trackId) => {
-                      handleDeleteTrack(trackId)
-                      navigate('/songs')
-                    }}
-                    onReveal={handleRevealFolder}
-                    onError={(message) => pushToast('error', message)}
-                  />
-                }
-              />
-              <Route path="*" element={<Navigate to="/songs" replace />} />
-            </Routes>
-          </main>
-        </div>
+        <main
+          className={mixActive ? 'shell-mix-main' : 'shell-library-main'}
+          inert={anyDialogOpen || undefined}
+        >
+          <Routes>
+            <Route path="/" element={<Navigate to="/songs" replace />} />
+            <Route
+              path="/songs"
+              element={
+                <SongsPage
+                  view={songsView}
+                  tracks={tracks}
+                  currentTrackId={mixTrackId}
+                  stagedImportsCount={drafts.length}
+                  queueRuns={queueRuns}
+                  onViewChange={(next) => navigate(buildSongsPath(next), { state: { songsView: next } })}
+                  onOpenTrack={openTrackWorkspace}
+                  onAddSongs={() => setImportOpen(true)}
+                  onReviewImports={() => setReviewOpen(true)}
+                  onBatchExport={(ids) => setBatchExportIds(ids)}
+                />
+              }
+            />
+            <Route
+              path="/mix/:trackId"
+              element={
+                <MixWorkspace
+                  track={selectedTrack}
+                  selectedRunId={mixRunId}
+                  profiles={settings?.profiles ?? []}
+                  defaultProfileKey={defaultProcessing.profile_key}
+                  defaultBitrate={defaultBitrate}
+                  creatingRun={creatingRun}
+                  cancellingRunId={cancellingRunId}
+                  retryingRunId={retryingRunId}
+                  deletingRunId={deletingRunId}
+                  settingKeeper={settingKeeper}
+                  savingMixRunId={savingMixRunId}
+                  updatingTrack={updatingTrack}
+                  onBackToSongs={() => openSongs()}
+                  onSelectRun={(runId) => {
+                    if (!selectedTrack) return
+                    openMix(selectedTrack.id, { runId })
+                  }}
+                  onCreateRun={handleCreateRun}
+                  onCancelRun={handleCancelRun}
+                  onRetryRun={handleRetryRun}
+                  onDeleteRun={handleDeleteRun}
+                  onSetKeeper={handleSetKeeper}
+                  onSaveMix={handleSaveMix}
+                  onUpdateTrack={handleUpdateTrack}
+                  onDeleteTrack={(trackId) => {
+                    handleDeleteTrack(trackId)
+                    openSongs()
+                  }}
+                  onReveal={handleRevealFolder}
+                  onError={(message) => pushToast('error', message)}
+                />
+              }
+            />
+            <Route path="*" element={<Navigate to="/songs" replace />} />
+          </Routes>
+        </main>
 
         <SettingsDrawer
           open={settingsOpen}
@@ -412,15 +389,7 @@ function App() {
           open={importOpen}
           stagedImports={drafts}
           onClose={() => setImportOpen(false)}
-          onSourcesStaged={() =>
-            navigate(
-              buildSongsPath({
-                mode: 'needs-attention',
-                search: '',
-                sort: 'recent',
-              }),
-            )
-          }
+          onSourcesStaged={() => setReviewOpen(true)}
           resolvingYoutubeImport={resolvingYoutubeImport}
           resolvingLocalImport={resolvingLocalImport}
           onResolveYouTube={async (sourceUrl) => {
@@ -429,6 +398,31 @@ function App() {
           onResolveLocalImport={async (files) => {
             await handleResolveLocalImport(files)
           }}
+        />
+
+        <ImportsOverlay
+          open={reviewOpen}
+          drafts={drafts}
+          profiles={settings?.profiles ?? []}
+          defaultProfileKey={defaultProcessing.profile_key}
+          confirming={confirmingDrafts}
+          onClose={() => setReviewOpen(false)}
+          onUpdateDraft={handleUpdateDraft}
+          onDiscardDraft={handleDiscardDraft}
+          onConfirm={async (payload) => {
+            await handleConfirmDrafts(payload)
+            setReviewOpen(false)
+          }}
+        />
+
+        <BatchExportOverlay
+          open={!!batchExportIds}
+          tracks={tracks}
+          selectedTrackIds={batchExportIds ?? []}
+          defaultBitrate={defaultBitrate}
+          onClose={() => setBatchExportIds(null)}
+          onReveal={handleRevealFolder}
+          onError={(message) => pushToast('error', message)}
         />
 
         <ToastStack toasts={toasts} onDismiss={dismissToast} />
@@ -446,56 +440,32 @@ function App() {
   )
 }
 
-type StatusChipProps = {
-  className?: string
-  connection: Connection
-  setupRequired: boolean
-  onOpenSettings: () => void
-}
-
-function StatusChip({ className, connection, setupRequired, onOpenSettings }: StatusChipProps) {
-  const [now, setNow] = useState(() => Date.now())
-
+function ConnectionDot({ connection, hasFirstSync }: { connection: Connection; hasFirstSync: boolean }) {
+  const [, setTick] = useState(0)
   useEffect(() => {
     if (connection.state !== 'offline') return
-    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    const id = window.setInterval(() => setTick((n) => n + 1), 1000)
     return () => window.clearInterval(id)
   }, [connection.state])
 
-  if (setupRequired) {
-    return (
-      <button
-        type="button"
-        className={className ?? 'topbar-chip topbar-chip-warn'}
-        onClick={onOpenSettings}
-        title="Open settings to resolve"
-      >
-        <span className="topbar-dot topbar-dot-warn" />
-        finish setup
-      </button>
-    )
-  }
-
   if (connection.state === 'offline') {
-    const retryInMs = connection.nextRetryAt ? connection.nextRetryAt - now : 0
+    const retryInMs = connection.nextRetryAt ? connection.nextRetryAt - Date.now() : 0
     const retryIn = Math.max(0, Math.ceil(retryInMs / 1000))
     return (
-      <span className={className ?? 'topbar-chip'} title={connection.lastError ?? 'Connection error'}>
+      <span className="topbar-chip" title={connection.lastError ?? 'Connection error'}>
         <span className="topbar-dot topbar-dot-offline" />
         offline · retry {retryIn}s
       </span>
     )
   }
-
-  if (connection.lastSyncAt === 0) {
+  if (!hasFirstSync) {
     return (
-      <span className={className ?? 'topbar-chip'}>
+      <span className="topbar-chip">
         <span className="topbar-dot topbar-dot-syncing" />
         loading
       </span>
     )
   }
-
   return null
 }
 
@@ -520,17 +490,6 @@ function GearIcon() {
         strokeWidth="1.25"
         strokeLinejoin="round"
       />
-    </svg>
-  )
-}
-
-function LibraryIcon() {
-  return (
-    <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <rect x="2.25" y="3" width="11.5" height="10" rx="1.75" stroke="currentColor" strokeWidth="1.25" />
-      <path d="M5.25 3V13" stroke="currentColor" strokeWidth="1.25" />
-      <path d="M7.75 5.5H11" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-      <path d="M7.75 8H11" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
     </svg>
   )
 }

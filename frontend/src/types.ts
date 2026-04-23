@@ -99,7 +99,6 @@ export type RunSummary = {
   output_directory: string | null
   created_at: string
   updated_at: string
-  note: string
   last_active_status: string | null
   dismissed_at: string | null
 }

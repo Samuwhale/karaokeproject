@@ -14,7 +14,7 @@ class ProcessingProfileResponse(BaseModel):
     best_for: str
     tradeoff: str
     model_filename: str
-    stems: list[str] = []
+    stems: list[str] = Field(default_factory=list)
 
 
 class RunProcessingConfigRequest(BaseModel):
@@ -35,7 +35,7 @@ class ArtifactMetricsResponse(BaseModel):
     size_bytes: int | None = None
     integrated_lufs: float | None = None
     true_peak_dbfs: float | None = None
-    peaks: list[float] = []
+    peaks: list[float] = Field(default_factory=list)
 
 
 class RunArtifactResponse(BaseModel):
@@ -61,7 +61,6 @@ class RunSummaryResponse(BaseModel):
     output_directory: str | None
     created_at: datetime
     updated_at: datetime
-    note: str = ""
     last_active_status: str | None = None
     dismissed_at: datetime | None = None
 
@@ -75,7 +74,7 @@ class RunMixStemEntry(BaseModel):
 
 
 class RunMixState(BaseModel):
-    stems: list[RunMixStemEntry] = []
+    stems: list[RunMixStemEntry] = Field(default_factory=list)
     is_default: bool = True
 
 
@@ -136,18 +135,9 @@ class SetKeeperRequest(BaseModel):
     run_id: str | None = None
 
 
-class SetRunNoteRequest(BaseModel):
-    note: str = ""
-
-
 class UpdateTrackRequest(BaseModel):
     title: str | None = None
     artist: str | None = None
-
-
-class PurgeNonKeepersResponse(BaseModel):
-    deleted_run_count: int
-    bytes_reclaimed: int
 
 
 class BackfillMetricsResponse(BaseModel):
@@ -162,8 +152,9 @@ class QueueRunResponse(BaseModel):
 
 
 class BatchTrackIdsRequest(BaseModel):
-    track_ids: list[str]
+    track_ids: list[str] = Field(default_factory=list)
+
 
 class BatchDeleteResponse(BaseModel):
     deleted_track_count: int
-    skipped_track_ids: list[str] = []
+    skipped_track_ids: list[str] = Field(default_factory=list)

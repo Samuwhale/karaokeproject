@@ -1,47 +1,21 @@
-import { QueueList } from '../QueueList'
-import { StagedImportsPanel } from '../StagedImportsPanel'
-import {
-  SONG_BROWSE_SORT_OPTIONS,
-  applySongBrowse,
-  filterReadyTracks,
-  trackStageSummary,
-} from '../trackListView'
+import { useMemo, useState } from 'react'
+
 import { isActiveRunStatus } from '../runStatus'
+import { SONG_BROWSE_SORT_OPTIONS, applySongBrowse, trackStageSummary } from '../trackListView'
 import type { SongsView } from '../../routes'
-import type {
-  ProcessingProfile,
-  QueueRunEntry,
-  RunProcessingConfigInput,
-  StagedImport,
-  TrackSummary,
-  UpdateImportDraftInput,
-} from '../../types'
+import type { QueueRunEntry, TrackSummary } from '../../types'
 
 type SongsPageProps = {
   view: SongsView
   tracks: TrackSummary[]
   currentTrackId: string | null
-  stagedImports: StagedImport[]
+  stagedImportsCount: number
   queueRuns: QueueRunEntry[]
-  profiles: ProcessingProfile[]
-  defaultProfileKey: string
-  confirmingDrafts: boolean
-  cancellingRunId: string | null
-  retryingRunId: string | null
   onViewChange: (view: SongsView) => void
-  onOpenTrack: (track: TrackSummary, options?: { runId?: string | null; runStatus?: string | null }) => void
+  onOpenTrack: (track: TrackSummary, options?: { runId?: string | null }) => void
   onAddSongs: () => void
-  onCancelRun: (runId: string) => Promise<void>
-  onRetryRun: (runId: string) => Promise<void>
-  onDismissRun: (runId: string) => Promise<void>
-  onUpdateStagedImport: (draftId: string, payload: UpdateImportDraftInput) => Promise<void>
-  onDiscardStagedImport: (draftId: string) => Promise<void>
-  onConfirmStagedImports: (payload: {
-    draft_ids: string[]
-    queue: boolean
-    processing?: RunProcessingConfigInput
-    processing_overrides?: Record<string, RunProcessingConfigInput>
-  }) => Promise<unknown>
+  onReviewImports: () => void
+  onBatchExport: (trackIds: string[]) => void
 }
 
 function formatDuration(seconds: number | null) {
@@ -52,63 +26,56 @@ function formatDuration(seconds: number | null) {
   return `${minutes}:${remaining}`
 }
 
-function artistLine(track: TrackSummary) {
-  return track.artist ?? 'Unknown artist'
-}
+type RowStatus = { text: string | null; tone: 'processing' | 'attn' | 'final' | null }
 
-function sectionCopy(view: SongsView['mode']) {
-  switch (view) {
-    case 'needs-attention':
-      return 'Resolve imports and active split work here before you move back into Mix.'
-    case 'ready':
-      return 'Finished songs stay light here so you can move straight into the mixer.'
-    default:
-      return 'Search the full song library and reopen any workspace from one list.'
-  }
-}
-
-function rowStatusCopy(track: TrackSummary) {
+function rowStatus(track: TrackSummary): RowStatus {
   const stage = trackStageSummary(track)
-  if (stage.key === 'ready' || stage.key === 'final') {
-    return track.has_custom_mix ? 'Saved balance ready' : 'Default balance ready'
+  if (stage.key === 'processing') {
+    const pct = Math.round(track.latest_run?.progress ?? 0)
+    return { text: `Splitting · ${pct}%`, tone: 'processing' }
   }
-  return stage.description
+  if (stage.key === 'needs-attention') return { text: 'Split failed', tone: 'attn' }
+  if (stage.key === 'needs-split') return { text: 'No split yet', tone: null }
+  if (stage.key === 'final') return { text: 'Final', tone: 'final' }
+  return { text: null, tone: null }
 }
 
-function SongRow({
-  track,
-  currentTrackId,
-  onOpen,
+function QueueStrip({
+  draftsCount,
+  activeCount,
+  failedCount,
+  onReviewImports,
 }: {
-  track: TrackSummary
-  currentTrackId: string | null
-  onOpen: (track: TrackSummary) => void
+  draftsCount: number
+  activeCount: number
+  failedCount: number
+  onReviewImports: () => void
 }) {
-  const stage = trackStageSummary(track)
-  const initials = track.title.trim().slice(0, 1).toUpperCase() || 'S'
-  const metadata = [
-    artistLine(track),
-    formatDuration(track.duration_seconds),
-    track.run_count === 0 ? 'No versions' : `${track.run_count} version${track.run_count === 1 ? '' : 's'}`,
-  ].join(' · ')
+  const parts: string[] = []
+  if (draftsCount > 0) parts.push(`${draftsCount} import${draftsCount === 1 ? '' : 's'} to review`)
+  if (activeCount > 0) parts.push(`${activeCount} split${activeCount === 1 ? '' : 's'} running`)
+  if (failedCount > 0) parts.push(`${failedCount} need${failedCount === 1 ? 's' : ''} attention`)
+  const title =
+    draftsCount > 0
+      ? 'Imports waiting'
+      : failedCount > 0
+        ? 'Needs attention'
+        : 'Splitting now'
 
   return (
-    <article className={`kp-song-row ${currentTrackId === track.id ? 'kp-song-row-active' : ''}`}>
-      <button type="button" className="kp-song-row-button" onClick={() => onOpen(track)}>
-        <span className="kp-song-art" aria-hidden>
-          {track.thumbnail_url ? <img src={track.thumbnail_url} alt="" loading="lazy" /> : initials}
-        </span>
-        <span className="kp-song-copy">
-          <strong>{track.title}</strong>
-          <span>{metadata}</span>
-        </span>
-        <span className="kp-song-status">
-          <strong>{stage.label}</strong>
-          <span>{rowStatusCopy(track)}</span>
-        </span>
-        <span className="kp-song-action">{stage.actionLabel}</span>
-      </button>
-    </article>
+    <section className={`library-queue ${failedCount > 0 && draftsCount === 0 && activeCount === 0 ? 'is-attn' : ''}`}>
+      <div className="library-queue-copy">
+        <strong>{title}</strong>
+        <span>{parts.join(' · ')}</span>
+      </div>
+      <div className="library-queue-actions">
+        {draftsCount > 0 ? (
+          <button type="button" className="button-primary" onClick={onReviewImports}>
+            Review
+          </button>
+        ) : null}
+      </div>
+    </section>
   )
 }
 
@@ -116,191 +83,196 @@ export function SongsPage({
   view,
   tracks,
   currentTrackId,
-  stagedImports,
+  stagedImportsCount,
   queueRuns,
-  profiles,
-  defaultProfileKey,
-  confirmingDrafts,
-  cancellingRunId,
-  retryingRunId,
   onViewChange,
   onOpenTrack,
   onAddSongs,
-  onCancelRun,
-  onRetryRun,
-  onDismissRun,
-  onUpdateStagedImport,
-  onDiscardStagedImport,
-  onConfirmStagedImports,
+  onReviewImports,
+  onBatchExport,
 }: SongsPageProps) {
-  const browseTracks = applySongBrowse(tracks, { search: view.search, sort: view.sort })
-  const readyTracks = filterReadyTracks(browseTracks)
-  const activeEntries = queueRuns.filter((entry) => isActiveRunStatus(entry.run.status))
-  const blockedEntries = queueRuns.filter(
-    (entry) => entry.run.status === 'failed' || entry.run.status === 'cancelled',
+  const [selecting, setSelecting] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  const browseTracks = useMemo(
+    () => applySongBrowse(tracks, { search: view.search, sort: view.sort }),
+    [tracks, view.search, view.sort],
   )
-  const attentionEntries = [...activeEntries, ...blockedEntries]
-  const attentionCount = stagedImports.length + attentionEntries.length
-  const readyCount = filterReadyTracks(tracks).length
+  const activeCount = queueRuns.filter((entry) => isActiveRunStatus(entry.run.status)).length
+  const failedCount = queueRuns.filter(
+    (entry) => entry.run.status === 'failed' || entry.run.status === 'cancelled',
+  ).length
+  const showQueue = stagedImportsCount > 0 || activeCount > 0 || failedCount > 0
+  const selectableTracks = useMemo(
+    () =>
+      browseTracks.filter((track) => {
+        const stage = trackStageSummary(track)
+        return stage.key === 'ready' || stage.key === 'final'
+      }),
+    [browseTracks],
+  )
+  const selectedCount = selected.size
+  const allSelectable = selectableTracks.length > 0 && selectableTracks.every((track) => selected.has(track.id))
+
+  function toggleSelect(trackId: string) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(trackId)) next.delete(trackId)
+      else next.add(trackId)
+      return next
+    })
+  }
+
+  function toggleSelecting() {
+    if (selecting) setSelected(new Set())
+    setSelecting((value) => !value)
+  }
+
+  function toggleAll() {
+    if (allSelectable) setSelected(new Set())
+    else setSelected(new Set(selectableTracks.map((track) => track.id)))
+  }
+
+  function handleBatchExport() {
+    if (selectedCount === 0) return
+    onBatchExport(Array.from(selected))
+    setSelected(new Set())
+    setSelecting(false)
+  }
 
   return (
-    <section className="kp-page kp-songs-page">
-      <header className="kp-page-header kp-songs-header">
-        <div>
-          <h1>Songs</h1>
-          <p>{sectionCopy(view.mode)}</p>
-        </div>
-        <button type="button" className="button-primary" onClick={onAddSongs}>
-          Add songs
+    <section className="library">
+      <h1 className="library-hero">Library</h1>
+
+      {showQueue ? (
+        <QueueStrip
+          draftsCount={stagedImportsCount}
+          activeCount={activeCount}
+          failedCount={failedCount}
+          onReviewImports={onReviewImports}
+        />
+      ) : null}
+
+      <div className="library-toolbar">
+        <input
+          type="search"
+          className="library-search"
+          placeholder="Search title or artist"
+          aria-label="Search songs"
+          value={view.search}
+          onChange={(event) => onViewChange({ ...view, search: event.target.value })}
+        />
+        <select
+          className="library-sort"
+          aria-label="Sort songs"
+          value={view.sort}
+          onChange={(event) => onViewChange({ ...view, sort: event.target.value as SongsView['sort'] })}
+        >
+          {SONG_BROWSE_SORT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className={`library-batch-toggle ${selecting ? 'is-active' : ''}`}
+          onClick={toggleSelecting}
+          disabled={tracks.length === 0}
+        >
+          {selecting ? 'Cancel' : 'Select'}
         </button>
-      </header>
-
-      <div className="kp-songs-toolbar">
-        <div className="kp-segmented-control" role="tablist" aria-label="Song worklist views">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view.mode === 'needs-attention'}
-            className={view.mode === 'needs-attention' ? 'kp-segmented-active' : ''}
-            onClick={() => onViewChange({ ...view, mode: 'needs-attention' })}
-          >
-            Needs Attention ({attentionCount})
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view.mode === 'ready'}
-            className={view.mode === 'ready' ? 'kp-segmented-active' : ''}
-            onClick={() => onViewChange({ ...view, mode: 'ready' })}
-          >
-            Ready ({readyCount})
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view.mode === 'library'}
-            className={view.mode === 'library' ? 'kp-segmented-active' : ''}
-            onClick={() => onViewChange({ ...view, mode: 'library' })}
-          >
-            Library ({tracks.length})
-          </button>
-        </div>
-
-        {view.mode === 'library' ? (
-          <div className="kp-library-controls">
-            <input
-              type="search"
-              className="kp-search-field"
-              placeholder="Search title or artist"
-              aria-label="Search songs by title or artist"
-              value={view.search}
-              onChange={(event) => onViewChange({ ...view, search: event.target.value })}
-            />
-            <select
-              aria-label="Sort songs"
-              value={view.sort}
-              onChange={(event) =>
-                onViewChange({ ...view, sort: event.target.value as SongsView['sort'] })
-              }
-            >
-              {SONG_BROWSE_SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
       </div>
 
-      {view.mode === 'needs-attention' ? (
-        <div className="kp-songs-flow">
-          {stagedImports.length > 0 ? (
-            <section className="kp-songs-section">
-              <header className="kp-section-header">
-                <div>
-                  <h2>Import review</h2>
-                  <p>Clean the metadata once, resolve duplicates, then decide whether to split immediately.</p>
-                </div>
-              </header>
-              <StagedImportsPanel
-                stagedImports={stagedImports}
-                profiles={profiles}
-                defaultProfileKey={defaultProfileKey}
-                confirming={confirmingDrafts}
-                onUpdateStagedImport={onUpdateStagedImport}
-                onDiscardStagedImport={onDiscardStagedImport}
-                onConfirmStagedImports={onConfirmStagedImports}
-              />
-            </section>
-          ) : null}
-
-          {attentionEntries.length > 0 ? (
-            <section className="kp-songs-section">
-              <header className="kp-section-header">
-                <div>
-                  <h2>Processing</h2>
-                  <p>Keep running splits and failures visible without letting them crowd the rest of the library.</p>
-                </div>
-              </header>
-              <QueueList
-                showHeader={false}
-                entries={attentionEntries}
-                onSelectRun={(trackId, runId) => {
-                  const track = tracks.find((item) => item.id === trackId)
-                  if (!track) return
-                  const runStatus = attentionEntries.find((entry) => entry.run.id === runId)?.run.status ?? null
-                  onOpenTrack(track, { runId, runStatus })
-                }}
-                onCancelRun={onCancelRun}
-                onRetryRun={onRetryRun}
-                onDismissRun={onDismissRun}
-                cancellingRunId={cancellingRunId}
-                retryingRunId={retryingRunId}
-              />
-            </section>
-          ) : null}
-
-          {stagedImports.length === 0 && attentionEntries.length === 0 ? (
-            <p className="empty-state">Nothing needs attention right now. Open Ready when a split finishes, or add more songs.</p>
-          ) : null}
+      {selecting && selectableTracks.length > 0 ? (
+        <div className="library-toolbar">
+          <button type="button" className="library-batch-toggle" onClick={toggleAll}>
+            {allSelectable ? 'Clear all' : 'Select all ready'}
+          </button>
+          <span className="library-count">{selectedCount} selected</span>
         </div>
       ) : null}
 
-      {view.mode === 'ready' ? (
-        readyTracks.length > 0 ? (
-          <div className="kp-song-list">
-            {readyTracks.map((track) => (
-              <SongRow
-                key={track.id}
-                track={track}
-                currentTrackId={currentTrackId}
-                onOpen={(nextTrack) => onOpenTrack(nextTrack)}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="empty-state">No finished songs are ready to reopen in Mix yet.</p>
-        )
-      ) : null}
+      {browseTracks.length > 0 ? (
+        <div className="library-list" role="list">
+          {browseTracks.map((track) => {
+            const status = rowStatus(track)
+            const isActive = currentTrackId === track.id
+            const isSelected = selected.has(track.id)
+            const canSelect =
+              selecting &&
+              selectableTracks.some((candidate) => candidate.id === track.id)
+            const initials = track.title.trim().slice(0, 1).toUpperCase() || 'S'
+            const meta = [track.artist ?? 'Unknown artist', formatDuration(track.duration_seconds)]
+              .filter(Boolean)
+              .join(' · ')
 
-      {view.mode === 'library' ? (
-        browseTracks.length > 0 ? (
-          <div className="kp-song-list">
-            {browseTracks.map((track) => (
-              <SongRow
+            return (
+              <button
                 key={track.id}
-                track={track}
-                currentTrackId={currentTrackId}
-                onOpen={(nextTrack) => onOpenTrack(nextTrack)}
-              />
-            ))}
-          </div>
-        ) : tracks.length > 0 ? (
-          <p className="empty-state">No songs match this search.</p>
-        ) : (
-          <p className="empty-state">No songs yet. Add files or a YouTube link to stage the first batch.</p>
-        )
+                type="button"
+                role="listitem"
+                className={`song-row ${isActive ? 'is-active' : ''}`}
+                data-batch={selecting ? 'on' : 'off'}
+                onClick={(event) => {
+                  if (selecting) {
+                    event.preventDefault()
+                    if (canSelect) toggleSelect(track.id)
+                    return
+                  }
+                  onOpenTrack(track)
+                }}
+              >
+                {selecting ? (
+                  <span className="song-row-check">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      disabled={!canSelect}
+                      onChange={() => toggleSelect(track.id)}
+                      onClick={(event) => event.stopPropagation()}
+                      aria-label={`Select ${track.title}`}
+                    />
+                  </span>
+                ) : null}
+                <span className="song-row-art" aria-hidden>
+                  {track.thumbnail_url ? <img src={track.thumbnail_url} alt="" loading="lazy" /> : initials}
+                </span>
+                <span className="song-row-copy">
+                  <span className="song-row-title">{track.title}</span>
+                  <span className="song-row-sub">{meta}</span>
+                </span>
+                {status.text ? (
+                  <span className={`song-row-status ${status.tone ? `is-${status.tone}` : ''}`}>
+                    {status.text}
+                  </span>
+                ) : (
+                  <span />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      ) : tracks.length > 0 ? (
+        <p className="library-empty">No songs match this search.</p>
+      ) : (
+        <div className="library-empty">
+          <strong>No songs yet</strong>
+          <p>Paste a YouTube URL, drop audio files, or hit Add to start.</p>
+          <button type="button" className="button-primary" onClick={onAddSongs}>
+            Add songs
+          </button>
+        </div>
+      )}
+
+      {selecting && selectedCount > 0 ? (
+        <div className="batch-bar" role="status">
+          <span className="batch-bar-count">{selectedCount} selected</span>
+          <span className="batch-bar-hint">Export as edited mix, raw stems, or both.</span>
+          <button type="button" className="button-primary" onClick={handleBatchExport}>
+            Export selection
+          </button>
+        </div>
       ) : null}
     </section>
   )

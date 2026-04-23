@@ -92,10 +92,3 @@ export function applySongBrowse(
     }
   })
 }
-
-export function filterReadyTracks(tracks: TrackSummary[]) {
-  return tracks.filter((track) => {
-    const stage = trackStageSummary(track)
-    return stage.key === 'ready' || stage.key === 'final'
-  })
-}

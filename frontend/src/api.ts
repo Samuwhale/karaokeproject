@@ -207,10 +207,6 @@ export function updateRunMix(trackId: string, runId: string, stems: RunMixStemEn
   return putJson<RunDetail>(`/api/tracks/${trackId}/runs/${runId}/mix`, { stems })
 }
 
-export function setRunNote(runId: string, note: string) {
-  return putJson<RunDetail>(`/api/runs/${runId}/note`, { note })
-}
-
 export function getActiveRuns() {
   return fetchJson<QueueRunEntry[]>('/api/runs/active')
 }
@@ -219,17 +215,6 @@ export function getActiveRuns() {
 
 export function setKeeperRun(trackId: string, runId: string | null) {
   return putJson<TrackDetail>(`/api/tracks/${trackId}/keeper`, { run_id: runId })
-}
-
-export function purgeNonKeeperRuns(trackId: string) {
-  return fetchJson<{ deleted_run_count: number; bytes_reclaimed: number }>(
-    `/api/tracks/${trackId}/purge-non-keepers`,
-    { method: 'POST' },
-  )
-}
-
-export function flushPendingTrackPurge(trackId: string) {
-  postKeepalive(`/api/tracks/${trackId}/purge-non-keepers`)
 }
 
 export function batchDeleteTracks(payload: BatchTrackIdsInput) {

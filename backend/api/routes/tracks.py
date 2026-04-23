@@ -11,12 +11,10 @@ from backend.schemas.tracks import (
     BatchTrackIdsRequest,
     CreateRunRequest,
     CreateRunResponse,
-    PurgeNonKeepersResponse,
     QueueRunResponse,
     RunDetailResponse,
     RunMixInput,
     SetKeeperRequest,
-    SetRunNoteRequest,
     TrackDetailResponse,
     TrackSummaryResponse,
     UpdateTrackRequest,
@@ -32,7 +30,6 @@ from backend.services.tracks import (
     dismiss_run,
     get_track,
     list_tracks,
-    purge_non_keeper_runs,
     request_run_cancellation,
     retry_run,
     serialize_run_detail,
@@ -41,7 +38,6 @@ from backend.services.tracks import (
     serialize_track_summary,
     set_keeper_run,
     set_run_mix,
-    set_run_note,
     update_track,
 )
 
@@ -157,21 +153,6 @@ def delete_run_endpoint(run_id: str, session: Session = Depends(get_db_session))
     return {"ok": True}
 
 
-@router.put("/runs/{run_id}/note", response_model=RunDetailResponse)
-def set_run_note_endpoint(
-    run_id: str,
-    payload: SetRunNoteRequest,
-    session: Session = Depends(get_db_session),
-) -> RunDetailResponse:
-    try:
-        run = set_run_note(session, run_id, payload.note)
-    except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return serialize_run_detail(run)
-
-
 @router.post("/runs/{run_id}/retry", response_model=CreateRunResponse)
 def retry_run_endpoint(run_id: str, session: Session = Depends(get_db_session)) -> CreateRunResponse:
     try:
@@ -219,20 +200,6 @@ def set_track_keeper(
     if track is None:
         raise HTTPException(status_code=404, detail="Track not found.")
     return serialize_track_detail(track)
-
-
-@router.post("/tracks/{track_id}/purge-non-keepers", response_model=PurgeNonKeepersResponse)
-def purge_non_keepers_endpoint(
-    track_id: str,
-    session: Session = Depends(get_db_session),
-) -> PurgeNonKeepersResponse:
-    try:
-        deleted, reclaimed = purge_non_keeper_runs(session, track_id)
-    except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return PurgeNonKeepersResponse(deleted_run_count=deleted, bytes_reclaimed=reclaimed)
 
 
 @router.get("/runs/active", response_model=list[QueueRunResponse])
