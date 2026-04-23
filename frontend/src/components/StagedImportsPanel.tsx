@@ -368,35 +368,39 @@ export function StagedImportsPanel({
           )}
         </div>
         <div className="import-flow-footer-actions staged-imports-footer-actions">
-          <label className="staged-imports-toggle">
-            <input
-              type="checkbox"
-              checked={startSplitAfterImport}
-              disabled={!canConfirm || confirming}
-              onChange={(event) => setStartSplitAfterImport(event.target.checked)}
-            />
-            <span>Start first split after import</span>
-          </label>
-          {startSplitAfterImport ? (
-            <label className="field field-inline import-flow-profile-select">
-              <span>Split with</span>
-              <select
-                value={effectiveQueueProfileKey}
-                onChange={(event) =>
-                  setQueueProfileState({
-                    sourceKey: defaultProfileKey,
-                    value: event.target.value,
-                  })
-                }
-                disabled={!canConfirm || confirming}
-              >
-                {profiles.map((profile) => (
-                  <option key={profile.key} value={profile.key}>
-                    {profile.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {stagedImports.length > 0 ? (
+            <div className="staged-imports-decision-block">
+              <label className="staged-imports-toggle">
+                <input
+                  type="checkbox"
+                  checked={startSplitAfterImport}
+                  disabled={!canConfirm || confirming}
+                  onChange={(event) => setStartSplitAfterImport(event.target.checked)}
+                />
+                <span>Start the first split after import</span>
+              </label>
+              {startSplitAfterImport ? (
+                <label className="field field-inline import-flow-profile-select">
+                  <span>Split with</span>
+                  <select
+                    value={effectiveQueueProfileKey}
+                    onChange={(event) =>
+                      setQueueProfileState({
+                        sourceKey: defaultProfileKey,
+                        value: event.target.value,
+                      })
+                    }
+                    disabled={!canConfirm || confirming}
+                  >
+                    {profiles.map((profile) => (
+                      <option key={profile.key} value={profile.key}>
+                        {profile.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
           ) : null}
           <button
             type="button"

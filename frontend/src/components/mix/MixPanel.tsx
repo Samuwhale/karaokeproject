@@ -215,37 +215,6 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
 
   return (
     <section className="kp-mix-panel">
-      <header className="kp-mix-header">
-        <div className="kp-mix-header-copy">
-          <strong>Live stem balance</strong>
-          <span>{stems.length} stems ready for mute, solo, and level changes.</span>
-        </div>
-        <div className="kp-mix-header-actions">
-          <span className="kp-mix-status" aria-live="polite">
-            {saving || saveState === 'saving' ? (
-              <>
-                <Spinner /> {statusLabel}
-              </>
-            ) : (
-              statusLabel
-            )}
-          </span>
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={handleReset}
-            disabled={showsDefault && stems.every((stem) => !stem.soloed)}
-          >
-            Reset balance
-          </button>
-          {saveState === 'failed' && retryPayload ? (
-            <button type="button" className="button-secondary" onClick={() => void persistMix(retryPayload)}>
-              Retry save
-            </button>
-          ) : null}
-        </div>
-      </header>
-
       <section className="kp-mix-transport">
         <div className="kp-mix-transport-main">
           <div className="kp-mix-transport-controls">
@@ -271,6 +240,31 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
           <div className="kp-mix-clock">
             <strong>{formatTime(mixer.currentTime)}</strong>
             <span>{formatTime(mixer.duration)}</span>
+          </div>
+
+          <div className="kp-mix-transport-side">
+            <span className="kp-mix-status" aria-live="polite">
+              {saving || saveState === 'saving' ? (
+                <>
+                  <Spinner /> {statusLabel}
+                </>
+              ) : (
+                statusLabel
+              )}
+            </span>
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={handleReset}
+              disabled={showsDefault && stems.every((stem) => !stem.soloed)}
+            >
+              Reset balance
+            </button>
+            {saveState === 'failed' && retryPayload ? (
+              <button type="button" className="button-secondary" onClick={() => void persistMix(retryPayload)}>
+                Retry save
+              </button>
+            ) : null}
           </div>
         </div>
 

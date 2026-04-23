@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
@@ -46,8 +46,8 @@
   --radius-sm: 8px;
   --radius-md: 14px;
 
-  --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
-  --font-display: 'Manrope', 'Inter', -apple-system, system-ui, sans-serif;
+  --font-sans: 'IBM Plex Sans', -apple-system, system-ui, sans-serif;
+  --font-display: 'Space Grotesk', 'IBM Plex Sans', -apple-system, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
   --line-height-base: 1.5;

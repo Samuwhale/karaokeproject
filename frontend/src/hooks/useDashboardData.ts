@@ -3,11 +3,7 @@ import type { MutableRefObject } from 'react'
 
 import {
   backfillMetrics,
-  batchApplyTrackFields,
-  batchCancelTrackRuns,
   batchDeleteTracks,
-  batchPurgeNonKeepers,
-  batchQueueRuns,
   cancelRun,
   cleanupExportBundles,
   cleanupNonKeeperRunsLibrary,
@@ -69,7 +65,6 @@ const DELETE_UNDO_MS = 5000
 const PURGE_UNDO_MS = 5000
 
 export type ConnectionState = 'ready' | 'syncing' | 'offline'
-export type SelectionKey = 'library' | 'queue'
 
 export type Connection = {
   state: ConnectionState
@@ -106,13 +101,6 @@ function createId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function toggleInSet(set: Set<string>, id: string): Set<string> {
-  const next = new Set(set)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  return next
-}
-
 function clearTimer(timerRef: MutableRefObject<number | null>) {
   if (timerRef.current === null) return
   window.clearTimeout(timerRef.current)
@@ -143,9 +131,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
 
   const [selectedTrack, setSelectedTrack] = useState<TrackDetail | null>(null)
 
-  const [selectedLibraryIds, setSelectedLibraryIds] = useState<Set<string>>(new Set())
-  const [selectedQueueRunIds, setSelectedQueueRunIds] = useState<Set<string>>(new Set())
-
   const [toasts, setToasts] = useState<Toast[]>([])
   const [resolvingYoutubeImport, setResolvingYoutubeImport] = useState(false)
   const [resolvingLocalImport, setResolvingLocalImport] = useState(false)
@@ -164,7 +149,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
   const [savingNoteRunId, setSavingNoteRunId] = useState<string | null>(null)
   const [savingMixRunId, setSavingMixRunId] = useState<string | null>(null)
   const [updatingTrack, setUpdatingTrack] = useState(false)
-  const [batching, setBatching] = useState(false)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set())
   const [pendingPurge, setPendingPurge] = useState<PendingPurge | null>(null)
 
@@ -289,20 +273,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
       setDrafts(nextDrafts)
       setQueueRuns(nextQueue)
 
-      // Prune stale selections
-      setSelectedLibraryIds((current) => {
-        const valid = new Set(nextTracks.map((track) => track.id))
-        const next = new Set<string>()
-        for (const id of current) if (valid.has(id)) next.add(id)
-        return next.size === current.size ? current : next
-      })
-      setSelectedQueueRunIds((current) => {
-        const valid = new Set(nextQueue.map((entry) => entry.run.id))
-        const next = new Set<string>()
-        for (const id of current) if (valid.has(id)) next.add(id)
-        return next.size === current.size ? current : next
-      })
-
       await syncSelectedTrackDetail(routeTrackIdRef.current, nextQueue.length)
 
       setConnection({
@@ -393,23 +363,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
     }, 0)
     return () => window.clearTimeout(id)
   }, [selection.trackId, syncSelectedTrackDetail])
-
-  // ----- Selection helpers -----
-
-  function toggleLibrarySelected(trackId: string) {
-    setSelectedLibraryIds((current) => toggleInSet(current, trackId))
-  }
-  function toggleQueueRunSelected(runId: string) {
-    setSelectedQueueRunIds((current) => toggleInSet(current, runId))
-  }
-  function clearSelection(key: SelectionKey) {
-    if (key === 'library') setSelectedLibraryIds(new Set())
-    if (key === 'queue') setSelectedQueueRunIds(new Set())
-  }
-  function selectAll(key: SelectionKey, ids: string[]) {
-    if (key === 'library') setSelectedLibraryIds(new Set(ids))
-    if (key === 'queue') setSelectedQueueRunIds(new Set(ids))
-  }
 
   // ----- Import (Add Sources) -----
 
@@ -533,12 +486,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
   async function handleDismissRun(runId: string) {
     try {
       await dismissRun(runId)
-      setSelectedQueueRunIds((current) => {
-        if (!current.has(runId)) return current
-        const next = new Set(current)
-        next.delete(runId)
-        return next
-      })
       pushToast('success', `Cleared ${findRunTrackLabel(runId)} from queue follow-up.`)
       await refreshDashboard()
     } catch (error) {
@@ -743,41 +690,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
     }
   }
 
-  // ----- Batch track ops (library surface) -----
-
-  async function handleBatchQueueRuns(trackIds: string[], processing: RunProcessingConfigInput) {
-    if (!trackIds.length) return
-    setBatching(true)
-    try {
-      const result = await batchQueueRuns({ track_ids: trackIds, processing })
-      pushToast(
-        'success',
-        `Queued ${result.queued_run_count} run${result.queued_run_count === 1 ? '' : 's'}.`,
-      )
-      await refreshDashboard()
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
-    } finally {
-      setBatching(false)
-    }
-  }
-
-  async function handleBatchApplyArtist(trackIds: string[], artist: string | null) {
-    if (!trackIds.length) return
-    setBatching(true)
-    try {
-      const result = await batchApplyTrackFields({ track_ids: trackIds, artist })
-      pushToast('success', `Updated ${result.updated_track_count} track${result.updated_track_count === 1 ? '' : 's'}.`)
-      await refreshDashboard()
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
-    } finally {
-      setBatching(false)
-    }
-  }
-
   function setPendingDeleteIdsImmediate(next: Set<string>) {
     pendingDeleteIdsRef.current = next
     setPendingDeleteIds(next)
@@ -785,7 +697,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
 
   async function commitTrackDelete(trackIds: string[]) {
     if (!trackIds.length) return
-    setBatching(true)
     try {
       await batchDeleteTracks({ track_ids: trackIds })
       setPendingDeleteIdsImmediate(new Set())
@@ -799,8 +710,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
       const next = new Set(pendingDeleteIdsRef.current)
       for (const id of trackIds) next.delete(id)
       setPendingDeleteIdsImmediate(next)
-    } finally {
-      setBatching(false)
     }
   }
 
@@ -821,7 +730,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
     }
     const scheduled = [...trackIds]
     setPendingDeleteIdsImmediate(new Set(scheduled))
-    setSelectedLibraryIds(new Set())
     pushToast(
       'info',
       `Scheduled ${scheduled.length} track${scheduled.length === 1 ? '' : 's'} for deletion.`,
@@ -837,148 +745,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
       pendingDeleteTimerRef.current = null
       void commitTrackDelete(scheduled)
     }, DELETE_UNDO_MS)
-  }
-
-  function handleBatchDeleteTracks(trackIds: string[]) {
-    scheduleTrackDelete(trackIds)
-  }
-
-  async function handleBatchCancelTrackRuns(trackIds: string[]) {
-    if (!trackIds.length) return
-    setBatching(true)
-    try {
-      const result = await batchCancelTrackRuns({ track_ids: trackIds })
-      pushToast(
-        'success',
-        `Cancelled ${result.cancelled_run_count} run${result.cancelled_run_count === 1 ? '' : 's'}.`,
-      )
-      await refreshDashboard()
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
-    } finally {
-      setBatching(false)
-    }
-  }
-
-  async function handleBatchPurgeNonKeepers(trackIds: string[]) {
-    if (!trackIds.length) return
-    setBatching(true)
-    try {
-      const result = await batchPurgeNonKeepers({ track_ids: trackIds })
-      const mb = (result.bytes_reclaimed / (1024 * 1024)).toFixed(1)
-      pushToast(
-        'success',
-        `Purged ${result.deleted_run_count} non-final render${result.deleted_run_count === 1 ? '' : 's'} across ${result.purged_track_count} track${result.purged_track_count === 1 ? '' : 's'} · ${mb} MB reclaimed.`,
-      )
-      await refreshDashboard()
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
-    } finally {
-      setBatching(false)
-    }
-  }
-
-  async function handleBatchCancelQueueRuns(runIds: string[]) {
-    if (!runIds.length) return
-    setBatching(true)
-    try {
-      const results = await Promise.allSettled(runIds.map((id) => cancelRun(id)))
-      const failedRunIds = runIds.filter((_, index) => results[index]?.status === 'rejected')
-      const cancelledCount = runIds.length - failedRunIds.length
-
-      if (cancelledCount === 0) {
-        throw new Error(
-          runIds.length === 1
-            ? 'Could not cancel the selected render.'
-            : 'Could not cancel any of the selected renders.',
-        )
-      }
-
-      setSelectedQueueRunIds(new Set(failedRunIds))
-      pushToast(
-        failedRunIds.length === 0 ? 'success' : 'info',
-        failedRunIds.length === 0
-          ? `Cancellation requested for ${cancelledCount} run${cancelledCount === 1 ? '' : 's'}.`
-          : `Cancellation requested for ${cancelledCount} run${cancelledCount === 1 ? '' : 's'}; ${failedRunIds.length} still need attention.`,
-      )
-      await refreshDashboard()
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
-    } finally {
-      setBatching(false)
-    }
-  }
-
-  async function handleBatchRetryQueueRuns(runIds: string[]) {
-    if (!runIds.length) return
-    setBatching(true)
-    try {
-      const results = await Promise.allSettled(runIds.map((id) => retryRun(id)))
-      const failedRunIds = runIds.filter((_, index) => results[index]?.status === 'rejected')
-      const succeededCount = results.filter((result) => result.status === 'fulfilled').length
-      const failedCount = runIds.length - succeededCount
-
-      if (succeededCount === 0) {
-        throw new Error(
-          runIds.length === 1
-            ? 'Could not retry the selected split.'
-            : 'Could not retry any of the selected splits.',
-        )
-      }
-
-      setSelectedQueueRunIds(new Set(failedRunIds))
-      pushToast(
-        failedCount === 0 ? 'success' : 'info',
-        failedCount === 0
-          ? `Queued ${succeededCount} ${succeededCount === 1 ? 'retry' : 'retries'}.`
-          : `Queued ${succeededCount} ${succeededCount === 1 ? 'retry' : 'retries'}; ${failedCount} still need attention.`,
-      )
-      await refreshDashboard()
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
-    } finally {
-      setBatching(false)
-    }
-  }
-
-  async function handleBatchDismissQueueRuns(runIds: string[]) {
-    if (!runIds.length) return
-    setBatching(true)
-    try {
-      const results = await Promise.allSettled(runIds.map((id) => dismissRun(id)))
-      const dismissedCount = results.filter((result) => result.status === 'fulfilled').length
-      const failedCount = runIds.length - dismissedCount
-
-      if (dismissedCount === 0) {
-        throw new Error(
-          runIds.length === 1
-            ? 'Could not dismiss the selected split.'
-            : 'Could not dismiss any of the selected splits.',
-        )
-      }
-
-      setSelectedQueueRunIds((current) => {
-        const next = new Set(current)
-        for (const id of runIds) next.delete(id)
-        return next
-      })
-      pushToast(
-        failedCount === 0 ? 'success' : 'info',
-        failedCount === 0
-          ? `Dismissed ${dismissedCount} follow-up item${dismissedCount === 1 ? '' : 's'}.`
-          : `Dismissed ${dismissedCount} follow-up item${dismissedCount === 1 ? '' : 's'}; ${failedCount} could not be dismissed.`,
-      )
-      await refreshDashboard()
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
-    } finally {
-      setBatching(false)
-    }
   }
 
   async function handleSaveSettings(payload: Omit<Settings, 'profiles'>) {
@@ -1105,12 +871,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
     queueRuns,
     cachedModels,
     selectedTrack: visibleSelectedTrack,
-    selectedLibraryIds,
-    selectedQueueRunIds,
-    toggleLibrarySelected,
-    toggleQueueRunSelected,
-    clearSelection,
-    selectAll,
     toasts,
     dismissToast,
     pushToast,
@@ -1131,7 +891,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
     savingNoteRunId,
     savingMixRunId,
     updatingTrack,
-    batching,
     handleResolveYouTube,
     handleResolveLocalImport,
     handleUpdateDraft,
@@ -1154,14 +913,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
     handleSaveMix,
     handleUpdateTrack,
     handleDeleteTrack,
-    handleBatchQueueRuns,
-    handleBatchApplyArtist,
-    handleBatchDeleteTracks,
-    handleBatchCancelTrackRuns,
-    handleBatchPurgeNonKeepers,
-    handleBatchCancelQueueRuns,
-    handleBatchRetryQueueRuns,
-    handleBatchDismissQueueRuns,
   }
 }
 

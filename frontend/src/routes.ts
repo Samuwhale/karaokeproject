@@ -1,29 +1,32 @@
-import type { LibraryFilter, LibrarySort, LibraryView } from './components/trackListView'
+import type { SongBrowseSort } from './components/trackListView'
 
-export type AppPage = 'library' | 'queue' | 'studio'
-export type StudioTab = 'mix' | 'versions'
+export type SongsMode = 'needs-attention' | 'ready' | 'library'
 
-const LIBRARY_FILTERS = new Set<LibraryFilter>(['all', 'needs-work', 'ready', 'final'])
+export type SongsView = {
+  mode: SongsMode
+  search: string
+  sort: SongBrowseSort
+}
 
-const LIBRARY_SORTS = new Set<LibrarySort>(['recent', 'created', 'title', 'runs'])
-const STUDIO_TABS = new Set<StudioTab>(['mix', 'versions'])
+const SONG_MODES = new Set<SongsMode>(['needs-attention', 'ready', 'library'])
+const SONG_SORTS = new Set<SongBrowseSort>(['recent', 'created', 'title', 'runs'])
 
-export function parseLibraryView(searchParams: URLSearchParams): LibraryView {
-  const filter = searchParams.get('filter')
+export function parseSongsView(searchParams: URLSearchParams): SongsView {
+  const mode = searchParams.get('view')
   const sort = searchParams.get('sort')
   const search = searchParams.get('search')?.trim() ?? ''
 
   return {
-    filter: filter && LIBRARY_FILTERS.has(filter as LibraryFilter) ? (filter as LibraryFilter) : 'all',
-    sort: sort && LIBRARY_SORTS.has(sort as LibrarySort) ? (sort as LibrarySort) : 'recent',
+    mode: mode && SONG_MODES.has(mode as SongsMode) ? (mode as SongsMode) : 'library',
+    sort: sort && SONG_SORTS.has(sort as SongBrowseSort) ? (sort as SongBrowseSort) : 'recent',
     search,
   }
 }
 
-export function buildLibraryPath(view: LibraryView) {
+export function buildSongsPath(view: SongsView) {
   const searchParams = new URLSearchParams()
 
-  if (view.filter !== 'all') searchParams.set('filter', view.filter)
+  if (view.mode !== 'library') searchParams.set('view', view.mode)
   if (view.sort !== 'recent') searchParams.set('sort', view.sort)
   if (view.search.trim()) searchParams.set('search', view.search.trim())
 
@@ -31,26 +34,11 @@ export function buildLibraryPath(view: LibraryView) {
   return search ? `/songs?${search}` : '/songs'
 }
 
-export function normalizeStudioTab(tab: string | undefined): StudioTab {
-  if (tab && STUDIO_TABS.has(tab as StudioTab)) return tab as StudioTab
-  return 'mix'
-}
-
-export function buildStudioPath(
-  trackId: string,
-  tab: StudioTab,
-  options?: {
-    runId?: string | null
-    compareRunId?: string | null
-  },
-) {
+export function buildMixPath(trackId: string, options?: { runId?: string | null }) {
   const searchParams = new URLSearchParams()
 
   if (options?.runId) searchParams.set('run', options.runId)
-  if (tab === 'versions' && options?.compareRunId) {
-    searchParams.set('compare', options.compareRunId)
-  }
 
   const search = searchParams.toString()
-  return search ? `/studio/${trackId}/${tab}?${search}` : `/studio/${trackId}/${tab}`
+  return search ? `/mix/${trackId}?${search}` : `/mix/${trackId}`
 }

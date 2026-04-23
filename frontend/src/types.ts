@@ -268,36 +268,8 @@ export type BatchTrackIdsInput = {
   track_ids: string[]
 }
 
-export type BatchQueueRunsInput = BatchTrackIdsInput & {
-  processing: RunProcessingConfigInput
-}
-
-export type BatchApplyInput = BatchTrackIdsInput & {
-  artist?: string | null
-}
-
-export type BatchQueueRunsResponse = {
-  queued_run_count: number
-  skipped_track_ids: string[]
-}
-
 export type BatchDeleteResponse = {
   deleted_track_count: number
-  skipped_track_ids: string[]
-}
-
-export type BatchCancelResponse = {
-  cancelled_run_count: number
-}
-
-export type BatchApplyResponse = {
-  updated_track_count: number
-}
-
-export type BatchPurgeNonKeepersResponse = {
-  purged_track_count: number
-  deleted_run_count: number
-  bytes_reclaimed: number
   skipped_track_ids: string[]
 }
 

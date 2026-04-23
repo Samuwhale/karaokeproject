@@ -71,8 +71,8 @@ function defaultMixSummary(
   if (usesExplicitRunSelection) {
     if (!selectedTracks.length) return null
     return selectedTracks.length === 1
-      ? 'Using the mix saved on the selected split.'
-      : 'Each selected track uses the mix saved on its chosen split.'
+      ? 'Using the saved stem balance from the selected version.'
+      : 'Each selected track uses the saved stem balance from its chosen version.'
   }
 
   if (selectedTracks.length === 1) {
@@ -241,30 +241,30 @@ export function ExportBuilder({
   const currentMixSummary = mixSummary ?? defaultMixSummary(selectedTracks, usesExplicitRunSelection)
   const quickExportSummary = [
     preset === 'final-mix'
-      ? `Mixdown: ${mixdownFormat.toUpperCase()}`
+      ? `Current mix: ${mixdownFormat.toUpperCase()}`
       : preset === 'stems-for-editing'
-        ? `Stems: ${stemFormat.toUpperCase()}`
-        : `Mixdown ${mixdownFormat.toUpperCase()} + stems ${stemFormat.toUpperCase()}`,
+        ? `All stems: ${stemFormat.toUpperCase()}`
+        : `Mix ${mixdownFormat.toUpperCase()} + stems ${stemFormat.toUpperCase()}`,
     showPackaging ? (mode === 'single-bundle' ? 'One zip' : 'Zip per track') : null,
   ]
     .filter(Boolean)
     .join(' · ')
   const presetLabel =
     preset === 'final-mix'
-      ? 'Final mix'
+      ? 'Current mix'
       : preset === 'stems-for-editing'
-        ? 'Stems for editing'
-        : 'Full package'
+        ? 'All stems'
+        : 'Mix + stems'
   const blockingReason =
     !selectedTrackIds.length
-      ? 'Choose at least one track to export.'
-      : mp3Requested && !bitrateValid
-        ? BITRATE_HINT
-        : !artifactList.length
-          ? preset === 'final-mix'
-            ? 'No mixdown is available for this selection yet.'
-            : 'This selection does not have the files needed for that preset.'
-          : plan && includedCount === 0
+          ? 'Choose at least one track to export.'
+          : mp3Requested && !bitrateValid
+            ? BITRATE_HINT
+            : !artifactList.length
+              ? preset === 'final-mix'
+                ? 'No mixdown is available for this selection yet.'
+                : 'This selection does not have the files needed for that preset.'
+              : plan && includedCount === 0
             ? 'None of the selected tracks have the files required for this export plan.'
             : null
 
@@ -315,7 +315,7 @@ export function ExportBuilder({
   return (
     <div className="export-builder">
       <section className="export-section">
-        <h3>Export preset</h3>
+        <h3>Export intent</h3>
         {lockPreset ? (
           <p className="output-intent-summary">
             {presetLabel} is already selected for this export. Adjust format only if you need to.
@@ -327,7 +327,7 @@ export function ExportBuilder({
         )}
         {!lockPreset && stemOptions.length === 0 && (preset === 'stems-for-editing' || preset === 'full-package') ? (
           <p className="export-inline-warning">
-            This selection does not have separated stems, so only Final mix can be exported right now.
+            This selection does not have separated stems, so only Current mix can be exported right now.
           </p>
         ) : null}
         {lockPreset ? (
@@ -336,10 +336,10 @@ export function ExportBuilder({
               <strong>{presetLabel}</strong>
               <span>
                 {preset === 'final-mix'
-                  ? 'Just the saved mixdown.'
+                  ? 'Build the saved mix only.'
                   : preset === 'stems-for-editing'
-                    ? 'Export the separated stems without a finished mixdown.'
-                    : 'Mixdown, stems, and the source audio together.'}
+                    ? 'Build the raw separated stems only.'
+                    : 'Build the saved mix plus the raw stems together.'}
               </span>
             </div>
           </div>
@@ -350,8 +350,8 @@ export function ExportBuilder({
               className={`export-preset ${preset === 'final-mix' ? 'export-preset-active' : ''}`}
               onClick={() => setPreset('final-mix')}
             >
-              <strong>Final mix</strong>
-              <span>Just the saved mixdown.</span>
+              <strong>Current mix</strong>
+              <span>Build the saved mix only.</span>
             </button>
             <button
               type="button"
@@ -359,8 +359,8 @@ export function ExportBuilder({
               onClick={() => setPreset('stems-for-editing')}
               disabled={stemOptions.length === 0}
             >
-              <strong>Stems for editing</strong>
-              <span>Export the separated stems without a finished mixdown.</span>
+              <strong>All stems</strong>
+              <span>Build the raw separated stems only.</span>
             </button>
             <button
               type="button"
@@ -368,8 +368,8 @@ export function ExportBuilder({
               onClick={() => setPreset('full-package')}
               disabled={stemOptions.length === 0}
             >
-              <strong>Full package</strong>
-              <span>Mixdown, stems, and the source audio together.</span>
+              <strong>Mix + stems</strong>
+              <span>Build the saved mix plus the raw stems together.</span>
             </button>
           </div>
         )}
@@ -399,7 +399,7 @@ export function ExportBuilder({
           className="button-secondary"
           onClick={() => setShowAdvanced((current) => !current)}
         >
-          {showAdvanced ? 'Hide customization' : 'Customize output'}
+          {showAdvanced ? 'Hide settings' : 'More settings'}
         </button>
       </section>
 

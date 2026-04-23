@@ -164,35 +164,6 @@ class QueueRunResponse(BaseModel):
 class BatchTrackIdsRequest(BaseModel):
     track_ids: list[str]
 
-
-class BatchQueueRunsRequest(BatchTrackIdsRequest):
-    processing: RunProcessingConfigRequest
-
-
-class BatchApplyRequest(BatchTrackIdsRequest):
-    artist: str | None = None
-
-
-class BatchQueueRunsResponse(BaseModel):
-    queued_run_count: int
-    skipped_track_ids: list[str] = []
-
-
 class BatchDeleteResponse(BaseModel):
     deleted_track_count: int
-    skipped_track_ids: list[str] = []
-
-
-class BatchCancelResponse(BaseModel):
-    cancelled_run_count: int
-
-
-class BatchApplyResponse(BaseModel):
-    updated_track_count: int
-
-
-class BatchPurgeNonKeepersResponse(BaseModel):
-    purged_track_count: int
-    deleted_run_count: int
-    bytes_reclaimed: int
     skipped_track_ids: list[str] = []

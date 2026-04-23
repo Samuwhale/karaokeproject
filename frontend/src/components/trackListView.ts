@@ -1,149 +1,84 @@
 import type { TrackSummary } from '../types'
 import { isActiveRunStatus } from './runStatus'
 
-export type LibrarySort = 'recent' | 'created' | 'title' | 'runs'
-export type LibraryFilter = 'all' | 'needs-work' | 'ready' | 'final'
+export type SongBrowseSort = 'recent' | 'created' | 'title' | 'runs'
 
-export type LibraryView = {
-  search: string
-  sort: LibrarySort
-  filter: LibraryFilter
-}
-
-export type LibraryStageSummary = {
-  key: 'rendering' | 'needs-attention' | 'ready-to-render' | 'ready' | 'final'
-  label: string
-  detail: string
-}
-
-export const DEFAULT_LIBRARY_VIEW: LibraryView = {
-  search: '',
-  sort: 'recent',
-  filter: 'all',
-}
-
-export const LIBRARY_FILTERS: Array<{
-  value: LibraryFilter
+export type TrackStageSummary = {
+  key: 'processing' | 'needs-attention' | 'needs-split' | 'ready' | 'final'
   label: string
   description: string
-}> = [
-  {
-    value: 'all',
-    label: 'All',
-    description: 'Every song in the library.',
-  },
-  {
-    value: 'needs-work',
-    label: 'Needs Work',
-    description: 'Songs that still need a split, retry, or review.',
-  },
-  {
-    value: 'ready',
-    label: 'Ready',
-    description: 'Songs ready to review and mix.',
-  },
-  {
-    value: 'final',
-    label: 'Final',
-    description: 'Songs with a chosen final version.',
-  },
+  actionLabel: string
+}
+
+export const SONG_BROWSE_SORT_OPTIONS: { value: SongBrowseSort; label: string }[] = [
+  { value: 'recent', label: 'Recently updated' },
+  { value: 'created', label: 'Recently added' },
+  { value: 'title', label: 'Title A-Z' },
+  { value: 'runs', label: 'Most versions' },
 ]
 
-export function trackStageSummary(track: TrackSummary): LibraryStageSummary {
+export function trackStageSummary(track: TrackSummary): TrackStageSummary {
   const latestStatus = track.latest_run?.status ?? null
 
   if (track.keeper_run_id) {
     return {
       key: 'final',
       label: 'Final saved',
-      detail: track.has_custom_mix
-        ? 'A final version is chosen and a custom mix is saved.'
-        : 'A final version is chosen and ready to export again any time.',
+      description: track.has_custom_mix ? 'Saved custom mix on the chosen final version.' : 'Final version saved and ready to export.',
+      actionLabel: 'Open mix',
     }
   }
 
   if (latestStatus === 'failed' || latestStatus === 'cancelled') {
     return {
       key: 'needs-attention',
-      label: 'Retry split',
-      detail: 'The latest split failed. Retry it or choose a different setup.',
+      label: 'Needs attention',
+      description: 'The latest split failed or was cancelled.',
+      actionLabel: 'Review split',
     }
   }
 
   if (latestStatus && isActiveRunStatus(latestStatus)) {
     return {
-      key: 'rendering',
-      label: 'Rendering',
-      detail: track.latest_run?.status_message || 'Processing in the background.',
+      key: 'processing',
+      label: 'Splitting now',
+      description: track.latest_run?.status_message || 'The latest split is still running.',
+      actionLabel: 'Open workspace',
     }
   }
 
   if (latestStatus === 'completed') {
     return {
       key: 'ready',
-      label: 'Needs final choice',
-      detail: track.has_custom_mix
-        ? 'A custom mix is saved. Re-open it or compare it before you lock in the final version.'
-        : 'The split is usable. Compare versions first, then open the winner in Mix.',
+      label: track.has_custom_mix ? 'Mix saved' : 'Ready to mix',
+      description: track.has_custom_mix ? 'A saved stem balance is ready to reopen.' : 'The latest completed split is ready in Mix.',
+      actionLabel: 'Open mix',
     }
   }
 
   return {
-    key: 'ready-to-render',
+    key: 'needs-split',
     label: 'Needs split',
-    detail: 'Import is done. Queue the first split when you are ready.',
+    description: 'The source is imported, but no split has been queued yet.',
+    actionLabel: 'Open workspace',
   }
 }
 
-export function countLibraryFilters(tracks: TrackSummary[]): Record<LibraryFilter, number> {
-  const counts: Record<LibraryFilter, number> = {
-    all: tracks.length,
-    'needs-work': 0,
-    ready: 0,
-    final: 0,
-  }
-
-  for (const track of tracks) {
-    const stage = trackStageSummary(track)
-    if (stage.key === 'final') {
-      counts.final += 1
-      continue
-    }
-
-    if (stage.key === 'ready') {
-      counts.ready += 1
-      continue
-    }
-
-    counts['needs-work'] += 1
-  }
-
-  return counts
-}
-
-export function applyLibraryView(tracks: TrackSummary[], view: LibraryView): TrackSummary[] {
+export function applySongBrowse(
+  tracks: TrackSummary[],
+  view: {
+    search: string
+    sort: SongBrowseSort
+  },
+) {
   const query = view.search.trim().toLowerCase()
+
   const matches = tracks.filter((track) => {
-    if (query) {
-      const haystack = `${track.title} ${track.artist ?? ''}`.toLowerCase()
-      if (!haystack.includes(query)) return false
-    }
-
-    const stage = trackStageSummary(track)
-    if (view.filter === 'needs-work') {
-      return stage.key === 'rendering' || stage.key === 'needs-attention' || stage.key === 'ready-to-render'
-    }
-
-    if (view.filter === 'ready') {
-      return stage.key === 'ready'
-    }
-
-    if (view.filter === 'final') {
-      return stage.key === 'final'
-    }
-
-    return true
+    if (!query) return true
+    const haystack = `${track.title} ${track.artist ?? ''}`.toLowerCase()
+    return haystack.includes(query)
   })
+
   return [...matches].sort((a, b) => {
     switch (view.sort) {
       case 'title':
@@ -155,5 +90,12 @@ export function applyLibraryView(tracks: TrackSummary[], view: LibraryView): Tra
       default:
         return b.updated_at.localeCompare(a.updated_at)
     }
+  })
+}
+
+export function filterReadyTracks(tracks: TrackSummary[]) {
+  return tracks.filter((track) => {
+    const stage = trackStageSummary(track)
+    return stage.key === 'ready' || stage.key === 'final'
   })
 }

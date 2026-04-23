@@ -12,8 +12,6 @@ const REMEDIATION: { pattern: RegExp; hint: string }[] = [
 
 type QueueListProps = {
   entries: QueueRunEntry[]
-  selectedIds: Set<string>
-  onToggleSelect: (runId: string) => void
   onSelectRun: (trackId: string, runId: string) => void
   onCancelRun: (runId: string) => Promise<void>
   onRetryRun: (runId: string) => Promise<void>
@@ -40,8 +38,6 @@ function remediationFor(message: string | null) {
 
 export function QueueList({
   entries,
-  selectedIds,
-  onToggleSelect,
   onSelectRun,
   onCancelRun,
   onRetryRun,
@@ -60,7 +56,6 @@ export function QueueList({
     return items.map((entry) => {
       const { run } = entry
       const failed = run.status === 'failed' || run.status === 'cancelled'
-      const selected = selectedIds.has(run.id)
       const cancelling = cancellingRunId === run.id
       const retrying = retryingRunId === run.id
       const description = describeRun(run)
@@ -74,7 +69,6 @@ export function QueueList({
       const rowClassName = [
         'queue-row',
         `queue-row-${group}`,
-        selected ? 'queue-row-selected' : '',
         failed ? 'queue-row-failed' : '',
       ]
         .filter(Boolean)
@@ -83,13 +77,6 @@ export function QueueList({
 
       return (
         <article key={run.id} className={rowClassName}>
-          <label className="list-row-check">
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={() => onToggleSelect(run.id)}
-            />
-          </label>
           <button
             type="button"
             className="queue-row-main"
@@ -171,7 +158,7 @@ export function QueueList({
           </div>
         ) : null}
         <p className="empty-state">
-          Nothing is running right now. Start a split from Imports or from a song in Songs to see progress here.
+          Nothing is running right now. Start a split from Songs to see progress here.
         </p>
       </div>
     )

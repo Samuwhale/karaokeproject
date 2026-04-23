@@ -7,13 +7,7 @@ from backend.core.config import RuntimeSettings
 from backend.db.models import IN_PROGRESS_RUN_STATUSES, Run, RunStatus, Track
 from backend.schemas.tracks import (
     BackfillMetricsResponse,
-    BatchApplyRequest,
-    BatchApplyResponse,
-    BatchCancelResponse,
     BatchDeleteResponse,
-    BatchPurgeNonKeepersResponse,
-    BatchQueueRunsRequest,
-    BatchQueueRunsResponse,
     BatchTrackIdsRequest,
     CreateRunRequest,
     CreateRunResponse,
@@ -73,8 +67,11 @@ def update_track_endpoint(
     payload: UpdateTrackRequest,
     session: Session = Depends(get_db_session),
 ) -> TrackDetailResponse:
+    update_fields: dict[str, str | None] = {"title": payload.title}
+    if "artist" in payload.model_fields_set:
+        update_fields["artist"] = payload.artist
     try:
-        update_track(session, track_id, title=payload.title, artist=payload.artist)
+        update_track(session, track_id, **update_fields)
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
@@ -284,57 +281,6 @@ def dismiss_run_endpoint(run_id: str, session: Session = Depends(get_db_session)
     return CreateRunResponse(run=serialize_run_summary(run))
 
 
-@router.post("/tracks/batch/queue", response_model=BatchQueueRunsResponse)
-def batch_queue_runs(
-    payload: BatchQueueRunsRequest,
-    session: Session = Depends(get_db_session),
-    runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
-) -> BatchQueueRunsResponse:
-    if not payload.track_ids:
-        return BatchQueueRunsResponse(queued_run_count=0)
-
-    try:
-        processing = build_processing_from_request(
-            payload.processing,
-            get_or_create_settings(session, runtime_settings),
-        )
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-    queued = 0
-    skipped: list[str] = []
-    for track_id in payload.track_ids:
-        track = get_track(session, track_id)
-        if track is None:
-            skipped.append(track_id)
-            continue
-        create_run(track, processing)
-        queued += 1
-    if queued:
-        session.commit()
-    return BatchQueueRunsResponse(queued_run_count=queued, skipped_track_ids=skipped)
-
-
-@router.post("/tracks/batch/apply", response_model=BatchApplyResponse)
-def batch_apply_track_fields(
-    payload: BatchApplyRequest,
-    session: Session = Depends(get_db_session),
-) -> BatchApplyResponse:
-    if not payload.track_ids or payload.artist is None:
-        return BatchApplyResponse(updated_track_count=0)
-
-    updated = 0
-    for track_id in payload.track_ids:
-        try:
-            update_track(session, track_id, title=None, artist=payload.artist)
-            updated += 1
-        except LookupError:
-            continue
-        except ValueError:
-            continue
-    return BatchApplyResponse(updated_track_count=updated)
-
-
 @router.post("/tracks/batch/delete", response_model=BatchDeleteResponse)
 def batch_delete_tracks(
     payload: BatchTrackIdsRequest,
@@ -351,53 +297,6 @@ def batch_delete_tracks(
         except ValueError:
             skipped.append(track_id)
     return BatchDeleteResponse(deleted_track_count=deleted, skipped_track_ids=skipped)
-
-
-@router.post("/tracks/batch/cancel", response_model=BatchCancelResponse)
-def batch_cancel_runs(
-    payload: BatchTrackIdsRequest,
-    session: Session = Depends(get_db_session),
-) -> BatchCancelResponse:
-    cancelled = 0
-    cancellable = {RunStatus.queued.value} | set(IN_PROGRESS_RUN_STATUSES)
-    for track_id in payload.track_ids:
-        track = get_track(session, track_id)
-        if track is None:
-            continue
-        for run in track.runs:
-            if run.status not in cancellable:
-                continue
-            try:
-                request_run_cancellation(session, run.id)
-                cancelled += 1
-            except (LookupError, ValueError):
-                continue
-    return BatchCancelResponse(cancelled_run_count=cancelled)
-
-
-@router.post("/tracks/batch/purge-non-keepers", response_model=BatchPurgeNonKeepersResponse)
-def batch_purge_non_keepers(
-    payload: BatchTrackIdsRequest,
-    session: Session = Depends(get_db_session),
-) -> BatchPurgeNonKeepersResponse:
-    purged = 0
-    total_deleted = 0
-    total_reclaimed = 0
-    skipped: list[str] = []
-    for track_id in payload.track_ids:
-        try:
-            deleted, reclaimed = purge_non_keeper_runs(session, track_id)
-            purged += 1
-            total_deleted += deleted
-            total_reclaimed += reclaimed
-        except (LookupError, ValueError):
-            skipped.append(track_id)
-    return BatchPurgeNonKeepersResponse(
-        purged_track_count=purged,
-        deleted_run_count=total_deleted,
-        bytes_reclaimed=total_reclaimed,
-        skipped_track_ids=skipped,
-    )
 
 
 @router.post("/runs/{run_id}/measure", response_model=RunDetailResponse)

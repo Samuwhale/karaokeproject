@@ -76,10 +76,10 @@ export function OutputIntentPicker({
     <div className={`output-intent ${compact ? 'output-intent-compact' : ''}`}>
       <div className="output-intent-head">
         <div className="output-intent-copy">
-          <h3 className="subsection-head">Starting Balance</h3>
+          <h3 className="subsection-head">Mix presets</h3>
           {!compact ? (
             <p className="output-intent-summary">
-              Start from the closest result, then fine-tune the stem balance below.
+              Start from the closest proven result, then fine-tune the stem balance in the mixer.
             </p>
           ) : null}
         </div>
@@ -118,7 +118,7 @@ export function OutputIntentPicker({
         <details className="output-intent-reruns">
           <summary>Need another kind of split?</summary>
           <div className="output-intent-reruns-body">
-            <p>Queue a more detailed version instead of forcing the current split to do too much.</p>
+            <p>Queue a more suitable version instead of forcing the current split to do too much.</p>
             <div className="output-intent-reruns-actions">
               {rerunSuggestions.map(({ spec, fallback }) => (
                 <button

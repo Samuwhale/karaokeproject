@@ -3,51 +3,36 @@ import { Navigate, NavLink, Route, Routes, useLocation, useMatch, useNavigate } 
 
 import './App.css'
 import './redesign.css'
-import { ApplyArtistPrompt, BatchActionBar, OverflowMenu } from './components/BatchActionBar'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { ExportModal, type ExportPreset } from './components/ExportModal'
 import { ImportFlowDialog } from './components/ImportFlowDialog'
-import { LibraryPage } from './components/library/LibraryPage'
-import { QueuePage } from './components/queue/QueuePage'
 import { SettingsDrawer } from './components/SettingsDrawer'
-import { StudioPage } from './components/studio/StudioPage'
-import {
-  DEFAULT_LIBRARY_VIEW,
-  applyLibraryView,
-  countLibraryFilters,
-  trackStageSummary,
-} from './components/trackListView'
-import type { LibraryView } from './components/trackListView'
-import { ConfirmInline } from './components/feedback/ConfirmInline'
 import { ToastStack } from './components/feedback/ToastStack'
-import { isActiveRunStatus } from './components/runStatus'
+import { MixWorkspace } from './components/mix/MixWorkspace'
+import { SongsPage } from './components/songs/SongsPage'
+import { applySongBrowse } from './components/trackListView'
 import { useDashboardData } from './hooks/useDashboardData'
 import type { Connection } from './hooks/useDashboardData'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { filterImportableMediaFiles } from './importableMedia'
-import {
-  buildLibraryPath,
-  buildStudioPath,
-  normalizeStudioTab,
-  parseLibraryView,
-} from './routes'
+import { buildMixPath, buildSongsPath, parseSongsView } from './routes'
 import { resolveSelectedRun } from './runSelection'
 import type { RunProcessingConfigInput, TrackSummary } from './types'
 
 function App() {
   const location = useLocation()
   const navigate = useNavigate()
-  const studioMatch = useMatch('/studio/:trackId/:tab')
-  const libraryActive = location.pathname === '/songs'
-  const queueActive = location.pathname === '/imports'
-  const studioActive = !!studioMatch
-  const studioTrackId = studioMatch?.params.trackId ?? null
-  const studioTab = normalizeStudioTab(studioMatch?.params.tab)
-  const studioSearchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
-  const studioRunId = studioActive ? studioSearchParams.get('run') : null
-  const studioCompareRunId = studioActive ? studioSearchParams.get('compare') : null
+  const mixMatch = useMatch('/mix/:trackId')
+  const songsActive = location.pathname === '/songs'
+  const mixActive = !!mixMatch
+  const mixTrackId = mixMatch?.params.trackId ?? null
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const mixRunId = mixActive ? searchParams.get('run') : null
+  const songsView = useMemo(
+    () => (songsActive ? parseSongsView(new URLSearchParams(location.search)) : parseSongsView(new URLSearchParams())),
+    [songsActive, location.search],
+  )
 
-  const dashboard = useDashboardData({ trackId: studioTrackId })
+  const dashboard = useDashboardData({ trackId: mixTrackId })
   const {
     diagnostics,
     settings,
@@ -57,12 +42,6 @@ function App() {
     queueRuns,
     cachedModels,
     selectedTrack,
-    selectedLibraryIds,
-    selectedQueueRunIds,
-    toggleLibrarySelected,
-    toggleQueueRunSelected,
-    clearSelection,
-    selectAll,
     toasts,
     dismissToast,
     pushToast,
@@ -82,7 +61,6 @@ function App() {
     backfillingMetrics,
     savingMixRunId,
     updatingTrack,
-    batching,
     handleResolveYouTube,
     handleResolveLocalImport,
     handleUpdateDraft,
@@ -99,19 +77,10 @@ function App() {
     handleCleanupExportBundles,
     handleCleanupLibraryRuns,
     handleSetKeeper,
-    handlePurgeNonKeepers,
     handleBackfillMetrics,
     handleSaveMix,
     handleUpdateTrack,
     handleDeleteTrack,
-    handleBatchQueueRuns,
-    handleBatchApplyArtist,
-    handleBatchDeleteTracks,
-    handleBatchCancelTrackRuns,
-    handleBatchPurgeNonKeepers,
-    handleBatchCancelQueueRuns,
-    handleBatchRetryQueueRuns,
-    handleBatchDismissQueueRuns,
   } = dashboard
 
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -120,172 +89,55 @@ function App() {
   )
   const [importOpen, setImportOpen] = useState(false)
   const [dragOverlayActive, setDragOverlayActive] = useState(false)
-  const [exportSelection, setExportSelection] = useState<{
-    trackIds: string[]
-    runIds: Record<string, string>
-    initialPreset?: ExportPreset
-    lockPreset?: boolean
-    contextTitle?: string
-    contextDescription?: string
-  } | null>(null)
   const dragCounterRef = useRef(0)
 
-  const libraryView = useMemo(
-    () => (libraryActive ? parseLibraryView(new URLSearchParams(location.search)) : DEFAULT_LIBRARY_VIEW),
-    [libraryActive, location.search],
+  const browseTracks = useMemo(
+    () => applySongBrowse(tracks, { search: songsView.search, sort: songsView.sort }),
+    [songsView.search, songsView.sort, tracks],
   )
-  const visibleTracks = useMemo(() => applyLibraryView(tracks, libraryView), [tracks, libraryView])
-  const defaultTrackList = useMemo(
-    () => applyLibraryView(tracks, DEFAULT_LIBRARY_VIEW),
-    [tracks],
-  )
-  const countsByFilter = useMemo(() => countLibraryFilters(tracks), [tracks])
   const defaultProcessing: RunProcessingConfigInput = {
     profile_key: settings?.default_profile ?? 'standard',
   }
   const defaultBitrate = settings?.export_mp3_bitrate ?? '320k'
   const hasFirstSync = connection.lastSyncAt > 0
   const setupRequired = hasFirstSync && diagnostics ? !diagnostics.app_ready : false
-  const selectedStudioRun = selectedTrack ? resolveSelectedRun(selectedTrack, studioRunId) : null
-  const queueActiveCount = useMemo(
-    () => queueRuns.filter((entry) => isActiveRunStatus(entry.run.status)).length,
-    [queueRuns],
-  )
-  const queueFollowUpCount = queueRuns.length - queueActiveCount
 
   function openSettings(view: 'preferences' | 'maintenance' | 'storage') {
     setSettingsView(view)
     setSettingsOpen(true)
   }
 
-  function openLibrary(view: LibraryView = libraryView) {
-    navigate(buildLibraryPath(view))
+  function openSongs(view = songsView) {
+    navigate(buildSongsPath(view))
   }
 
-  function preferredStudioTabForTrack(
-    track: TrackSummary,
-    options?: { runStatus?: string | null; runId?: string | null },
-  ) {
-    if (options?.runStatus) {
-      if (isActiveRunStatus(options.runStatus)) return 'versions' as const
-      if (options.runStatus === 'failed' || options.runStatus === 'cancelled') return 'versions' as const
-      if (options.runStatus === 'completed') return 'mix' as const
-    }
-
-    if (track.keeper_run_id && (!options?.runId || track.keeper_run_id === options.runId)) {
-      return 'mix' as const
-    }
-
-    if (track.latest_run?.status === 'completed') {
-      return 'mix' as const
-    }
-
-    return 'versions' as const
+  function openMix(trackId: string, options?: { runId?: string | null }) {
+    navigate(buildMixPath(trackId, { runId: options?.runId ?? null }))
   }
 
-  function openStudio(
-    trackId: string,
-    options?: { runId?: string | null; tab?: ReturnType<typeof normalizeStudioTab>; compareRunId?: string | null },
-  ) {
-    navigate(
-      buildStudioPath(trackId, options?.tab ?? 'mix', {
-        runId: options?.runId ?? null,
-        compareRunId: options?.compareRunId ?? null,
-      }),
-    )
-  }
-
-  function openTrackWorkspace(track: TrackSummary, options?: { runId?: string | null; runStatus?: string | null }) {
-    const stage = trackStageSummary(track)
-    if (stage.key === 'rendering') {
-      navigate('/imports')
-      return
-    }
-
+  function openTrackWorkspace(track: TrackSummary, options?: { runId?: string | null }) {
     const runId = options?.runId ?? track.keeper_run_id ?? track.latest_run?.id ?? null
-    const tab = preferredStudioTabForTrack(track, {
-      runId,
-      runStatus: options?.runStatus ?? track.latest_run?.status ?? null,
-    })
-
-    openStudio(track.id, { tab, runId })
-  }
-
-  function openBatchExport(trackIds: string[]) {
-    const tracksById = new Map(tracks.map((track) => [track.id, track]))
-    const exportableTrackIds: string[] = []
-    const runIds: Record<string, string> = {}
-    let skippedCount = 0
-
-    for (const trackId of trackIds) {
-      const track = tracksById.get(trackId)
-      if (!track) continue
-      if (!track.keeper_run_id) {
-        skippedCount += 1
-        continue
-      }
-      exportableTrackIds.push(track.id)
-      runIds[track.id] = track.keeper_run_id
-    }
-
-    if (exportableTrackIds.length === 0) {
-      pushToast('error', 'Batch export only works for songs with a final version selected.')
-      return
-    }
-
-    if (skippedCount > 0) {
-      pushToast(
-        'error',
-        `${skippedCount} song${skippedCount === 1 ? '' : 's'} skipped because no final version is selected.`,
-      )
-    }
-
-    setExportSelection({
-      trackIds: exportableTrackIds,
-      runIds,
-      contextTitle: `Export final versions for ${exportableTrackIds.length} track${exportableTrackIds.length === 1 ? '' : 's'}`,
-      contextDescription: 'Batch export uses the selected final version for each song.',
-    })
+    openMix(track.id, { runId })
   }
 
   useEffect(() => {
-    if (!studioActive) return
-    const trackKnown = studioTrackId ? tracks.some((track) => track.id === studioTrackId) : false
+    if (!mixActive) return
+    const trackKnown = mixTrackId ? tracks.some((track) => track.id === mixTrackId) : false
     if (hasFirstSync && !selectedTrack && !trackKnown) {
       navigate('/songs', { replace: true })
       return
     }
     if (!selectedTrack) return
 
-    const resolvedRun = resolveSelectedRun(selectedTrack, studioRunId)
-    const validCompare =
-      studioCompareRunId &&
-      resolvedRun &&
-      studioCompareRunId !== resolvedRun.id &&
-      selectedTrack.runs.some((run) => run.id === studioCompareRunId && run.status === 'completed')
-        ? studioCompareRunId
-        : null
-    const nextPath = buildStudioPath(selectedTrack.id, studioTab, {
+    const resolvedRun = resolveSelectedRun(selectedTrack, mixRunId)
+    const nextPath = buildMixPath(selectedTrack.id, {
       runId: resolvedRun?.id ?? null,
-      compareRunId: studioTab === 'versions' ? validCompare : null,
     })
 
     if (`${location.pathname}${location.search}` !== nextPath) {
       navigate(nextPath, { replace: true })
     }
-  }, [
-    hasFirstSync,
-    location.pathname,
-    location.search,
-    navigate,
-    selectedTrack,
-    studioActive,
-    studioCompareRunId,
-    studioTrackId,
-    studioRunId,
-    studioTab,
-    tracks,
-  ])
+  }, [hasFirstSync, location.pathname, location.search, mixActive, mixRunId, mixTrackId, navigate, selectedTrack, tracks])
 
   useEffect(() => {
     if (importOpen) return
@@ -319,7 +171,15 @@ function App() {
       const files = filterImportableMediaFiles(event.dataTransfer?.files ?? [])
       if (files.length) {
         handleResolveLocalImport(files)
-          .then(() => navigate('/imports'))
+          .then(() =>
+            navigate(
+              buildSongsPath({
+                mode: 'needs-attention',
+                search: '',
+                sort: 'recent',
+              }),
+            ),
+          )
           .catch(() => undefined)
         return
       }
@@ -352,30 +212,29 @@ function App() {
       if (!text || !/^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\b/i.test(text)) return
       event.preventDefault()
       handleResolveYouTube(text)
-        .then(() => navigate('/imports'))
+        .then(() =>
+          navigate(
+            buildSongsPath({
+              mode: 'needs-attention',
+              search: '',
+              sort: 'recent',
+            }),
+          ),
+        )
         .catch(() => undefined)
     }
 
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
-  }, [handleResolveYouTube, navigate, pushToast])
-
-  const activePageTracks = studioActive ? defaultTrackList : visibleTracks
+  }, [handleResolveYouTube, navigate])
 
   function selectAdjacentTrack(offset: number) {
-    if (!activePageTracks.length) return
-    const currentIndex = studioTrackId
-      ? activePageTracks.findIndex((track) => track.id === studioTrackId)
-      : -1
+    if (!browseTracks.length) return
+    const currentIndex = mixTrackId ? browseTracks.findIndex((track) => track.id === mixTrackId) : -1
     const nextIndex =
-      currentIndex < 0 ? 0 : Math.max(0, Math.min(activePageTracks.length - 1, currentIndex + offset))
-    const nextTrack = activePageTracks[nextIndex]
+      currentIndex < 0 ? 0 : Math.max(0, Math.min(browseTracks.length - 1, currentIndex + offset))
+    const nextTrack = browseTracks[nextIndex]
     if (!nextTrack) return
-    if (studioActive) {
-      const nextRunId = nextTrack.keeper_run_id ?? nextTrack.latest_run?.id ?? null
-      openStudio(nextTrack.id, { tab: studioTab, runId: nextRunId })
-      return
-    }
     openTrackWorkspace(nextTrack)
   }
 
@@ -383,38 +242,14 @@ function App() {
     onNavigateNext: () => selectAdjacentTrack(1),
     onNavigatePrev: () => selectAdjacentTrack(-1),
     onRerun: () => {
-      if (!studioActive || !selectedTrack || creatingRun || !settings) return
+      if (!mixActive || !selectedTrack || creatingRun) return
       void handleCreateRun(selectedTrack.id, defaultProcessing)
     },
     onSelectRunByIndex: (index) => {
-      if (!studioActive || !selectedTrack || (studioTab !== 'mix' && studioTab !== 'versions')) return
+      if (!mixActive || !selectedTrack) return
       const run = selectedTrack.runs[index]
       if (!run) return
-      openStudio(selectedTrack.id, {
-        tab: studioTab,
-        runId: run.id,
-      })
-    },
-    onToggleCompare: () => {
-      if (!studioActive || !selectedTrack || !selectedStudioRun) return
-      if (studioTab !== 'versions') {
-        const candidate = selectedTrack.runs.find(
-          (run) => run.status === 'completed' && run.id !== selectedStudioRun.id,
-        )
-        openStudio(selectedTrack.id, {
-          tab: 'versions',
-          runId: selectedStudioRun.id,
-          compareRunId: candidate?.id ?? null,
-        })
-        return
-      }
-      openStudio(selectedTrack.id, {
-        tab: 'versions',
-        runId: selectedStudioRun.id,
-        compareRunId: studioCompareRunId ? null : selectedTrack.runs.find(
-          (run) => run.status === 'completed' && run.id !== selectedStudioRun.id,
-        )?.id ?? null,
-      })
+      openMix(selectedTrack.id, { runId: run.id })
     },
     onToggleSettings: () => {
       if (settingsOpen) setSettingsOpen(false)
@@ -423,59 +258,27 @@ function App() {
     onEscape: () => {
       if (settingsOpen) setSettingsOpen(false)
       else if (importOpen) setImportOpen(false)
-      else if (exportSelection !== null) setExportSelection(null)
-      else if ((libraryActive || queueActive) && selectedQueueRunIds.size > 0) clearSelection('queue')
-      else if (libraryActive && selectedLibraryIds.size > 0) {
-        clearSelection('library')
-      }
     },
   })
 
-  const anyDialogOpen = settingsOpen || importOpen || exportSelection !== null
-  const librarySelectionList = Array.from(selectedLibraryIds)
-  const queueSelectionList = Array.from(selectedQueueRunIds)
-  const selectedQueueEntries = useMemo(
-    () => queueRuns.filter((entry) => selectedQueueRunIds.has(entry.run.id)),
-    [queueRuns, selectedQueueRunIds],
-  )
-  const selectedQueueActiveIds = useMemo(
-    () =>
-      selectedQueueEntries
-        .filter((entry) => isActiveRunStatus(entry.run.status))
-        .map((entry) => entry.run.id),
-    [selectedQueueEntries],
-  )
-  const selectedQueueFollowUpIds = useMemo(
-    () =>
-      selectedQueueEntries
-        .filter((entry) => !isActiveRunStatus(entry.run.status))
-        .map((entry) => entry.run.id),
-    [selectedQueueEntries],
-  )
-  const selectedFinalCount = useMemo(() => {
-    const selectedIds = new Set(librarySelectionList)
-    return tracks.filter((track) => selectedIds.has(track.id) && track.keeper_run_id).length
-  }, [librarySelectionList, tracks])
-  const mixWorkspaceActive = studioActive && studioTab === 'mix'
+  const anyDialogOpen = settingsOpen || importOpen
   const showRailStatus = setupRequired || connection.state !== 'ready'
-  const suiteMainClassName = `suite-main ${mixWorkspaceActive ? 'suite-main-fixed-workspace' : ''}`
+  const suiteMainClassName = `suite-main ${mixActive ? 'suite-main-fixed-workspace' : ''}`
+  const appShellClassName = `app-shell ${mixActive ? 'app-shell-mix-focus' : ''}`
+
   return (
     <ErrorBoundary>
-      <div className="app-shell">
+      <div className={appShellClassName}>
         <aside className="shell-rail" inert={anyDialogOpen || undefined}>
           <div className="shell-rail-brand">
-            <strong>Studio</strong>
-            <span>Karaoke project</span>
+            <strong>Karaoke</strong>
+            <span>Mix workspace</span>
           </div>
 
           <nav className="shell-rail-nav" aria-label="Primary navigation">
             <NavLink to="/songs" className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}>
               <LibraryIcon />
               <span>Songs</span>
-            </NavLink>
-            <NavLink to="/imports" className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}>
-              <QueueIcon />
-              <span>Imports</span>
             </NavLink>
           </nav>
 
@@ -502,81 +305,30 @@ function App() {
           </div>
         </aside>
 
-        <div className={`shell-canvas ${mixWorkspaceActive ? 'shell-canvas-focus-mode' : ''}`}>
+        <div className={`shell-canvas ${mixActive ? 'shell-canvas-focus-mode' : ''}`}>
           <main className={suiteMainClassName} inert={anyDialogOpen || undefined}>
             <Routes>
               <Route path="/" element={<Navigate to="/songs" replace />} />
               <Route
                 path="/songs"
                 element={
-                  <LibraryPage
-                    view={libraryView}
-                    tracks={visibleTracks}
-                    totalCount={tracks.length}
-                    hasFirstSync={hasFirstSync}
-                    countsByFilter={countsByFilter}
-                    currentTrackId={studioTrackId}
-                    workQueue={{
-                      stagedCount: drafts.length,
-                      activeCount: queueActiveCount,
-                      followUpCount: queueFollowUpCount,
-                    }}
-                    selectedIds={selectedLibraryIds}
-                    onViewChange={(nextView) => openLibrary(nextView)}
-                    onToggleSelect={(trackId) => {
-                      if (selectedQueueRunIds.size > 0) clearSelection('queue')
-                      toggleLibrarySelected(trackId)
-                    }}
-                    onSelectAll={() => {
-                      if (selectedQueueRunIds.size > 0) clearSelection('queue')
-                      selectAll(
-                        'library',
-                        visibleTracks.map((track) => track.id),
-                      )
-                    }}
-                    onClearSelection={() => clearSelection('library')}
-                    onOpenTrack={(track) => openTrackWorkspace(track)}
-                    onAddSongs={() => setImportOpen(true)}
-                  />
-                }
-              />
-              <Route
-                path="/imports"
-                element={
-                  <QueuePage
+                  <SongsPage
+                    view={songsView}
+                    tracks={tracks}
+                    currentTrackId={mixTrackId}
                     stagedImports={drafts}
+                    queueRuns={queueRuns}
                     profiles={settings?.profiles ?? []}
                     defaultProfileKey={defaultProcessing.profile_key}
                     confirmingDrafts={confirmingDrafts}
-                    selectedQueueRunIds={selectedQueueRunIds}
-                    queueRuns={queueRuns}
                     cancellingRunId={cancellingRunId}
                     retryingRunId={retryingRunId}
+                    onViewChange={openSongs}
+                    onOpenTrack={(track, options) => openTrackWorkspace(track, options)}
                     onAddSongs={() => setImportOpen(true)}
-                    onToggleQueueSelected={(runId) => {
-                      if (selectedLibraryIds.size > 0) {
-                        clearSelection('library')
-                      }
-                      toggleQueueRunSelected(runId)
-                    }}
-                    onSelectRun={(trackId, runId) => {
-                      const track = tracks.find((entry) => entry.id === trackId)
-                      if (!track) {
-                        openStudio(trackId, { tab: 'versions', runId })
-                        return
-                      }
-                      const runStatus =
-                        queueRuns.find((entry) => entry.run.id === runId)?.run.status ?? null
-                      const tab = preferredStudioTabForTrack(track, { runId, runStatus })
-                      openStudio(trackId, { tab, runId })
-                    }}
                     onCancelRun={handleCancelRun}
                     onRetryRun={async (runId) => {
-                      const result = await handleRetryRun(runId)
-                      const trackId = queueRuns.find((entry) => entry.run.id === runId)?.track_id
-                      if (trackId && result && typeof result === 'object' && 'run' in result) {
-                        openStudio(trackId, { runId: (result as { run: { id: string } }).run.id })
-                      }
+                      await handleRetryRun(runId)
                     }}
                     onDismissRun={handleDismissRun}
                     onUpdateStagedImport={handleUpdateDraft}
@@ -584,22 +336,22 @@ function App() {
                     onConfirmStagedImports={async (payload) => {
                       await handleConfirmDrafts(payload)
                       navigate(
-                        payload.queue
-                          ? '/imports'
-                          : buildLibraryPath({ ...DEFAULT_LIBRARY_VIEW, filter: 'needs-work' }),
+                        buildSongsPath({
+                          mode: payload.queue ? 'needs-attention' : 'library',
+                          search: '',
+                          sort: 'recent',
+                        }),
                       )
                     }}
                   />
                 }
               />
               <Route
-                path="/studio/:trackId/:tab"
+                path="/mix/:trackId"
                 element={
-                  <StudioPage
+                  <MixWorkspace
                     track={selectedTrack}
-                    tab={studioTab}
-                    selectedRunId={studioRunId}
-                    compareRunId={studioCompareRunId}
+                    selectedRunId={mixRunId}
                     profiles={settings?.profiles ?? []}
                     cachedModels={cachedModels}
                     defaultProfileKey={defaultProcessing.profile_key}
@@ -611,48 +363,16 @@ function App() {
                     settingKeeper={settingKeeper}
                     savingMixRunId={savingMixRunId}
                     updatingTrack={updatingTrack}
-                    onBackToLibrary={() => openLibrary()}
-                    onChangeTab={(tab) => {
-                      if (!selectedTrack) return
-                      openStudio(selectedTrack.id, {
-                        tab,
-                        runId: selectedStudioRun?.id ?? null,
-                        compareRunId: tab === 'versions' ? studioCompareRunId : null,
-                      })
-                    }}
+                    onBackToSongs={() => openSongs()}
                     onSelectRun={(runId) => {
                       if (!selectedTrack) return
-                      const nextCompare = studioCompareRunId === runId ? null : studioCompareRunId
-                      openStudio(selectedTrack.id, {
-                        tab: studioTab,
-                        runId,
-                        compareRunId: studioTab === 'versions' ? nextCompare : null,
-                      })
+                      openMix(selectedTrack.id, { runId })
                     }}
-                    onSelectCompare={(runId) => {
-                      if (!selectedTrack) return
-                      openStudio(selectedTrack.id, {
-                        tab: 'versions',
-                        runId: selectedStudioRun?.id ?? null,
-                        compareRunId: runId,
-                      })
-                    }}
-                    onCreateRun={async (trackId, processing) => {
-                      const result = await handleCreateRun(trackId, processing)
-                      if (result && typeof result === 'object' && 'run' in result) {
-                        openStudio(trackId, { tab: 'versions', runId: (result as { run: { id: string } }).run.id })
-                      }
-                    }}
+                    onCreateRun={handleCreateRun}
                     onCancelRun={handleCancelRun}
-                    onRetryRun={async (runId) => {
-                      const result = await handleRetryRun(runId)
-                      if (selectedTrack && result && typeof result === 'object' && 'run' in result) {
-                        openStudio(selectedTrack.id, { tab: 'versions', runId: (result as { run: { id: string } }).run.id })
-                      }
-                    }}
+                    onRetryRun={handleRetryRun}
                     onDeleteRun={handleDeleteRun}
                     onSetKeeper={handleSetKeeper}
-                    onPurgeNonKeepers={handlePurgeNonKeepers}
                     onSaveMix={handleSaveMix}
                     onUpdateTrack={handleUpdateTrack}
                     onDeleteTrack={(trackId) => {
@@ -668,109 +388,6 @@ function App() {
             </Routes>
           </main>
         </div>
-
-        {libraryActive && queueSelectionList.length === 0 && librarySelectionList.length > 0 ? (
-          <BatchActionBar
-            selectedCount={librarySelectionList.length}
-            selectionLabel="songs"
-            onClear={() => {
-              clearSelection('library')
-            }}
-            busy={batching}
-            inert={anyDialogOpen}
-          >
-            <button
-              type="button"
-              className="button-primary"
-              disabled={batching}
-              onClick={() => void handleBatchQueueRuns(librarySelectionList, defaultProcessing)}
-            >
-              Start splits
-            </button>
-            <button
-              type="button"
-              className="button-secondary"
-              disabled={selectedFinalCount === 0}
-              onClick={() => openBatchExport(librarySelectionList)}
-            >
-              Export final versions ({selectedFinalCount}/{librarySelectionList.length})
-            </button>
-            <ConfirmInline
-              label="Delete"
-              pendingLabel="Deleting…"
-              confirmLabel={`Delete ${librarySelectionList.length} track${librarySelectionList.length === 1 ? '' : 's'}`}
-              cancelLabel="Keep them"
-              prompt={`Delete ${librarySelectionList.length} track${librarySelectionList.length === 1 ? '' : 's'}?`}
-              pending={batching}
-              onConfirm={() => handleBatchDeleteTracks(librarySelectionList)}
-            />
-            <ApplyArtistPrompt
-              disabled={batching}
-              buttonLabel="Set artist"
-              onApply={(artist) => void handleBatchApplyArtist(librarySelectionList, artist)}
-              onClear={() => void handleBatchApplyArtist(librarySelectionList, null)}
-            />
-            <OverflowMenu label="More library tools">
-              <button
-                type="button"
-                className="button-secondary"
-                disabled={batching}
-                onClick={() => void handleBatchCancelTrackRuns(librarySelectionList)}
-              >
-                Cancel splits
-              </button>
-              <button
-                type="button"
-                className="button-secondary"
-                disabled={batching}
-                onClick={() => void handleBatchPurgeNonKeepers(librarySelectionList)}
-              >
-                Clean up non-final splits
-              </button>
-            </OverflowMenu>
-          </BatchActionBar>
-        ) : null}
-
-        {queueActive && queueSelectionList.length > 0 ? (
-          <BatchActionBar
-            selectedCount={queueSelectionList.length}
-            selectionLabel="import items"
-            onClear={() => clearSelection('queue')}
-            busy={batching}
-            inert={anyDialogOpen}
-          >
-            {selectedQueueActiveIds.length > 0 ? (
-              <button
-                type="button"
-                className="button-secondary"
-                disabled={batching}
-                onClick={() => void handleBatchCancelQueueRuns(selectedQueueActiveIds)}
-              >
-                Cancel active splits ({selectedQueueActiveIds.length})
-              </button>
-            ) : null}
-            {selectedQueueFollowUpIds.length > 0 ? (
-              <button
-                type="button"
-                className="button-primary"
-                disabled={batching}
-                onClick={() => void handleBatchRetryQueueRuns(selectedQueueFollowUpIds)}
-              >
-                Retry selected ({selectedQueueFollowUpIds.length})
-              </button>
-            ) : null}
-            {selectedQueueFollowUpIds.length > 0 ? (
-              <button
-                type="button"
-                className="button-secondary"
-                disabled={batching}
-                onClick={() => void handleBatchDismissQueueRuns(selectedQueueFollowUpIds)}
-              >
-                Dismiss selected ({selectedQueueFollowUpIds.length})
-              </button>
-            ) : null}
-          </BatchActionBar>
-        ) : null}
 
         <SettingsDrawer
           open={settingsOpen}
@@ -795,7 +412,15 @@ function App() {
           open={importOpen}
           stagedImports={drafts}
           onClose={() => setImportOpen(false)}
-          onSourcesStaged={() => navigate('/imports')}
+          onSourcesStaged={() =>
+            navigate(
+              buildSongsPath({
+                mode: 'needs-attention',
+                search: '',
+                sort: 'recent',
+              }),
+            )
+          }
           resolvingYoutubeImport={resolvingYoutubeImport}
           resolvingLocalImport={resolvingLocalImport}
           onResolveYouTube={async (sourceUrl) => {
@@ -804,21 +429,6 @@ function App() {
           onResolveLocalImport={async (files) => {
             await handleResolveLocalImport(files)
           }}
-        />
-
-        <ExportModal
-          open={exportSelection !== null}
-          onClose={() => setExportSelection(null)}
-          tracks={tracks}
-          selectedTrackIds={exportSelection?.trackIds ?? []}
-          defaultBitrate={defaultBitrate}
-          selectedRunIdByTrack={exportSelection?.runIds}
-          initialPreset={exportSelection?.initialPreset}
-          lockPreset={exportSelection?.lockPreset}
-          contextTitle={exportSelection?.contextTitle}
-          contextDescription={exportSelection?.contextDescription}
-          onError={(message) => pushToast('error', message)}
-          onReveal={handleRevealFolder}
         />
 
         <ToastStack toasts={toasts} onDismiss={dismissToast} />
@@ -921,17 +531,6 @@ function LibraryIcon() {
       <path d="M5.25 3V13" stroke="currentColor" strokeWidth="1.25" />
       <path d="M7.75 5.5H11" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
       <path d="M7.75 8H11" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function QueueIcon() {
-  return (
-    <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path d="M3 4.25H13" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-      <path d="M3 8H10.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-      <path d="M3 11.75H8.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-      <circle cx="12" cy="11.75" r="1.75" stroke="currentColor" strokeWidth="1.25" />
     </svg>
   )
 }

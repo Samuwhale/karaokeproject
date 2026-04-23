@@ -1,11 +1,5 @@
 import type {
-  BatchApplyInput,
-  BatchApplyResponse,
-  BatchCancelResponse,
   BatchDeleteResponse,
-  BatchPurgeNonKeepersResponse,
-  BatchQueueRunsInput,
-  BatchQueueRunsResponse,
   BatchTrackIdsInput,
   CachedModelsResponse,
   ConfirmImportDraftsInput,
@@ -238,16 +232,6 @@ export function flushPendingTrackPurge(trackId: string) {
   postKeepalive(`/api/tracks/${trackId}/purge-non-keepers`)
 }
 
-// --- Batch track operations ---
-
-export function batchQueueRuns(payload: BatchQueueRunsInput) {
-  return postJson<BatchQueueRunsResponse>('/api/tracks/batch/queue', payload)
-}
-
-export function batchApplyTrackFields(payload: BatchApplyInput) {
-  return postJson<BatchApplyResponse>('/api/tracks/batch/apply', payload)
-}
-
 export function batchDeleteTracks(payload: BatchTrackIdsInput) {
   return postJson<BatchDeleteResponse>('/api/tracks/batch/delete', payload)
 }
@@ -255,14 +239,6 @@ export function batchDeleteTracks(payload: BatchTrackIdsInput) {
 export function flushPendingTrackDeletes(trackIds: string[]) {
   if (!trackIds.length) return
   postKeepalive('/api/tracks/batch/delete', { track_ids: trackIds })
-}
-
-export function batchCancelTrackRuns(payload: BatchTrackIdsInput) {
-  return postJson<BatchCancelResponse>('/api/tracks/batch/cancel', payload)
-}
-
-export function batchPurgeNonKeepers(payload: BatchTrackIdsInput) {
-  return postJson<BatchPurgeNonKeepersResponse>('/api/tracks/batch/purge-non-keepers', payload)
 }
 
 // --- Imports (drafts) ---

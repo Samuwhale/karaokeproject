@@ -41,6 +41,8 @@ from backend.services.processing import (
     serialize_processing_config,
 )
 
+UNSET = object()
+
 
 def _slugify(value: str) -> str:
     normalized = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower())
@@ -636,7 +638,7 @@ def update_track(
     track_id: str,
     *,
     title: str | None,
-    artist: str | None,
+    artist: str | None | object = UNSET,
 ) -> Track:
     track = get_track(session, track_id)
     if track is None:
@@ -651,8 +653,9 @@ def update_track(
         metadata["source_slug"] = _slugify(clean_title)
         track.metadata_json = metadata
 
-    if artist is not None:
-        clean_artist = artist.strip() or None
+    if artist is not UNSET:
+        clean_artist = artist.strip() if isinstance(artist, str) else None
+        clean_artist = clean_artist or None
         track.artist = clean_artist
 
     session.commit()
