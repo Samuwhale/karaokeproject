@@ -68,10 +68,10 @@ function SettingsDrawerContent({
             <h2>Settings</h2>
             <p>
               {view === 'preferences'
-                ? 'Set the defaults used when you start new work.'
+                ? 'Set the defaults used when you start new splits or exports.'
                 : view === 'maintenance'
-                  ? 'Check readiness, review workspace usage, and clean up local files.'
-                  : 'Edit storage paths and retention only when the workspace layout needs to change.'}
+                  ? 'Check readiness first, then repair anything blocking the workspace.'
+                  : 'Review disk usage, cleanup targets, and storage paths when the workspace layout needs to change.'}
             </p>
           </div>
           <button ref={closeButtonRef} type="button" className="button-secondary" onClick={onClose}>
@@ -87,7 +87,7 @@ function SettingsDrawerContent({
               className={`drawer-tab ${view === 'preferences' ? 'drawer-tab-active' : ''}`}
               onClick={() => setView('preferences')}
             >
-              Everyday defaults
+              Defaults
             </button>
             <button
               type="button"
@@ -96,7 +96,7 @@ function SettingsDrawerContent({
               className={`drawer-tab ${view === 'maintenance' ? 'drawer-tab-active' : ''}`}
               onClick={() => setView('maintenance')}
             >
-              Workspace cleanup
+              Readiness
             </button>
             <button
               type="button"
@@ -105,7 +105,7 @@ function SettingsDrawerContent({
               className={`drawer-tab ${view === 'storage' ? 'drawer-tab-active' : ''}`}
               onClick={() => setView('storage')}
             >
-              Storage paths
+              Storage
             </button>
           </div>
           {view === 'maintenance' ? (

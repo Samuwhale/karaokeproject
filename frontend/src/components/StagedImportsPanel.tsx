@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import type {
   DraftDuplicateAction,
@@ -31,8 +31,13 @@ type StagedImportsPanelProps = {
   }) => Promise<unknown>
 }
 
+type QueueProfileState = {
+  sourceKey: string
+  value: string
+}
+
 function formatDuration(seconds: number | null) {
-  if (!seconds) return '—'
+  if (seconds === null) return '—'
   const total = Math.round(seconds)
   const m = Math.floor(total / 60)
   const s = (total % 60).toString().padStart(2, '0')
@@ -40,7 +45,7 @@ function formatDuration(seconds: number | null) {
 }
 
 function formatSize(bytes: number | null) {
-  if (!bytes) return null
+  if (bytes === null) return null
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   return `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
@@ -79,7 +84,7 @@ function reviewStatus(item: StagedImport) {
   if (item.duplicate_action === 'reuse-existing') {
     return {
       label: 'Will attach to an existing song',
-      detail: 'Its source is kept, but renders and exports stay attached to the existing song.',
+      detail: 'Its source is kept, but splits and exports stay attached to the existing song.',
     }
   }
 
@@ -115,9 +120,15 @@ function EditableField({
   onCommit: (next: string) => void
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  const skipCommitRef = useRef(false)
   const currentValue = draft === null || draft === value ? value : draft
 
   function commit() {
+    if (skipCommitRef.current) {
+      skipCommitRef.current = false
+      setDraft(null)
+      return
+    }
     const next = currentValue.trim()
     if (next === value.trim()) {
       setDraft(null)
@@ -142,6 +153,7 @@ function EditableField({
             ;(event.target as HTMLInputElement).blur()
           }
           if (event.key === 'Escape') {
+            skipCommitRef.current = true
             setDraft(null)
             ;(event.target as HTMLInputElement).blur()
           }
@@ -160,7 +172,12 @@ export function StagedImportsPanel({
   onDiscardStagedImport,
   onConfirmStagedImports,
 }: StagedImportsPanelProps) {
-  const [queueProfileKey, setQueueProfileKey] = useState(defaultProfileKey)
+  const [queueProfileState, setQueueProfileState] = useState<QueueProfileState>({
+    sourceKey: defaultProfileKey,
+    value: defaultProfileKey,
+  })
+  const queueProfileKey =
+    queueProfileState.sourceKey === defaultProfileKey ? queueProfileState.value : defaultProfileKey
   const effectiveQueueProfileKey =
     profiles.some((profile) => profile.key === queueProfileKey) ? queueProfileKey : defaultProfileKey
   const defaultProfileLabel =
@@ -173,8 +190,7 @@ export function StagedImportsPanel({
     if (aNeedsDecision !== bNeedsDecision) return bNeedsDecision - aNeedsDecision
     return a.title.localeCompare(b.title)
   })
-  const canQueue = stagedImports.length > 0 && unresolvedCount === 0 && !confirming
-  const canImportOnly = stagedImports.length > 0 && unresolvedCount === 0 && !confirming
+  const canConfirm = stagedImports.length > 0 && unresolvedCount === 0 && !confirming
 
   async function confirm(queue: boolean) {
     if (stagedImports.length === 0) return
@@ -321,14 +337,14 @@ export function StagedImportsPanel({
           ) : unresolvedCount > 0 ? (
             <span>Resolve every duplicate decision before continuing.</span>
           ) : (
-            <span>Choose whether this batch should land quietly in the library or queue with a specific default render profile.</span>
+            <span>Choose whether this batch should enter the library quietly or queue its first split right away.</span>
           )}
         </div>
         <div className="import-flow-footer-actions import-flow-footer-actions-stacked">
           <button
             type="button"
             className="button-secondary"
-            disabled={!canImportOnly}
+            disabled={!canConfirm}
             onClick={() => void confirm(false)}
           >
             {confirming ? (
@@ -336,16 +352,21 @@ export function StagedImportsPanel({
                 <Spinner /> Importing…
               </>
             ) : (
-              `Import ${stagedImports.length} song${stagedImports.length === 1 ? '' : 's'} to Library`
+              `Add ${stagedImports.length} song${stagedImports.length === 1 ? '' : 's'} to Library`
             )}
           </button>
           <div className="import-flow-queue-action">
             <label className="field field-inline import-flow-profile-select">
-              <span>Queue with</span>
+              <span>Split with</span>
               <select
                 value={effectiveQueueProfileKey}
-                onChange={(event) => setQueueProfileKey(event.target.value)}
-                disabled={!canQueue || confirming}
+                onChange={(event) =>
+                  setQueueProfileState({
+                    sourceKey: defaultProfileKey,
+                    value: event.target.value,
+                  })
+                }
+                disabled={!canConfirm || confirming}
               >
                 {profiles.map((profile) => (
                   <option key={profile.key} value={profile.key}>
@@ -357,7 +378,7 @@ export function StagedImportsPanel({
             <button
               type="button"
               className="button-primary"
-              disabled={!canQueue}
+              disabled={!canConfirm}
               onClick={() => void confirm(true)}
             >
               {confirming ? (
@@ -365,7 +386,7 @@ export function StagedImportsPanel({
                   <Spinner /> Queueing…
                 </>
               ) : (
-                `Import and Queue with ${defaultProfileLabel}`
+                `Add and Split with ${defaultProfileLabel}`
               )}
             </button>
           </div>

@@ -29,7 +29,7 @@ export function DiagnosticsPanel({
     return (
       <section className="section">
         <div className="section-head">
-          <h2>System readiness</h2>
+          <h2>Readiness</h2>
         </div>
         <div className="skeleton-stack">
           <Skeleton height={24} />
@@ -48,7 +48,7 @@ export function DiagnosticsPanel({
   return (
     <section className="section">
       <div className="section-head">
-        <h2>System readiness</h2>
+        <h2>Readiness</h2>
       </div>
 
       <div className="diagnostics-callout">

@@ -3,6 +3,7 @@ import type { DragEvent } from 'react'
 
 import { useDialogFocus } from '../hooks/useDialogFocus'
 import type { StagedImport } from '../types'
+import { filterImportableMediaFiles } from '../importableMedia'
 import { Spinner } from './feedback/Spinner'
 
 type ImportFlowDialogProps = {
@@ -12,8 +13,8 @@ type ImportFlowDialogProps = {
   resolvingLocalImport: boolean
   onClose: () => void
   onSourcesStaged: () => void
-  onResolveYouTube: (sourceUrl: string) => Promise<unknown>
-  onResolveLocalImport: (files: File[]) => Promise<unknown>
+  onResolveYouTube: (sourceUrl: string) => Promise<void>
+  onResolveLocalImport: (files: File[]) => Promise<void>
 }
 
 function looksLikePlaylist(url: string) {
@@ -21,7 +22,7 @@ function looksLikePlaylist(url: string) {
 }
 
 function formatSize(bytes: number | null) {
-  if (!bytes) return null
+  if (bytes === null) return null
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   return `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
@@ -72,6 +73,11 @@ function ImportFlowDialogContent({
     onClose()
   }
 
+  function handleYoutubeUrlChange(value: string) {
+    setYoutubeUrl(value)
+    if (error) setError(null)
+  }
+
   async function resolveUrl() {
     const trimmed = youtubeUrl.trim()
     if (!trimmed) return
@@ -101,9 +107,7 @@ function ImportFlowDialogContent({
     event.preventDefault()
     event.stopPropagation()
     setDragActive(false)
-    const accepted = Array.from(event.dataTransfer.files).filter((file) =>
-      /^(audio|video)\//.test(file.type),
-    )
+    const accepted = filterImportableMediaFiles(event.dataTransfer.files)
     if (accepted.length === 0) {
       setError('Drop audio or video files to stage them.')
       return
@@ -111,8 +115,6 @@ function ImportFlowDialogContent({
     setError(null)
     setLocalFiles(accepted)
   }
-
-  if (!open) return null
 
   const busy = resolvingYoutubeImport || resolvingLocalImport
   const playlistHint =
@@ -126,8 +128,8 @@ function ImportFlowDialogContent({
       <div className="import-modal-panel import-flow-panel" ref={panelRef} tabIndex={-1}>
         <header className="import-modal-head">
           <div className="import-flow-head-copy">
-            <h2>Add sources</h2>
-            <p>Stage new YouTube links or local files here. Review and import them from the inbox.</p>
+            <h2>Add songs</h2>
+            <p>Add YouTube links or local files here. Title cleanup, duplicate decisions, and queue choices happen next in Review imports.</p>
           </div>
           <div className="import-flow-head-actions">
             <button ref={closeButtonRef} type="button" className="button-secondary" onClick={handleClose}>
@@ -146,8 +148,8 @@ function ImportFlowDialogContent({
           <div className="import-flow-add">
             <section className="import-flow-section">
               <div className="import-flow-section-head">
-                <h3>From YouTube</h3>
-                <p>The source is staged first. You will review titles and duplicates back in the inbox.</p>
+                <h3>YouTube link</h3>
+                <p>Add the link first, then review the imported song in Review imports.</p>
               </div>
               <label className="field">
                 <span>YouTube URL</span>
@@ -156,7 +158,12 @@ function ImportFlowDialogContent({
                   type="url"
                   placeholder="https://www.youtube.com/watch?v=…"
                   value={youtubeUrl}
-                  onChange={(event) => setYoutubeUrl(event.target.value)}
+                  onChange={(event) => handleYoutubeUrlChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' || !youtubeUrl.trim() || busy) return
+                    event.preventDefault()
+                    void resolveUrl()
+                  }}
                   disabled={busy}
                 />
                 {playlistHint ? <span className="field-hint">{playlistHint}</span> : null}
@@ -173,7 +180,7 @@ function ImportFlowDialogContent({
                       <Spinner /> Resolving…
                     </>
                   ) : (
-                    'Stage YouTube Source'
+                    'Add YouTube Link'
                   )}
                 </button>
               </div>
@@ -182,7 +189,7 @@ function ImportFlowDialogContent({
             <section className="import-flow-section">
               <div className="import-flow-section-head">
                 <h3>Local files</h3>
-                <p>Drop audio or video files here, then finish the batch from the inbox.</p>
+                <p>Drop audio or video files here, then finish the batch in Review imports.</p>
               </div>
               <div
                 className={`drop-zone ${dragActive ? 'drop-zone-active' : ''}`}
@@ -219,7 +226,13 @@ function ImportFlowDialogContent({
                   accept="audio/*,video/*"
                   multiple
                   disabled={busy}
-                  onChange={(event) => setLocalFiles(Array.from(event.target.files ?? []))}
+                  onChange={(event) => {
+                    const accepted = filterImportableMediaFiles(event.target.files ?? [])
+                    setLocalFiles(accepted)
+                    setError(
+                      accepted.length > 0 ? null : 'Choose audio or video files to stage them.',
+                    )
+                  }}
                   hidden
                 />
                 {localFiles.length > 0 ? (
@@ -254,7 +267,7 @@ function ImportFlowDialogContent({
                       <Spinner /> Staging…
                     </>
                   ) : (
-                    'Stage Local Files'
+                    'Add Files'
                   )}
                 </button>
               </div>
@@ -264,7 +277,7 @@ function ImportFlowDialogContent({
               <section className="import-flow-section import-flow-section-compact">
                 <div className="import-flow-section-head">
                   <h3>{stagedImports.length} staged source{stagedImports.length === 1 ? '' : 's'}</h3>
-                  <p>Close this dialog and finish the batch from the inbox.</p>
+                  <p>Close this dialog and finish the batch from the workspace.</p>
                 </div>
                 <div className="import-flow-section-actions">
                   <button
@@ -275,7 +288,7 @@ function ImportFlowDialogContent({
                       handleClose()
                     }}
                   >
-                    Go to inbox
+                    Back to workspace
                   </button>
                 </div>
               </section>

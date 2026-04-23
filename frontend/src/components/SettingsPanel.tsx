@@ -59,18 +59,18 @@ function bucketFor(storageOverview: StorageOverview | null, key: StorageBucket['
 function panelCopy(view: SettingsPanelProps['view']) {
   if (view === 'preferences') {
     return {
-      title: 'Preferences',
+      title: 'Defaults',
       description: 'Keep these defaults simple so imports, reruns, and exports stay fast.',
     }
   }
   if (view === 'maintenance') {
     return {
-      title: 'Workspace cleanup',
-      description: 'Review workspace usage first, then run cleanup only where it actually helps.',
+      title: 'Readiness & repair',
+      description: 'Check system health and repair the library before running any cleanup.',
     }
   }
   return {
-    title: 'Storage paths',
+    title: 'Storage & cleanup',
     description: 'Change paths and retention only when the workspace layout needs to move.',
   }
 }
@@ -115,6 +115,10 @@ export function SettingsPanel({
   }, [savedAt])
 
   const copy = panelCopy(view)
+
+  if (view === 'maintenance') {
+    return null
+  }
 
   if (!settings) {
     return (
@@ -187,7 +191,7 @@ export function SettingsPanel({
                 labelId="default-model"
                 onProfileChange={(nextKey) => updateDraft({ ...draft, default_profile: nextKey })}
               />
-              <span className="field-hint">Used for new renders unless you change it per track.</span>
+              <span className="field-hint">Used for new splits unless you change it per song.</span>
             </div>
 
             <label className="field">
@@ -215,8 +219,8 @@ export function SettingsPanel({
         </form>
       ) : null}
 
-      {view === 'maintenance' ? (
-        <>
+      {view === 'storage' ? (
+        <form className="import-form" onSubmit={handleSubmit}>
           <section className="storage-panel-block">
             <div className="subsection-head">Workspace usage</div>
             <div className="storage-usage-list">
@@ -279,18 +283,14 @@ export function SettingsPanel({
                 disabled={cleaningLibraryRuns || (outputs?.reclaimable_bytes ?? 0) === 0}
                 onClick={() => void onCleanupLibraryRuns()}
               >
-                <span>Purge non-final renders</span>
+                <span>Purge non-final splits</span>
                 <span>
                   {cleaningLibraryRuns ? <><Spinner /> Working</> : formatBytes(outputs?.reclaimable_bytes ?? 0)}
                 </span>
               </button>
             </div>
           </section>
-        </>
-      ) : null}
 
-      {view === 'storage' ? (
-        <form className="import-form" onSubmit={handleSubmit}>
           <section className="storage-panel-block">
             <div className="subsection-head">Storage paths</div>
             <div className="storage-path-grid">

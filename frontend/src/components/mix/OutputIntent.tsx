@@ -1,6 +1,9 @@
+import { useMemo, useState } from 'react'
+
 import type { ProcessingProfile, RunDetail, RunMixStemEntry } from '../../types'
 import {
   INTENTS,
+  type OutputIntent,
   inferIntent,
   isIntentSupported,
   resolveIntentTemplate,
@@ -13,6 +16,12 @@ type OutputIntentPickerProps = {
   onRerunWithProfile: (profileKey: string) => void
   onExport: () => void
   onReveal: () => void
+  saving: boolean
+}
+
+type PendingIntentState = {
+  runId: string
+  value: OutputIntent
 }
 
 export function OutputIntentPicker({
@@ -22,18 +31,47 @@ export function OutputIntentPicker({
   onRerunWithProfile,
   onExport,
   onReveal,
+  saving,
 }: OutputIntentPickerProps) {
   const inferredIntent = inferIntent(run)
-  const activeIntent = inferredIntent
+  const [pendingIntent, setPendingIntent] = useState<PendingIntentState | null>(null)
+  const activeIntent =
+    pendingIntent?.runId === run.id ? pendingIntent.value : inferredIntent
+  const activeIntentSpec = useMemo(
+    () => INTENTS.find((spec) => spec.value === activeIntent) ?? null,
+    [activeIntent],
+  )
+
+  async function handleApplyIntent(intent: OutputIntent) {
+    const template = resolveIntentTemplate(intent, run.artifacts)
+    if (!template) return
+
+    setPendingIntent({ runId: run.id, value: intent })
+    try {
+      await onApplyTemplate(template)
+    } catch {
+      setPendingIntent((current) =>
+        current?.runId === run.id && current.value === intent ? null : current,
+      )
+    }
+  }
 
   return (
     <section className="output-intent">
       <div className="output-intent-head">
-        <h3 className="subsection-head">Choose the result</h3>
+        <h3 className="subsection-head">Choose target mix</h3>
         <p className="output-intent-summary">
-          Start with the listening outcome you want. Manual balancing stays below if the preset is
-          close but not exact.
+          Start with the closest outcome first. Open the stem mixer only if it still needs work.
         </p>
+        <span className="output-intent-state" aria-live="polite">
+          {saving
+            ? activeIntentSpec
+              ? `Saving ${activeIntentSpec.label.toLowerCase()}…`
+              : 'Saving changes…'
+            : activeIntentSpec
+              ? `${activeIntentSpec.label} applied.`
+              : 'No preset fully matches the current balance.'}
+        </span>
       </div>
       <div className="output-intent-options" role="group" aria-label="Quick mix presets">
         {INTENTS.map((spec) => {
@@ -47,8 +85,7 @@ export function OutputIntentPicker({
                 aria-pressed={isActive}
                 className={`output-intent-option ${isActive ? 'active' : ''}`}
                 onClick={() => {
-                  const template = resolveIntentTemplate(spec.value, run.artifacts)
-                  if (template) void onApplyTemplate(template)
+                  void handleApplyIntent(spec.value)
                 }}
               >
                 <span className="output-intent-option-label">{spec.label}</span>
@@ -85,7 +122,7 @@ export function OutputIntentPicker({
           Export this result
         </button>
         <button type="button" className="button-secondary" onClick={onReveal}>
-          Open render folder
+          Open result folder
         </button>
       </div>
     </section>

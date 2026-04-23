@@ -13,9 +13,7 @@ import {
 type CompareViewProps = {
   runA: RunDetail
   runB: RunDetail
-  keeperRunId: string | null
-  settingKeeper: boolean
-  onSetKeeper: (runId: string) => void | Promise<void>
+  metricsReady: boolean
 }
 
 // Prefer the canonical whole-run mix render, then stems shared between both
@@ -107,9 +105,7 @@ function matchedMetrics(runA: RunDetail, runB: RunDetail): {
 export function CompareView({
   runA,
   runB,
-  keeperRunId,
-  settingKeeper,
-  onSetKeeper,
+  metricsReady,
 }: CompareViewProps) {
   const matched = matchedMetrics(runA, runB)
   const metricsA = matched?.metricsA ?? null
@@ -117,99 +113,25 @@ export function CompareView({
   const metricsUnavailable = !matched
   const pairs = pairedArtifacts(runA, runB)
 
-  function renderFinalRenderButton(run: RunDetail) {
-    const isKeeper = keeperRunId === run.id
-    return (
-      <button
-        type="button"
-        className={`button-secondary compare-keeper-action ${isKeeper ? 'compare-keeper-active' : ''}`}
-        disabled={settingKeeper}
-        onClick={() => void onSetKeeper(run.id)}
-        title={isKeeper ? 'Already marked as final version' : 'Mark as final version'}
-      >
-        {isKeeper ? 'Final Version' : 'Set Final'}
-      </button>
-    )
-  }
-
   return (
     <section className="compare-view">
       <header className="compare-view-head">
-        <h3>Compare</h3>
+        <h3>Compare results</h3>
         <p className="compare-view-hint">
-          Render metrics are shown only when both renders have a rendered mixdown.
+          {metricsReady
+            ? 'Waveform overlays come first so you can judge the result quickly. Technical metrics stay available below.'
+            : 'Waveform overlays still appear for shared files. Technical metrics only appear when both splits include a comparable mixdown.'}
         </p>
       </header>
 
       <div className="compare-pick">
         <div className="compare-pick-cell">
-          <span>{runA.processing.profile_label}</span>
-          {renderFinalRenderButton(runA)}
+          <span>Current · {runA.processing.profile_label}</span>
         </div>
         <div className="compare-pick-cell">
-          <span>{runB.processing.profile_label}</span>
-          {renderFinalRenderButton(runB)}
+          <span>Compare with · {runB.processing.profile_label}</span>
         </div>
       </div>
-
-      <table className="compare-table">
-        <thead>
-          <tr>
-            <th scope="col"></th>
-            <th scope="col">Selected render</th>
-            <th scope="col">Compared render</th>
-          </tr>
-        </thead>
-        <tbody>
-          <CompareRow
-            label="Model"
-            valueA={runA.processing.profile_label}
-            valueB={runB.processing.profile_label}
-            compareAsValue
-          />
-          <CompareRow
-            label="Model file"
-            valueA={runA.processing.model_filename}
-            valueB={runB.processing.model_filename}
-            compareAsValue
-          />
-          <tr className="compare-section-divider">
-            <td colSpan={3} />
-          </tr>
-          <CompareRow
-            label="Loudness"
-            valueA={metricsUnavailable ? '—' : formatLufs(metricsA?.integrated_lufs) ?? '—'}
-            valueB={metricsUnavailable ? '—' : formatLufs(metricsB?.integrated_lufs) ?? '—'}
-            delta={metricsUnavailable ? null : formatDelta(metricsA?.integrated_lufs, metricsB?.integrated_lufs, 'LU')}
-          />
-          <CompareRow
-            label="True peak"
-            valueA={metricsUnavailable ? '—' : formatTruePeak(metricsA?.true_peak_dbfs) ?? '—'}
-            valueB={metricsUnavailable ? '—' : formatTruePeak(metricsB?.true_peak_dbfs) ?? '—'}
-            delta={metricsUnavailable ? null : formatDelta(metricsA?.true_peak_dbfs, metricsB?.true_peak_dbfs, 'dB')}
-          />
-          <CompareRow
-            label="Duration"
-            valueA={metricsUnavailable ? '—' : formatDuration(metricsA?.duration_seconds) ?? '—'}
-            valueB={metricsUnavailable ? '—' : formatDuration(metricsB?.duration_seconds) ?? '—'}
-          />
-          <CompareRow
-            label="Sample rate"
-            valueA={metricsUnavailable ? '—' : formatSampleRate(metricsA?.sample_rate) ?? '—'}
-            valueB={metricsUnavailable ? '—' : formatSampleRate(metricsB?.sample_rate) ?? '—'}
-          />
-          <CompareRow
-            label="Channels"
-            valueA={metricsUnavailable ? '—' : formatChannels(metricsA?.channels) ?? '—'}
-            valueB={metricsUnavailable ? '—' : formatChannels(metricsB?.channels) ?? '—'}
-          />
-          <CompareRow
-            label="Size"
-            valueA={metricsUnavailable ? '—' : formatSize(metricsA?.size_bytes) ?? '—'}
-            valueB={metricsUnavailable ? '—' : formatSize(metricsB?.size_bytes) ?? '—'}
-          />
-        </tbody>
-      </table>
 
       {pairs.length ? (
         <div className="compare-overlays">
@@ -231,6 +153,68 @@ export function CompareView({
       ) : (
         <p className="empty-state">No matching artifacts to overlay.</p>
       )}
+
+      <details className="compare-metrics" open={metricsReady}>
+        <summary>Technical metrics</summary>
+        <table className="compare-table">
+          <thead>
+            <tr>
+              <th scope="col"></th>
+              <th scope="col">Current split</th>
+              <th scope="col">Compared split</th>
+            </tr>
+          </thead>
+          <tbody>
+            <CompareRow
+              label="Model"
+              valueA={runA.processing.profile_label}
+              valueB={runB.processing.profile_label}
+              compareAsValue
+            />
+            <CompareRow
+              label="Model file"
+              valueA={runA.processing.model_filename}
+              valueB={runB.processing.model_filename}
+              compareAsValue
+            />
+            <tr className="compare-section-divider">
+              <td colSpan={3} />
+            </tr>
+            <CompareRow
+              label="Loudness"
+              valueA={metricsUnavailable ? '—' : formatLufs(metricsA?.integrated_lufs) ?? '—'}
+              valueB={metricsUnavailable ? '—' : formatLufs(metricsB?.integrated_lufs) ?? '—'}
+              delta={metricsUnavailable ? null : formatDelta(metricsA?.integrated_lufs, metricsB?.integrated_lufs, 'LU')}
+            />
+            <CompareRow
+              label="True peak"
+              valueA={metricsUnavailable ? '—' : formatTruePeak(metricsA?.true_peak_dbfs) ?? '—'}
+              valueB={metricsUnavailable ? '—' : formatTruePeak(metricsB?.true_peak_dbfs) ?? '—'}
+              delta={metricsUnavailable ? null : formatDelta(metricsA?.true_peak_dbfs, metricsB?.true_peak_dbfs, 'dB')}
+            />
+            <CompareRow
+              label="Duration"
+              valueA={metricsUnavailable ? '—' : formatDuration(metricsA?.duration_seconds) ?? '—'}
+              valueB={metricsUnavailable ? '—' : formatDuration(metricsB?.duration_seconds) ?? '—'}
+            />
+            <CompareRow
+              label="Sample rate"
+              valueA={metricsUnavailable ? '—' : formatSampleRate(metricsA?.sample_rate) ?? '—'}
+              valueB={metricsUnavailable ? '—' : formatSampleRate(metricsB?.sample_rate) ?? '—'}
+            />
+            <CompareRow
+              label="Channels"
+              valueA={metricsUnavailable ? '—' : formatChannels(metricsA?.channels) ?? '—'}
+              valueB={metricsUnavailable ? '—' : formatChannels(metricsB?.channels) ?? '—'}
+            />
+            <CompareRow
+              label="Size"
+              valueA={metricsUnavailable ? '—' : formatSize(metricsA?.size_bytes) ?? '—'}
+              valueB={metricsUnavailable ? '—' : formatSize(metricsB?.size_bytes) ?? '—'}
+            />
+          </tbody>
+        </table>
+      </details>
     </section>
   )
 }

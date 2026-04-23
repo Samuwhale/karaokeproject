@@ -27,7 +27,6 @@ const RUN_NOTE_MAX_LENGTH = 280
 const RETRYABLE_RUN_STATUSES = new Set(['failed', 'cancelled'])
 
 type RunFilter = 'all' | 'completed' | 'failed'
-type WorkbenchMode = 'render' | 'result' | 'finalize'
 type ExportRequest = {
   initialPreset?: ExportPreset
   lockPreset?: boolean
@@ -64,6 +63,7 @@ type TrackDetailPanelProps = {
   onToggleCompare: (runId: string) => void
   onOpenExport: (request?: ExportRequest) => void
   onReveal: (payload: RevealFolderInput) => void | Promise<void>
+  onBackToLibrary: () => void
 }
 
 type DraftState<T> = {
@@ -81,7 +81,7 @@ function formatTimestampShort(value: string) {
 }
 
 function formatDuration(seconds: number | null) {
-  if (!seconds) return '—'
+  if (seconds === null) return '—'
   const total = Math.round(seconds)
   const m = Math.floor(total / 60)
   const s = (total % 60).toString().padStart(2, '0')
@@ -125,7 +125,7 @@ export function TrackDetailPanel({
     if (hasFirstSync && tracksCount === 0) {
       return (
         <section className="section track-detail-empty">
-          <p>Import a song to start rendering.</p>
+          <p>Import a song to start splitting.</p>
         </section>
       )
     }
@@ -134,12 +134,12 @@ export function TrackDetailPanel({
         <section className="section track-detail-empty">
           <h2>Select a song to keep working.</h2>
           <p>
-            Pick any track from the library to review its renders, tune the current result, or
+            Pick any song from the library to review its splits, tune the current result, or
             export it.
           </p>
           <p className="track-detail-empty-hint">
-            Tip: the library filters are now organized by workflow stage so attention and ready
-            results are easier to find.
+            Tip: the library filters are organized by what needs action next, so blocked work and
+            completed results are easier to find.
           </p>
         </section>
       )
@@ -181,12 +181,12 @@ function TrackDetailContent({
   onToggleCompare,
   onOpenExport,
   onReveal,
+  onBackToLibrary,
 }: TrackDetailContentProps) {
   const [runFilter, setRunFilter] = useState<RunFilter>('all')
   const [editing, setEditing] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [artistDraft, setArtistDraft] = useState('')
-  const [renderFormOpen, setRenderFormOpen] = useState(false)
   const [nextProcessingState, setNextProcessingState] = useState<DraftState<RunProcessingConfigInput>>({
     sourceKey: defaultProfileKey,
     values: {
@@ -211,7 +211,6 @@ function TrackDetailContent({
   const trackId = track.id
   const keeperRunId = track.keeper_run_id
   const hasNoRuns = track.runs.length === 0
-  const renderFormExpanded = hasNoRuns || renderFormOpen
   const isCustomProfile = nextProcessing.profile_key === CUSTOM_PROFILE_KEY
   const customModelValid = !isCustomProfile || isValidModelFilename(nextProcessing.model_filename ?? '')
   const canSubmit = customModelValid && !creatingRun
@@ -246,17 +245,17 @@ function TrackDetailContent({
   const failedRunCount = track.runs.filter((run) => RETRYABLE_RUN_STATUSES.has(run.status)).length
   const selectedRunStatusCopy =
     !selectedRun || hasNoRuns
-      ? 'Choose a profile when you are ready to create the first render.'
+      ? 'Choose a profile when you are ready to create the first split.'
       : isActiveRun
-        ? 'The selected render is still processing. You can keep browsing the library while it finishes.'
+        ? 'The selected split is still processing. You can keep browsing the library while it finishes.'
         : isFailedRun
-          ? 'This render needs attention before the result tools become useful.'
+          ? 'This split needs attention before the result tools become useful.'
           : runMode === 'completed-empty'
-            ? 'This render finished, but it did not produce mixable stems.'
-            : 'This render is ready to shape, compare, and export.'
+            ? 'This split finished, but it did not produce mixable stems.'
+            : 'This split is ready to shape, compare, and turn into a final version.'
   const selectedRunMeta = selectedRun
     ? `${selectedRun.processing.profile_label} · ${statusLabel(selectedRun.status)}`
-    : 'No render selected'
+    : 'No split selected'
   const finalRenderSummary = keeperRunId ? 'Final version selected' : 'No final version yet'
   const setupProfileLabel =
     nextProcessing.profile_key === CUSTOM_PROFILE_KEY
@@ -264,50 +263,39 @@ function TrackDetailContent({
         ? `Custom model · ${nextProcessing.model_filename.trim()}`
         : 'Custom model'
       : profiles.find((profile) => profile.key === nextProcessing.profile_key)?.label ?? 'Shared default'
-  const runHistoryOpen = track.runs.length <= 2 || effectiveRunFilter !== 'all' || compareRunId !== null
-  const renderSetupOpen = hasNoRuns || renderFormOpen
-  const suggestedWorkbenchMode: WorkbenchMode =
-    runMode === 'completed-mixable' || runMode === 'completed-empty'
-      ? 'result'
-      : 'render'
+  const decisionAvailable = !!selectedRun && selectedRun.status === 'completed'
+  const [runHistoryOpen, setRunHistoryOpen] = useState(false)
+  const [songSettingsOpen, setSongSettingsOpen] = useState(false)
+  const [renderSetupOpen, setRenderSetupOpen] = useState(
+    hasNoRuns || runMode === 'failed' || runMode === null,
+  )
+  const [manualMixOpen, setManualMixOpen] = useState(false)
+  const [finalizeOpen, setFinalizeOpen] = useState(!keeperRunId)
   const primaryAction =
-    runMode === 'completed-mixable' || runMode === 'completed-empty'
+    runMode === 'failed' && selectedRun
       ? {
-          label:
-            selectedRun && keeperRunId === selectedRun.id
-              ? 'Export Final Version'
-              : 'Choose Final Version',
-          action:
-            selectedRun && keeperRunId === selectedRun.id
-              ? () =>
-                  onOpenExport({
-                    initialPreset: 'final-mix',
-                    contextTitle: `Export ${track.title}`,
-                    contextDescription: 'Using the selected final version for this song.',
-                  })
-              : () => setWorkbenchMode('finalize'),
+          label: retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry Split',
+          action: () => void onRetryRun(selectedRun.id),
+          disabled: retryingRunId === selectedRun.id,
         }
-      : runMode === 'failed' && selectedRun
+      : runMode === 'completed-mixable' && selectedRun && keeperRunId === selectedRun.id
         ? {
-            label: retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry Render',
-            action: () => void onRetryRun(selectedRun.id),
-            disabled: retryingRunId === selectedRun.id,
+            label: 'Export Final Version',
+            action: () =>
+              onOpenExport({
+                initialPreset: 'final-mix',
+                contextTitle: `Export ${track.title}`,
+                contextDescription: 'Using the selected final version for this song.',
+              }),
           }
-        : !renderFormExpanded
+        : !renderSetupOpen
           ? {
-              label: hasNoRuns ? 'Start First Render' : 'Queue Another Render',
-              action: () => setRenderFormOpen(true),
+              label: hasNoRuns ? 'Start First Split' : 'Queue Another Split',
+              action: () => {
+                setRenderSetupOpen(true)
+              },
             }
           : null
-  const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(suggestedWorkbenchMode)
-  const resolvedWorkbenchMode =
-    workbenchMode === 'result' && !resultModeAvailable
-      ? 'render'
-      : workbenchMode === 'finalize' && !selectedRun
-        ? resultModeAvailable
-          ? 'result'
-          : 'render'
-        : workbenchMode
 
   async function handleCreateRun() {
     const payload: RunProcessingConfigInput = {
@@ -317,7 +305,6 @@ function TrackDetailContent({
       payload.model_filename = (nextProcessing.model_filename ?? '').trim()
     }
     await onCreateRun(trackId, payload)
-    setRenderFormOpen(false)
   }
 
   async function handleToggleKeeper(runId: string) {
@@ -328,6 +315,7 @@ function TrackDetailContent({
   function startEditing() {
     setTitleDraft(track.title)
     setArtistDraft(track.artist ?? '')
+    setSongSettingsOpen(true)
     setEditing(true)
   }
 
@@ -355,7 +343,7 @@ function TrackDetailContent({
       sourceKey: defaultProfileKey,
       values: { profile_key: profileKey, model_filename: '' },
     })
-    setRenderFormOpen(true)
+    setRenderSetupOpen(true)
   }
 
   function handleCompareTargetChange(nextRunId: string) {
@@ -367,12 +355,12 @@ function TrackDetailContent({
   const workflowCopy =
     runMode === 'active' && selectedRun
       ? {
-          title: 'Render in progress',
+          title: 'Split in progress',
           description: selectedRun.status_message || 'Processing continues in the background.',
         }
       : runMode === 'failed' && selectedRun
         ? {
-            title: selectedRun.status === 'cancelled' ? 'Render cancelled' : 'Render needs attention',
+            title: selectedRun.status === 'cancelled' ? 'Split cancelled' : 'Split needs attention',
             description:
               selectedRun.error_message ||
               'Retry with the same settings or choose a different model.',
@@ -384,501 +372,524 @@ function TrackDetailContent({
             }
           : runMode === 'completed-empty'
             ? {
-                title: 'Render finished without mixable stems',
+                title: 'Split finished without mixable stems',
                 description: 'Try a different model to get usable stems for mixing.',
               }
             : {
                 title: 'Choose how this song should be split',
-                description: 'Start a render, then come back here to compare and export the result.',
+                description: 'Start a split, then come back here to review the result and choose the final version.',
               }
 
   return (
     <section className="section track-detail">
       <div className="track-detail-head">
-        {editing ? (
-          <div className="track-detail-edit">
-            <label className="field">
-              <span>Title</span>
-              <input
-                type="text"
-                value={titleDraft}
-                onChange={(event) => setTitleDraft(event.target.value)}
-                autoFocus
-              />
-            </label>
-            <label className="field">
-              <span>Artist</span>
-              <input
-                type="text"
-                placeholder="Optional"
-                value={artistDraft}
-                onChange={(event) => setArtistDraft(event.target.value)}
-              />
-            </label>
-            <div className="track-detail-edit-actions">
-              <button
-                type="button"
-                className="button-primary"
-                disabled={updatingTrack || !titleDraft.trim()}
-                onClick={() => void handleSaveEdits()}
-              >
-                {updatingTrack ? <><Spinner /> Saving…</> : 'Save'}
-              </button>
-              <button type="button" className="button-secondary" onClick={() => setEditing(false)}>
-                Cancel
-              </button>
-            </div>
+        <div className="track-detail-head-meta">
+          <button type="button" className="track-detail-back" onClick={onBackToLibrary}>
+            Back to library
+          </button>
+          <h2>{track.title}</h2>
+          <p className="track-detail-subtitle">
+            {track.artist ?? 'Unknown artist'} · {formatDuration(track.duration_seconds)} ·{' '}
+            {track.source_type === 'youtube' ? 'YouTube' : track.source_format}
+          </p>
+          <div className="track-detail-status">
+            <strong>{workflowCopy.title}</strong>
+            <span className="track-detail-status-meta">{selectedRunMeta}</span>
           </div>
-        ) : (
-          <div className="track-detail-head-meta">
-            <h2>{track.title}</h2>
-            <p className="track-detail-subtitle">
-              {track.artist ?? 'Unknown artist'} · {formatDuration(track.duration_seconds)} ·{' '}
-              {track.source_type === 'youtube' ? 'YouTube' : track.source_format}
-            </p>
-            <div className="track-detail-hero">
-              <span className="track-detail-hero-label">Current step</span>
-              <strong>{workflowCopy.title}</strong>
-              <p>{workflowCopy.description}</p>
-              <span className="track-detail-hero-meta">{selectedRunMeta}</span>
-            </div>
-          </div>
-        )}
+          <p className="track-detail-status-copy">{workflowCopy.description}</p>
+        </div>
 
-        {!editing ? (
+        {primaryAction ? (
           <div className="track-detail-head-actions">
-            {primaryAction ? (
-              <button
-                type="button"
-                className="button-primary"
-                disabled={primaryAction.disabled}
-                onClick={primaryAction.action}
-              >
-                {primaryAction.label}
-              </button>
-            ) : null}
-            <button type="button" className="button-secondary" onClick={startEditing}>
-              Rename
+            <button
+              type="button"
+              className="button-primary"
+              disabled={primaryAction.disabled}
+              onClick={primaryAction.action}
+            >
+              {primaryAction.label}
             </button>
-            <ConfirmInline
-              label="Delete"
-              pendingLabel="Deleting…"
-              confirmLabel="Delete track"
-              cancelLabel="Keep it"
-              prompt={`Delete "${track.title}" and all its renders?`}
-              onConfirm={() => onDeleteTrack(trackId)}
-            />
           </div>
         ) : null}
       </div>
 
-      <div className="track-workflow">
-        <div className="workbench-mode-switch" role="tablist" aria-label="Song workspace">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={resolvedWorkbenchMode === 'render'}
-            className={`workbench-mode-tab ${resolvedWorkbenchMode === 'render' ? 'workbench-mode-tab-active' : ''}`}
-            onClick={() => setWorkbenchMode('render')}
-          >
-            1. Render
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={resolvedWorkbenchMode === 'result'}
-            className={`workbench-mode-tab ${resolvedWorkbenchMode === 'result' ? 'workbench-mode-tab-active' : ''}`}
-            onClick={() => setWorkbenchMode('result')}
-            disabled={!resultModeAvailable}
-          >
-            2. Shape & export
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={resolvedWorkbenchMode === 'finalize'}
-            className={`workbench-mode-tab ${resolvedWorkbenchMode === 'finalize' ? 'workbench-mode-tab-active' : ''}`}
-            onClick={() => setWorkbenchMode('finalize')}
-            disabled={!selectedRun}
-          >
-            3. Compare & decide
-          </button>
+      {selectedRun ? (
+        <div className="track-detail-current">
+          <div className="track-detail-current-copy">
+            <strong>Selected split</strong>
+            <p>
+              {selectedRun.processing.profile_label} · {statusLabel(selectedRun.status)}
+              {selectedRun.status === 'completed' ? ` · ${formatTimestampShort(selectedRun.updated_at)}` : ''}
+            </p>
+          </div>
+          {track.runs.length > 1 ? (
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => setRunHistoryOpen((current) => !current)}
+            >
+              {runHistoryOpen ? 'Hide other splits' : `Browse splits (${track.runs.length})`}
+            </button>
+          ) : null}
         </div>
+      ) : null}
 
-        {resolvedWorkbenchMode === 'render' ? (
-          <div className="track-detail-section">
+      <div className="track-workflow">
+        {runMode === 'active' && selectedRun ? (
+          <div className="workflow-step-block">
             <div className="track-detail-section-head">
-              <h3 className="subsection-head">Render</h3>
-              <p>Choose the current render, then queue another one only when you need a different split.</p>
+              <h3 className="subsection-head">Current split</h3>
+              <p>Processing continues in the background. You can leave this song selected while it finishes.</p>
             </div>
-
-            {track.runs.length === 0 ? (
-              <div className="workflow-step-blocked">
-                <p>No renders yet. Start with a model below to create the first result.</p>
-              </div>
-            ) : null}
-
-            {track.runs.length ? (
-              <details className="track-advanced track-detail-disclosure" open={runHistoryOpen}>
-                <summary className="track-advanced-summary">
-                  <div>
-                    <strong>Render history</strong>
-                    <p>{selectedRunMeta}</p>
-                  </div>
-                  <span>{track.runs.length} total · {activeRunCount} active</span>
-                </summary>
-                <div className="track-detail-disclosure-body">
-                  <div className="run-history">
-                    <div className="run-history-head">
-                      <div className="track-detail-section-head">
-                        <h4 className="subsection-head">Available renders</h4>
-                        <p>Pick the version you want to work from right now.</p>
-                      </div>
-                      <div className="run-history-head-actions">
-                        <span className="run-history-summary">
-                          {completedRunCount} completed · {failedRunCount} needs attention
-                        </span>
-                        <select
-                          aria-label="Filter renders"
-                          className="run-filter"
-                          value={effectiveRunFilter}
-                          onChange={(event) => setRunFilter(event.target.value as RunFilter)}
-                        >
-                          <option value="all">All</option>
-                          <option value="completed">Completed</option>
-                          <option value="failed">Failed</option>
-                        </select>
-                      </div>
-                    </div>
-                    {filteredRuns.length === 0 ? (
-                      <p className="empty-state run-history-empty">No renders match this filter.</p>
-                    ) : null}
-                    <div className="run-selector">
-                      {filteredRuns.map((run, index) => {
-                        const isActiveChip = selectedRun?.id === run.id
-                        const isKeeper = keeperRunId === run.id
-                        const isCompareTarget = compareRunId === run.id
-                        const isCompleted = run.status === 'completed'
-                        const shortcutDigit = index < 9 ? index + 1 : null
-
-                        return (
-                          <div
-                            key={run.id}
-                            className={`run-chip ${isActiveChip ? 'run-chip-active' : ''} ${isKeeper ? 'run-chip-keeper' : ''} ${isCompareTarget ? 'run-chip-compare' : ''}`}
-                          >
-                            <button
-                              type="button"
-                              className="run-chip-select"
-                              onClick={() => onSelectRun(run.id)}
-                              title={shortcutDigit ? `Press ${shortcutDigit}` : undefined}
-                            >
-                              <strong>
-                                {shortcutDigit ? (
-                                  <kbd className="run-chip-key" aria-hidden>
-                                    {shortcutDigit}
-                                  </kbd>
-                                ) : null}
-                                {run.processing.profile_label}
-                              </strong>
-                              <span>{isCompleted ? formatTimestampShort(run.updated_at) : statusLabel(run.status)}</span>
-                              {isKeeper || isCompareTarget ? (
-                                <em className="run-chip-meta">
-                                  {isKeeper ? 'Final version' : null}
-                                  {isKeeper && isCompareTarget ? ' · ' : null}
-                                  {isCompareTarget ? 'Compare target' : null}
-                                </em>
-                              ) : null}
-                            </button>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </details>
-            ) : null}
-
-            <details className="track-advanced track-detail-disclosure" open={renderSetupOpen}>
-              <summary className="track-advanced-summary">
-                <div>
-                  <strong>Queue another render</strong>
-                  <p>{selectedRunStatusCopy}</p>
-                </div>
-                <span>{setupProfileLabel}</span>
-              </summary>
-              <div className="track-detail-disclosure-body">
-                <div className="render-form">
-                  <ModelPicker
-                    profileKey={nextProcessing.profile_key}
-                    modelFilename={nextProcessing.model_filename ?? ''}
-                    profiles={profiles}
-                    cachedModels={cachedModels}
-                    labelId="render-form"
-                    onProfileChange={(nextKey) =>
-                      setNextProcessingState({
-                        sourceKey: defaultProfileKey,
-                        values: { ...nextProcessing, profile_key: nextKey },
-                      })
-                    }
-                    onModelFilenameChange={(next) =>
-                      setNextProcessingState({
-                        sourceKey: defaultProfileKey,
-                        values: { ...nextProcessing, model_filename: next },
-                      })
-                    }
-                  />
-                  <div className="render-form-actions">
-                    <button
-                      type="button"
-                      className="button-primary"
-                      disabled={!canSubmit}
-                      onClick={() => void handleCreateRun()}
-                    >
-                      {creatingRun ? <><Spinner /> Queueing…</> : hasNoRuns ? 'Start Render' : 'Queue Another Render'}
-                    </button>
-                    {!hasNoRuns ? (
-                      <button
-                        type="button"
-                        className="button-secondary"
-                        onClick={() => setRenderFormOpen(false)}
-                      >
-                        Hide Setup
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </details>
-
-            {runMode === 'active' && selectedRun ? (
-              <div className="workflow-step-block">
-                <div className="run-stepper-wrap">
-                  <RunStepper
-                    status={selectedRun.status}
-                    lastActiveStatus={selectedRun.last_active_status}
-                  />
-                </div>
-                <div className="run-progress">
-                  <ProgressBar value={selectedRun.progress} label={selectedRun.status_message} />
-                </div>
-                <div className="run-actions">
-                  <ConfirmInline
-                    label="Cancel Render"
-                    pendingLabel="Cancelling…"
-                    confirmLabel="Cancel render"
-                    cancelLabel="Keep running"
-                    prompt="Cancel this render?"
-                    pending={cancellingRunId === selectedRun.id}
-                    onConfirm={() => onCancelRun(selectedRun.id)}
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            {runMode === 'failed' && selectedRun ? (
-              <div className="run-failure">
-                <div className="run-failure-head">
-                  <span className="run-failure-title">
-                    {selectedRun.status === 'cancelled' ? 'This render was cancelled' : 'This render failed'}
-                  </span>
-                  <button
-                    type="button"
-                    className="button-primary"
-                    disabled={retryingRunId === selectedRun.id}
-                    onClick={() => void onRetryRun(selectedRun.id)}
-                  >
-                    {retryingRunId === selectedRun.id ? <><Spinner /> Retrying…</> : 'Retry Render'}
-                  </button>
-                </div>
-                {selectedRun.error_message ? (
-                  <p className="run-failure-message">{selectedRun.error_message}</p>
-                ) : null}
-                <p className="run-failure-next">
-                  {selectedRun.status === 'cancelled'
-                    ? 'Retry keeps the same settings, or choose a different model above.'
-                    : 'Retry keeps the same settings. If this keeps failing, choose a different model above.'}
-                </p>
-              </div>
-            ) : null}
+            <div className="run-stepper-wrap">
+              <RunStepper
+                status={selectedRun.status}
+                lastActiveStatus={selectedRun.last_active_status}
+              />
+            </div>
+            <div className="run-progress">
+              <ProgressBar value={selectedRun.progress} label={selectedRun.status_message} />
+            </div>
+            <div className="run-actions">
+              <ConfirmInline
+                label="Cancel Split"
+                pendingLabel="Cancelling…"
+                confirmLabel="Cancel split"
+                cancelLabel="Keep running"
+                prompt="Cancel this split?"
+                pending={cancellingRunId === selectedRun.id}
+                onConfirm={() => onCancelRun(selectedRun.id)}
+              />
+            </div>
           </div>
         ) : null}
 
-        {resolvedWorkbenchMode === 'result' ? (
+        {runMode === 'failed' && selectedRun ? (
+          <div className="run-failure">
+            <div className="run-failure-head">
+              <span className="run-failure-title">
+                {selectedRun.status === 'cancelled' ? 'This split was cancelled' : 'This split failed'}
+              </span>
+              <button
+                type="button"
+                className="button-primary"
+                disabled={retryingRunId === selectedRun.id}
+                onClick={() => void onRetryRun(selectedRun.id)}
+              >
+                {retryingRunId === selectedRun.id ? <><Spinner /> Retrying…</> : 'Retry Split'}
+              </button>
+            </div>
+            {selectedRun.error_message ? (
+              <p className="run-failure-message">{selectedRun.error_message}</p>
+            ) : null}
+            <p className="run-failure-next">
+              {selectedRun.status === 'cancelled'
+                ? 'Retry keeps the same settings, or choose a different model below.'
+                : 'Retry keeps the same settings. If this keeps failing, choose a different model below.'}
+            </p>
+          </div>
+        ) : null}
+
+        {resultModeAvailable && selectedRun ? (
           <div className="track-detail-section">
             <div className="track-detail-section-head">
-              <h3 className="subsection-head">Shape & export</h3>
+              <h3 className="subsection-head">Shape the result</h3>
               <p>
                 {runMode === 'completed-mixable'
-                  ? 'Choose the listening outcome first, then export it or fine-tune the stems.'
-                  : runMode === 'completed-empty'
-                    ? 'This render finished, but it does not have usable stems for shaping.'
-                    : hasNoRuns
-                      ? 'Run this song once to unlock result and export tools.'
-                      : 'Pick a completed render to unlock result and export tools.'}
+                  ? 'Start with the outcome you want, then open the full mixer only if you need more control.'
+                  : 'This split finished, but it does not have usable stems for shaping.'}
               </p>
             </div>
 
-            {resultModeAvailable && selectedRun ? (
-              runMode === 'completed-mixable' ? (
-                <>
-                  <OutputIntentPicker
-                    run={selectedRun}
-                    profiles={profiles}
-                    onApplyTemplate={handleApplyIntent}
-                    onRerunWithProfile={handleRerunWithProfile}
-                    onExport={() =>
-                      onOpenExport({
-                        initialPreset: 'final-mix',
-                        lockPreset: true,
-                        contextTitle: `Export current result for ${track.title}`,
-                        contextDescription:
-                          'The final mix preset is already chosen. Adjust format or packaging only if needed.',
-                      })
-                    }
-                    onReveal={() => void onReveal({ kind: 'track-outputs', track_id: trackId })}
-                  />
-                  <details className="track-advanced">
-                    <summary className="track-advanced-summary">
-                      <div>
-                        <strong>Fine-tune stems manually</strong>
-                        <p>Open the full mixer only when the quick result needs manual balancing.</p>
-                      </div>
-                      <span>{selectedRun.mix.is_default ? 'Unity balance' : 'Custom balance saved'}</span>
-                    </summary>
-                    <div className="track-advanced-body">
-                      <MixPanel
-                        key={mixPanelStateKey(trackId, selectedRun)}
-                        run={selectedRun}
-                        saving={savingMixRunId === selectedRun.id}
-                        onSave={(stems) => onSaveMix(trackId, selectedRun.id, stems)}
-                      />
-                    </div>
-                  </details>
-                </>
-              ) : (
-                <div className="workflow-step-blocked">
-                  <p>No stems are available for this render.</p>
-                  <button
-                    type="button"
-                    className="button-primary"
-                    onClick={() => setWorkbenchMode('render')}
+            {runMode === 'completed-mixable' ? (
+              <>
+                <OutputIntentPicker
+                  run={selectedRun}
+                  profiles={profiles}
+                  onApplyTemplate={handleApplyIntent}
+                  onRerunWithProfile={handleRerunWithProfile}
+                  onExport={() =>
+                    onOpenExport({
+                      initialPreset: 'final-mix',
+                      lockPreset: true,
+                      contextTitle: `Export current result for ${track.title}`,
+                      contextDescription:
+                        'The final mix preset is already chosen. Adjust format or packaging only if needed.',
+                    })
+                  }
+                  onReveal={() => void onReveal({ kind: 'track-outputs', track_id: trackId })}
+                  saving={savingMixRunId === selectedRun.id}
+                />
+
+                <details className="track-advanced" open={manualMixOpen}>
+                  <summary
+                    className="track-advanced-summary"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setManualMixOpen((current) => !current)
+                    }}
                   >
-                    Try Another Render
-                  </button>
-                </div>
-              )
+                    <div>
+                      <strong>Fine-tune stems manually</strong>
+                      <p>Open the full mixer only when the quick result still needs work.</p>
+                    </div>
+                    <span>{selectedRun.mix.is_default ? 'Unity balance' : 'Custom balance saved'}</span>
+                  </summary>
+                  <div className="track-advanced-body">
+                    <MixPanel
+                      key={mixPanelStateKey(trackId, selectedRun)}
+                      run={selectedRun}
+                      saving={savingMixRunId === selectedRun.id}
+                      onSave={(stems) => onSaveMix(trackId, selectedRun.id, stems)}
+                    />
+                  </div>
+                </details>
+              </>
             ) : (
               <div className="workflow-step-blocked">
-                <p>
-                  {hasNoRuns
-                    ? 'Start a render in the Render tab to create the first result.'
-                    : 'Select a completed render in the Render tab to unlock export tools.'}
-                </p>
+                <p>No stems are available for this split. Queue another split if you want a mixable result.</p>
+                <button
+                  type="button"
+                  className="button-primary"
+                  onClick={() => setRenderSetupOpen(true)}
+                >
+                  Queue Another Split
+                </button>
               </div>
             )}
           </div>
         ) : null}
 
-        {resolvedWorkbenchMode === 'finalize' ? (
+        {decisionAvailable && selectedRun ? (
           <div className="track-detail-section">
             <div className="track-detail-section-head">
-              <h3 className="subsection-head">Compare & decide</h3>
-              <p>Choose the final version, add context, and clean up the other renders only when you are sure.</p>
+              <h3 className="subsection-head">Compare completed results</h3>
+              <p>Use comparison only when you need help choosing between two finished splits.</p>
             </div>
 
-            {selectedRun ? (
-              <div className="track-advanced-body track-advanced-body-open">
-                <div className="track-detail-decision-summary">
-                  <strong>{finalRenderSummary}</strong>
-                  <p>Use the selected render as the decision anchor, then compare it against another completed render if needed.</p>
-                </div>
-
-                <div className="selected-render-actions">
-                  <button
-                    type="button"
-                    className={`button-secondary ${keeperRunId === selectedRun.id ? 'button-secondary-active' : ''}`}
-                    disabled={settingKeeper || selectedRun.status !== 'completed'}
-                    onClick={() => void handleToggleKeeper(selectedRun.id)}
+            {compareCandidates.length > 0 ? (
+              <>
+                <label className="field field-inline track-detail-compare-picker">
+                  <span>Compare with</span>
+                  <select
+                    value={compareRunId ?? ''}
+                    onChange={(event) => handleCompareTargetChange(event.target.value)}
                   >
-                    {keeperRunId === selectedRun.id ? 'Clear Final Version' : 'Set as Final Version'}
-                  </button>
-                  {compareCandidates.length > 0 ? (
-                    <label className="field field-inline">
-                      <span>Compare with</span>
-                      <select
-                        value={compareRunId ?? ''}
-                        onChange={(event) => handleCompareTargetChange(event.target.value)}
-                      >
-                        <option value="">No comparison</option>
-                        {compareCandidates.map((run) => (
-                          <option key={run.id} value={run.id}>
-                            {run.processing.profile_label} · {formatTimestampShort(run.updated_at)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                </div>
+                    <option value="">Choose another completed split</option>
+                    {compareCandidates.map((run) => (
+                      <option key={run.id} value={run.id}>
+                        {run.processing.profile_label} · {formatTimestampShort(run.updated_at)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
                 {bothCompleted && compareRun ? (
                   <CompareView
                     runA={selectedRun}
                     runB={compareRun}
-                    keeperRunId={keeperRunId}
-                    settingKeeper={settingKeeper}
-                    onSetKeeper={(runId) => onSetKeeper(trackId, runId)}
+                    metricsReady={bothCompleted}
                   />
-                ) : compareCandidates.length > 0 ? (
-                  <div className="workflow-step-blocked">
-                    <p>Choose a second completed render to compare waveform overlays and metrics.</p>
-                  </div>
                 ) : (
                   <div className="workflow-step-blocked">
-                    <p>Create a second completed render before you compare alternatives.</p>
+                    <p>Choose a second completed split to compare waveform overlays and metrics.</p>
                   </div>
                 )}
-
-                <RunNoteEditor
-                  key={`${selectedRun.id}:${selectedRun.note}`}
-                  runId={selectedRun.id}
-                  note={selectedRun.note}
-                  saving={savingNoteRunId === selectedRun.id}
-                  onSave={onSetRunNote}
-                />
-
-                {keeperRunId ? (
-                  <div className="workflow-step-footer">
-                    <button
-                      type="button"
-                      className="button-primary"
-                      onClick={() =>
-                        onOpenExport({
-                          initialPreset: 'final-mix',
-                          contextTitle: `Export ${track.title}`,
-                          contextDescription: 'Using the selected final version for this song.',
-                        })
-                      }
-                    >
-                      Export Final Version
-                    </button>
-                    <ConfirmInline
-                      label="Remove Other Renders"
-                      pendingLabel="Cleaning…"
-                      confirmLabel="Delete other renders"
-                      cancelLabel="Keep them"
-                      prompt="Delete every non-final render for this track?"
-                      onConfirm={() => onPurgeNonKeepers(trackId)}
-                    />
-                  </div>
-                ) : null}
-              </div>
+              </>
             ) : (
               <div className="workflow-step-blocked">
-                <p>Select a render in the Render tab first.</p>
+                <p>Create a second completed split before you compare alternatives.</p>
               </div>
             )}
           </div>
         ) : null}
+
+        {decisionAvailable && selectedRun ? (
+          <details className="track-advanced track-detail-disclosure" open={finalizeOpen}>
+            <summary
+              className="track-advanced-summary"
+              onClick={(event) => {
+                event.preventDefault()
+                setFinalizeOpen((current) => !current)
+              }}
+            >
+              <div>
+                <strong>Choose the final version</strong>
+                <p>Mark the selected split as the one to keep, then export it or clean up the rest.</p>
+              </div>
+              <span>{finalRenderSummary}</span>
+            </summary>
+            <div className="track-detail-disclosure-body">
+              <div className="selected-render-actions">
+                <button
+                  type="button"
+                  className={`button-secondary ${keeperRunId === selectedRun.id ? 'button-secondary-active' : ''}`}
+                  disabled={settingKeeper || selectedRun.status !== 'completed'}
+                  onClick={() => void handleToggleKeeper(selectedRun.id)}
+                >
+                  {keeperRunId === selectedRun.id ? 'Clear Final Version' : 'Set as Final Version'}
+                </button>
+              </div>
+
+              <details className="track-advanced" open={Boolean(selectedRun.note.trim())}>
+                <summary className="track-advanced-summary">
+                  <div>
+                    <strong>Keep a note with this split</strong>
+                    <p>Use this only if you want to remember why this version won.</p>
+                  </div>
+                  <span>{selectedRun.note.trim() ? 'Note saved' : 'Optional'}</span>
+                </summary>
+                <div className="track-advanced-body">
+                  <RunNoteEditor
+                    key={`${selectedRun.id}:${selectedRun.note}`}
+                    runId={selectedRun.id}
+                    note={selectedRun.note}
+                    saving={savingNoteRunId === selectedRun.id}
+                    onSave={onSetRunNote}
+                  />
+                </div>
+              </details>
+
+              {keeperRunId ? (
+                <div className="workflow-step-footer">
+                  <button
+                    type="button"
+                    className="button-primary"
+                    onClick={() =>
+                      onOpenExport({
+                        initialPreset: 'final-mix',
+                        contextTitle: `Export ${track.title}`,
+                        contextDescription: 'Using the selected final version for this song.',
+                      })
+                    }
+                  >
+                    Export Final Version
+                  </button>
+                  <ConfirmInline
+                    label="Remove Other Splits"
+                    pendingLabel="Cleaning…"
+                    confirmLabel="Delete other splits"
+                    cancelLabel="Keep them"
+                    prompt="Delete every non-final split for this song?"
+                    onConfirm={() => onPurgeNonKeepers(trackId)}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </details>
+        ) : null}
+
+        {track.runs.length ? (
+          <details className="track-advanced track-detail-disclosure" open={runHistoryOpen}>
+            <summary
+              className="track-advanced-summary"
+              onClick={(event) => {
+                event.preventDefault()
+                setRunHistoryOpen((current) => !current)
+              }}
+            >
+              <div>
+                <strong>Other splits</strong>
+                <p>Swap between completed, failed, and in-progress attempts without crowding the main workflow.</p>
+              </div>
+              <span>{track.runs.length} total · {activeRunCount} active</span>
+            </summary>
+            <div className="track-detail-disclosure-body">
+              <div className="run-history">
+                <div className="run-history-head">
+                  <div className="track-detail-section-head">
+                    <h3 className="subsection-head">Split history</h3>
+                    <p>{completedRunCount} completed · {failedRunCount} need attention</p>
+                  </div>
+                  <div className="run-history-head-actions">
+                    <select
+                      aria-label="Filter splits"
+                      className="run-filter"
+                      value={effectiveRunFilter}
+                      onChange={(event) => setRunFilter(event.target.value as RunFilter)}
+                    >
+                      <option value="all">All</option>
+                      <option value="completed">Completed</option>
+                      <option value="failed">Failed</option>
+                    </select>
+                  </div>
+                </div>
+                {filteredRuns.length === 0 ? (
+                  <p className="empty-state run-history-empty">No splits match this filter.</p>
+                ) : null}
+                <div className="run-selector">
+                  {filteredRuns.map((run, index) => {
+                    const isActiveChip = selectedRun?.id === run.id
+                    const isKeeper = keeperRunId === run.id
+                    const isCompareTarget = compareRunId === run.id
+                    const isCompleted = run.status === 'completed'
+                    const shortcutDigit = index < 9 ? index + 1 : null
+
+                    return (
+                      <div
+                        key={run.id}
+                        className={`run-chip ${isActiveChip ? 'run-chip-active' : ''} ${isKeeper ? 'run-chip-keeper' : ''} ${isCompareTarget ? 'run-chip-compare' : ''}`}
+                      >
+                        <button
+                          type="button"
+                          className="run-chip-select"
+                          onClick={() => onSelectRun(run.id)}
+                          title={shortcutDigit ? `Press ${shortcutDigit}` : undefined}
+                        >
+                          <strong>
+                            {shortcutDigit ? (
+                              <kbd className="run-chip-key" aria-hidden>
+                                {shortcutDigit}
+                              </kbd>
+                            ) : null}
+                            {run.processing.profile_label}
+                          </strong>
+                          <span>{isCompleted ? formatTimestampShort(run.updated_at) : statusLabel(run.status)}</span>
+                          {isKeeper || isCompareTarget ? (
+                            <em className="run-chip-meta">
+                              {isKeeper ? 'Final version' : null}
+                              {isKeeper && isCompareTarget ? ' · ' : null}
+                              {isCompareTarget ? 'Compare target' : null}
+                            </em>
+                          ) : null}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </details>
+        ) : (
+          <div className="workflow-step-blocked">
+            <p>No splits yet. Start with a model below to create the first result.</p>
+          </div>
+        )}
+
+        <details className="track-advanced track-detail-disclosure" open={renderSetupOpen}>
+          <summary
+            className="track-advanced-summary"
+            onClick={(event) => {
+              event.preventDefault()
+              setRenderSetupOpen((current) => !current)
+            }}
+          >
+            <div>
+              <strong>{hasNoRuns ? 'Split setup' : 'Queue another split'}</strong>
+              <p>{selectedRunStatusCopy}</p>
+            </div>
+            <span>{setupProfileLabel}</span>
+          </summary>
+          <div className="track-detail-disclosure-body">
+            <div className="render-form">
+              <ModelPicker
+                profileKey={nextProcessing.profile_key}
+                modelFilename={nextProcessing.model_filename ?? ''}
+                profiles={profiles}
+                cachedModels={cachedModels}
+                labelId="render-form"
+                onProfileChange={(nextKey) =>
+                  setNextProcessingState({
+                    sourceKey: defaultProfileKey,
+                    values: { ...nextProcessing, profile_key: nextKey },
+                  })
+                }
+                onModelFilenameChange={(next) =>
+                  setNextProcessingState({
+                    sourceKey: defaultProfileKey,
+                    values: { ...nextProcessing, model_filename: next },
+                  })
+                }
+              />
+              <div className="render-form-actions">
+                <button
+                  type="button"
+                  className="button-primary"
+                  disabled={!canSubmit}
+                  onClick={() => void handleCreateRun()}
+                >
+                  {creatingRun ? <><Spinner /> Queueing…</> : hasNoRuns ? 'Start Split' : 'Queue Another Split'}
+                </button>
+                {!hasNoRuns ? (
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={() => setRenderSetupOpen(false)}
+                  >
+                    Hide split setup
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details className="track-advanced track-detail-disclosure" open={songSettingsOpen || editing}>
+          <summary
+            className="track-advanced-summary"
+            onClick={(event) => {
+              event.preventDefault()
+              setSongSettingsOpen((current) => !current)
+            }}
+          >
+            <div>
+              <strong>Song settings</strong>
+              <p>Rename the song or remove it from the library.</p>
+            </div>
+            <span>{track.source_type === 'youtube' ? 'YouTube' : track.source_format}</span>
+          </summary>
+          <div className="track-detail-disclosure-body">
+            {editing ? (
+              <div className="track-detail-edit">
+                <label className="field">
+                  <span>Title</span>
+                  <input
+                    type="text"
+                    value={titleDraft}
+                    onChange={(event) => setTitleDraft(event.target.value)}
+                    autoFocus
+                  />
+                </label>
+                <label className="field">
+                  <span>Artist</span>
+                  <input
+                    type="text"
+                    placeholder="Optional"
+                    value={artistDraft}
+                    onChange={(event) => setArtistDraft(event.target.value)}
+                  />
+                </label>
+                <div className="track-detail-edit-actions">
+                  <button
+                    type="button"
+                    className="button-primary"
+                    disabled={updatingTrack || !titleDraft.trim()}
+                    onClick={() => void handleSaveEdits()}
+                  >
+                    {updatingTrack ? <><Spinner /> Saving…</> : 'Save'}
+                  </button>
+                  <button type="button" className="button-secondary" onClick={() => setEditing(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="track-settings-actions">
+                <button type="button" className="button-secondary" onClick={startEditing}>
+                  Rename
+                </button>
+                <ConfirmInline
+                  label="Delete"
+                  pendingLabel="Deleting…"
+                  confirmLabel="Delete track"
+                  cancelLabel="Keep it"
+                  prompt={`Delete "${track.title}" and all its splits?`}
+                  onConfirm={() => onDeleteTrack(trackId)}
+                />
+              </div>
+            )}
+          </div>
+        </details>
       </div>
     </section>
   )
@@ -926,7 +937,7 @@ function RunNoteEditor({ runId, note, saving, onSave }: RunNoteEditorProps) {
     <label className="run-note">
       <textarea
         value={draft}
-        placeholder="Add context about why this render is the one to keep."
+        placeholder="Add context about why this split is the one to keep."
         maxLength={RUN_NOTE_MAX_LENGTH}
         rows={3}
         onChange={(event) => setDraft(event.target.value)}

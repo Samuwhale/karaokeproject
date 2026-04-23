@@ -62,9 +62,31 @@ export function WaveformOverlay({
   const containerBRef = useRef<HTMLDivElement | null>(null)
   const playerARef = useRef<WaveSurfer | null>(null)
   const playerBRef = useRef<WaveSurfer | null>(null)
+  const sourceARef = useRef({
+    peaks: peaksA,
+    duration: durationA,
+  })
+  const sourceBRef = useRef({
+    peaks: peaksB,
+    duration: durationB,
+  })
   const [readyA, setReadyA] = useState(false)
   const [readyB, setReadyB] = useState(false)
   const [playing, setPlaying] = useState<Channel | null>(null)
+
+  useEffect(() => {
+    sourceARef.current = {
+      peaks: peaksA,
+      duration: durationA,
+    }
+  }, [durationA, peaksA])
+
+  useEffect(() => {
+    sourceBRef.current = {
+      peaks: peaksB,
+      duration: durationB,
+    }
+  }, [durationB, peaksB])
 
   useEffect(() => {
     if (!containerARef.current || !containerBRef.current) return
@@ -76,10 +98,24 @@ export function WaveformOverlay({
     const compare = readToken('--warn')
 
     const playerA = WaveSurfer.create(
-      buildOptions(containerARef.current, urlA, peaksA, durationA, accent, true),
+      buildOptions(
+        containerARef.current,
+        urlA,
+        sourceARef.current.peaks,
+        sourceARef.current.duration,
+        accent,
+        true,
+      ),
     )
     const playerB = WaveSurfer.create(
-      buildOptions(containerBRef.current, urlB, peaksB, durationB, compare, true),
+      buildOptions(
+        containerBRef.current,
+        urlB,
+        sourceBRef.current.peaks,
+        sourceBRef.current.duration,
+        compare,
+        true,
+      ),
     )
 
     playerARef.current = playerA
@@ -108,9 +144,6 @@ export function WaveformOverlay({
       playerARef.current = null
       playerBRef.current = null
     }
-    // peaks + durations are captured in closure; re-creating players only when
-    // the URLs change avoids destroying mid-playback on every dashboard poll.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlA, urlB])
 
   function playChannel(channel: Channel) {

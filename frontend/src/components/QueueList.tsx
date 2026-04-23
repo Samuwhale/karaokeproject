@@ -43,17 +43,106 @@ export function QueueList({
   embedded = false,
   showHeader = true,
 }: QueueListProps) {
-  const selectableIds = entries
-    .filter((entry) => isActiveRunStatus(entry.run.status))
-    .map((entry) => entry.run.id)
-  const activeCount = entries.filter((entry) => isActiveRunStatus(entry.run.status)).length
-  const attentionCount = entries.length - activeCount
-  const allSelected =
-    selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id))
+  const activeEntries = entries.filter((entry) => isActiveRunStatus(entry.run.status))
+  const attentionEntries = entries.filter((entry) => !isActiveRunStatus(entry.run.status))
+  const selectableIds = activeEntries.map((entry) => entry.run.id)
+  const activeCount = activeEntries.length
+  const attentionCount = attentionEntries.length
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id))
 
   function handleToggleAll() {
     if (allSelected) onClearSelection()
     else onSelectAll(selectableIds)
+  }
+
+  function renderRows(items: QueueRunEntry[], selectable: boolean) {
+    return items.map((entry) => {
+      const { run } = entry
+      const failed = run.status === 'failed' || run.status === 'cancelled'
+      const selected = selectable && selectedIds.has(run.id)
+      const cancelling = cancellingRunId === run.id
+      const retrying = retryingRunId === run.id
+      const description = describeRun(run)
+
+      const rowClassName = [
+        'queue-row',
+        selected ? 'queue-row-selected' : '',
+        failed ? 'queue-row-failed' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
+
+      return (
+        <article key={run.id} className={rowClassName}>
+          {selectable ? (
+            <label className="list-row-check">
+              <input
+                type="checkbox"
+                checked={selected}
+                onChange={() => onToggleSelect(run.id)}
+              />
+            </label>
+          ) : (
+            <div className="list-row-check queue-row-spacer" aria-hidden="true" />
+          )}
+          <button
+            type="button"
+            className="queue-row-main"
+            onClick={() => onSelectRun(entry.track_id, run.id)}
+          >
+            <div className="queue-row-title">
+              <strong>{entry.track_title}</strong>
+              {entry.track_artist ? <span> · {entry.track_artist}</span> : null}
+            </div>
+            <div className="queue-row-meta">
+              {RUN_STATUS_LABELS[run.status] ?? run.status} · {run.processing.profile_label} ·{' '}
+              {formatElapsed(run.created_at)}
+            </div>
+            {selectable ? <ProgressBar value={run.progress} /> : null}
+            {description && selectable ? <div className="queue-row-message">{description}</div> : null}
+            {!selectable && run.error_message ? (
+              <div className="queue-row-error">{run.error_message}</div>
+            ) : null}
+          </button>
+          <div className="queue-row-actions">
+            {!selectable ? (
+              <>
+                <button
+                  type="button"
+                  className="button-primary"
+                  disabled={retrying}
+                  onClick={() => void onRetryRun(run.id)}
+                >
+                  {retrying ? (
+                    <>
+                      <Spinner /> Retrying
+                    </>
+                  ) : (
+                    'Retry split'
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => void onDismissRun(run.id)}
+                >
+                  Dismiss
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={cancelling}
+                onClick={() => void onCancelRun(run.id)}
+              >
+                {cancelling ? 'Cancelling…' : 'Cancel split'}
+              </button>
+            )}
+          </div>
+        </article>
+      )
+    })
   }
 
   if (entries.length === 0) {
@@ -61,14 +150,14 @@ export function QueueList({
       <div className={embedded ? 'queue-list-panel' : 'track-list-wrap'}>
         {showHeader ? (
           <div className="section-head">
-          <div className="section-head-copy">
-            <h2>Active queue</h2>
-            <p>Watch renders in progress and jump straight back into the exact run that needs attention.</p>
-          </div>
+            <div className="section-head-copy">
+              <h2>Queue</h2>
+              <p>Watch active splits and jump straight back into the exact result that needs attention.</p>
+            </div>
           </div>
         ) : null}
         <p className="empty-state">
-          Nothing active. Queue a render from staged imports or from a track to see progress here.
+          Nothing is running right now. Queue a split from imported songs or from a song in the library to see progress here.
         </p>
       </div>
     )
@@ -79,116 +168,48 @@ export function QueueList({
       {showHeader ? (
         <div className="section-head">
           <div className="section-head-copy">
-            <h2>Active queue</h2>
-            <p>Keep active runs visible and reopen the exact run behind each status row.</p>
+            <h2>Queue</h2>
+            <p>Keep active splits visible and clear anything that needs follow-up.</p>
           </div>
         </div>
       ) : null}
 
-      <div className="list-controls">
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={allSelected}
-            disabled={selectableIds.length === 0}
-            onChange={handleToggleAll}
-          />
-          <span>{allSelected ? 'Clear all' : 'Select all'}</span>
-        </label>
-        <span className="library-count">
-          {activeCount} running
-          {attentionCount > 0 ? ` · ${attentionCount} attention` : ''}
-        </span>
-      </div>
+      {activeEntries.length > 0 ? (
+        <>
+          <div className="list-controls">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                disabled={selectableIds.length === 0}
+                onChange={handleToggleAll}
+              />
+              <span>{allSelected ? 'Clear all' : 'Select all'}</span>
+            </label>
+            <span className="library-count">
+              {activeCount} running
+              {attentionCount > 0 ? ` · ${attentionCount} need follow-up` : ''}
+            </span>
+          </div>
+          <section className="queue-group">
+            <div className="queue-group-head">
+              <strong>Splitting now</strong>
+              <span>{activeCount}</span>
+            </div>
+            <div className="queue-list">{renderRows(activeEntries, true)}</div>
+          </section>
+        </>
+      ) : null}
 
-      <div className="queue-list">
-        {entries.map((entry) => {
-          const { run } = entry
-          const failed = run.status === 'failed' || run.status === 'cancelled'
-          const selected = selectedIds.has(run.id)
-          const cancelling = cancellingRunId === run.id
-          const retrying = retryingRunId === run.id
-          const description = describeRun(run)
-
-          const rowClassName = [
-            'queue-row',
-            selected ? 'queue-row-selected' : '',
-            failed ? 'queue-row-failed' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')
-
-          return (
-            <article key={run.id} className={rowClassName}>
-              <label className="list-row-check">
-                <input
-                  type="checkbox"
-                  checked={selected}
-                  disabled={failed}
-                  onChange={() => onToggleSelect(run.id)}
-                />
-              </label>
-              <button
-                type="button"
-                className="queue-row-main"
-                onClick={() => onSelectRun(entry.track_id, run.id)}
-              >
-                <div className="queue-row-title">
-                  <strong>{entry.track_title}</strong>
-                  {entry.track_artist ? <span> · {entry.track_artist}</span> : null}
-                </div>
-                <div className="queue-row-meta">
-                  {RUN_STATUS_LABELS[run.status] ?? run.status} ·{' '}
-                  {run.processing.profile_label} · {formatElapsed(run.created_at)}
-                </div>
-                {!failed ? <ProgressBar value={run.progress} /> : null}
-                {description && !failed ? (
-                  <div className="queue-row-message">{description}</div>
-                ) : null}
-                {failed && run.error_message ? (
-                  <div className="queue-row-error">{run.error_message}</div>
-                ) : null}
-              </button>
-              <div className="queue-row-actions">
-                {failed ? (
-                  <>
-                    <button
-                      type="button"
-                      className="button-primary"
-                      disabled={retrying}
-                      onClick={() => void onRetryRun(run.id)}
-                    >
-                      {retrying ? (
-                        <>
-                          <Spinner /> Retrying
-                        </>
-                      ) : (
-                        'Retry'
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      className="button-secondary"
-                      onClick={() => void onDismissRun(run.id)}
-                    >
-                      Dismiss
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    disabled={cancelling}
-                    onClick={() => void onCancelRun(run.id)}
-                  >
-                    {cancelling ? 'Cancelling…' : 'Cancel Render'}
-                  </button>
-                )}
-              </div>
-            </article>
-          )
-        })}
-      </div>
+      {attentionEntries.length > 0 ? (
+        <section className="queue-group">
+          <div className="queue-group-head">
+            <strong>Needs follow-up</strong>
+            <span>{attentionCount}</span>
+          </div>
+          <div className="queue-list">{renderRows(attentionEntries, false)}</div>
+        </section>
+      ) : null}
     </div>
   )
 }

@@ -293,6 +293,18 @@ function ExportModalContent({
       : preset === 'stems-for-editing'
         ? 'Stems for editing'
         : 'Full package'
+  const blockingReason =
+    !selectedTrackIds.length
+      ? 'Choose at least one track to export.'
+      : mp3Requested && !bitrateValid
+        ? BITRATE_HINT
+        : !artifactList.length
+          ? preset === 'final-mix'
+            ? 'No mixdown is available for this selection yet.'
+            : 'This selection does not have the files needed for that preset. Choose Final mix or a different split.'
+          : plan && includedCount === 0
+            ? 'None of the selected tracks have the files required for this export plan.'
+            : null
 
   return (
     <div className="import-modal" role="dialog" aria-modal="true" aria-label="Export tracks">
@@ -385,13 +397,18 @@ function ExportModalContent({
                     defaults below.
                   </p>
                 )}
+                {!lockPreset && stemOptions.length === 0 && (preset === 'stems-for-editing' || preset === 'full-package') ? (
+                  <p className="export-inline-warning">
+                    This selection does not have separated stems, so only Final mix can be exported right now.
+                  </p>
+                ) : null}
                 {lockPreset ? (
                   <div className="export-preset-grid">
                     <div className="export-preset export-preset-active" aria-live="polite">
-                      <strong>{presetLabel}</strong>
-                      <span>
-                        {preset === 'final-mix'
-                          ? 'Just the rendered mixdown.'
+                        <strong>{presetLabel}</strong>
+                        <span>
+                          {preset === 'final-mix'
+                          ? 'Just the saved mixdown.'
                           : preset === 'stems-for-editing'
                             ? 'Export the separated stems without a finished mixdown.'
                             : 'Mixdown, stems, and the source audio together.'}
@@ -406,7 +423,7 @@ function ExportModalContent({
                       onClick={() => setPreset('final-mix')}
                     >
                       <strong>Final mix</strong>
-                      <span>Just the rendered mixdown.</span>
+                      <span>Just the saved mixdown.</span>
                     </button>
                     <button
                       type="button"
@@ -431,7 +448,7 @@ function ExportModalContent({
               </section>
 
               <section className="export-section">
-                <h3>2. Review what will be included</h3>
+                <h3>2. Review included files</h3>
                 {planLoading && !plan ? (
                   <p className="inline-hint">
                     <Spinner /> Checking which artifacts are available…
@@ -451,7 +468,7 @@ function ExportModalContent({
 
               <section className="export-section export-quick-summary">
                 <div className="export-quick-summary-copy">
-                  <h3>3. Export defaults</h3>
+                  <h3>3. Build export</h3>
                   <p>{quickExportSummary}</p>
                 </div>
                 <button
@@ -459,7 +476,7 @@ function ExportModalContent({
                   className="button-secondary"
                   onClick={() => setShowAdvanced((current) => !current)}
                 >
-                  {showAdvanced ? 'Hide advanced options' : 'Adjust format and packaging'}
+                  {showAdvanced ? 'Hide customization' : 'Customize output'}
                 </button>
               </section>
 
@@ -572,7 +589,9 @@ function ExportModalContent({
 
               <div className="import-footer">
                 <span>
-                  {busy
+                  {blockingReason
+                    ? blockingReason
+                    : busy
                     ? 'Building bundle…'
                     : plan
                       ? `${includedCount} included · ${skippedCount} skipped · ${formatBytes(totalBytes)}`
@@ -615,14 +634,14 @@ function resolveMixdownSummary(
   if (usesExplicitRunSelection) {
     if (!allSelected.length) return null
     return singleTrack
-      ? 'Using the mix saved on the selected render.'
-      : 'Each selected track uses the mix saved on its chosen render.'
+      ? 'Using the mix saved on the selected split.'
+      : 'Each selected track uses the mix saved on its chosen split.'
   }
 
   if (singleTrack) {
     return singleTrack.has_custom_mix
       ? 'Using your custom stem balance.'
-      : 'Stems play at unity — no balance changes saved on this render.'
+      : 'Stems play at unity — no balance changes saved on this split.'
   }
   const custom = allSelected.filter((track) => track.has_custom_mix).length
   if (!allSelected.length) return null

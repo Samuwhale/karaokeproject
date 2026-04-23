@@ -6,9 +6,9 @@ export type LibraryFilter =
   | 'all'
   | 'needs-attention'
   | 'ready-to-render'
-  | 'rendering'
   | 'ready'
   | 'final'
+export type TrackStage = LibraryFilter | 'rendering'
 
 export type LibraryView = {
   search: string
@@ -17,7 +17,7 @@ export type LibraryView = {
 }
 
 export type LibraryStageSummary = {
-  key: Exclude<LibraryFilter, 'all'>
+  key: Exclude<TrackStage, 'all'>
   label: string
   detail: string
   toneClassName: string
@@ -39,32 +39,27 @@ export const LIBRARY_FILTERS: LibraryFilterMeta[] = [
   {
     value: 'all',
     label: 'All songs',
-    description: 'Everything in the library, regardless of stage.',
+    description: 'Everything in the library, regardless of where it sits in the workflow.',
   },
   {
     value: 'needs-attention',
-    label: 'Needs work',
-    description: 'Failed or cancelled renders that need a decision.',
+    label: 'Needs retry',
+    description: 'Splits that failed or were cancelled and need a retry or a different setup.',
   },
   {
     value: 'ready-to-render',
-    label: 'To render',
-    description: 'Imported songs that have not been rendered yet.',
-  },
-  {
-    value: 'rendering',
-    label: 'Rendering',
-    description: 'Runs that are still working in the background.',
+    label: 'Ready to split',
+    description: 'Imported songs that have not been split yet.',
   },
   {
     value: 'ready',
-    label: 'Ready',
-    description: 'Usable results that still need a final decision or export.',
+    label: 'Review result',
+    description: 'Completed splits that still need a final choice.',
   },
   {
     value: 'final',
-    label: 'Final',
-    description: 'Songs with a chosen final version.',
+    label: 'Final version',
+    description: 'Songs with a chosen result ready to export again any time.',
   },
 ]
 
@@ -78,10 +73,10 @@ export function trackStageSummary(track: TrackSummary): LibraryStageSummary {
   if (track.keeper_run_id) {
     return {
       key: 'final',
-      label: 'Final',
+      label: 'Final version',
       detail: track.has_custom_mix
         ? 'A final version is chosen and a custom mix is saved.'
-        : 'A final version is chosen and ready to export again anytime.',
+        : 'A final version is chosen and ready to export again any time.',
       toneClassName: 'track-card-stage-finished',
     }
   }
@@ -89,8 +84,8 @@ export function trackStageSummary(track: TrackSummary): LibraryStageSummary {
   if (latestStatus === 'failed' || latestStatus === 'cancelled') {
     return {
       key: 'needs-attention',
-      label: 'Needs work',
-      detail: 'Latest render needs a retry or a different setup before this song is usable.',
+      label: 'Needs retry',
+      detail: 'The latest split needs a retry or a different setup before this song is usable.',
       toneClassName: 'track-card-stage-attention',
     }
   }
@@ -107,18 +102,18 @@ export function trackStageSummary(track: TrackSummary): LibraryStageSummary {
   if (latestStatus === 'completed') {
     return {
       key: 'ready',
-      label: 'Ready',
+      label: 'Review result',
       detail: track.has_custom_mix
-        ? 'Custom mix saved. Set the final version or export it.'
-        : 'The render is usable. Review it, compare it, then set the final version.',
+        ? 'Custom mix saved. Choose the final version or export it.'
+        : 'The split is usable. Review it, compare it, then choose the final version.',
       toneClassName: 'track-card-stage-ready',
     }
   }
 
   return {
     key: 'ready-to-render',
-    label: 'To render',
-    detail: 'Import is done. Start the first render when you are ready.',
+    label: 'Ready to split',
+    detail: 'Import is done. Start the first split when you are ready.',
     toneClassName: 'track-card-stage-pending',
   }
 }
@@ -128,13 +123,14 @@ export function countLibraryFilters(tracks: TrackSummary[]): Record<LibraryFilte
     all: tracks.length,
     'needs-attention': 0,
     'ready-to-render': 0,
-    rendering: 0,
     ready: 0,
     final: 0,
   }
 
   for (const track of tracks) {
-    counts[trackStageSummary(track).key] += 1
+    const stage = trackStageSummary(track)
+    if (stage.key === 'rendering') continue
+    counts[stage.key] += 1
   }
 
   return counts
@@ -152,7 +148,6 @@ export function applyLibraryView(tracks: TrackSummary[], view: LibraryView): Tra
     switch (view.filter) {
       case 'needs-attention':
       case 'ready-to-render':
-      case 'rendering':
       case 'ready':
       case 'final':
         return stage.key === view.filter

@@ -29,3 +29,11 @@ Do not add informational pills, chips, or badges just to restate nearby content
 Only use pills or badges when they carry meaningful status, filtering, or interaction value that would otherwise be unclear
 
 Do not run the app, start the dev server, or open a browser for visual validation unless the user explicitly asks you to. A clean typecheck and build is sufficient by default. Call out untested UX assumptions in writing instead of trying to verify them yourself.
+
+Do NOT:
+
+- Nest cards inside cards
+- Add unnecessary wrappers/divs
+- Use more than 2 levels of DOM depth per section
+- Introduce components without reuse justification
+- Add placeholder features or fake data blocks

@@ -163,9 +163,9 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
     <section className="mix-panel">
       <header className="mix-panel-head">
         <div className="mix-panel-head-copy">
-          <h3 className="subsection-head">Mix</h3>
+          <h3 className="subsection-head">Stem mixer</h3>
           <p className="mix-panel-copy">
-            Adjust stem balance for the selected render. Changes save automatically.
+            Fine-tune individual stems for the selected split. Changes save automatically.
           </p>
         </div>
         <div className="mix-panel-head-actions">
@@ -223,7 +223,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
 
       {mixer.error ? <p className="mix-error">{mixer.error}</p> : null}
       <p className="mix-panel-hint">
-        Use Mute and Solo to audition stems. Double-click any slider to reset it to 0 dB.
+        Use Mute and Solo to audition stems. Double-click any slider to reset it.
       </p>
 
       <ul className="mix-stems">
