@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { ConfirmInline } from '../feedback/ConfirmInline'
-import { ProgressBar } from '../feedback/ProgressBar'
 import { RunStepper } from '../feedback/RunStepper'
 import { Spinner } from '../feedback/Spinner'
 import { MixExportPopover } from './MixExportPopover'
@@ -67,17 +66,16 @@ function isMixableRun(run: RunDetail) {
   return run.status === 'completed' && run.artifacts.some((artifact) => isStemKind(artifact.kind))
 }
 
-function versionLabel(run: RunDetail | null) {
-  if (!run) return { label: 'No version', detail: 'Queue a split' }
-  return {
-    label: run.processing.profile_label,
-    detail: formatStatus(run.status),
-  }
+function versionSummary(run: RunDetail | null, keeperId: string | null): string {
+  if (!run) return 'No version yet'
+  const isKeeper = keeperId && run.id === keeperId
+  const prefix = isKeeper ? 'Final · ' : ''
+  return `${prefix}${run.processing.profile_label}`
 }
 
 function Chevron() {
   return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden>
       <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
@@ -163,7 +161,7 @@ function VersionsPopover({
       <div className="popover popover-center popover-wide" role="dialog" aria-label="Versions">
         <div className="popover-title">Versions</div>
         {track.runs.length === 0 ? (
-          <p className="export-pop-intro">No splits yet. Queue the first one below.</p>
+          <p className="popover-empty">No splits yet. Queue the first one below.</p>
         ) : (
           <div className="popover-list" role="list">
             {track.runs.map((run) => {
@@ -242,9 +240,9 @@ function VersionsPopover({
           </div>
         ) : null}
 
-        <div className="popover-foot">
+        <div className="popover-foot popover-foot-split">
           <select
-            className="library-sort"
+            className="popover-select"
             value={profileKey}
             onChange={(event) => setProfileKey(event.target.value)}
             aria-label="Split profile"
@@ -266,7 +264,7 @@ function VersionsPopover({
                 <Spinner /> Queueing…
               </>
             ) : (
-              'Queue split'
+              'New split'
             )}
           </button>
         </div>
@@ -407,8 +405,10 @@ function MixWorkspaceContent({
   const [popover, setPopover] = useState<Popover>(null)
   const selectedRun = resolveSelectedRun(track, selectedRunId)
   const mixable = selectedRun ? isMixableRun(selectedRun) : false
-  const version = versionLabel(selectedRun)
   const canExport = !!selectedRun && selectedRun.status === 'completed'
+  const versionLabel = versionSummary(selectedRun, track.keeper_run_id)
+  const activeSplit = selectedRun && isActiveRunStatus(selectedRun.status)
+  const progressPct = activeSplit ? Math.round(selectedRun.progress) : null
 
   const mixRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
@@ -422,27 +422,23 @@ function MixWorkspaceContent({
   return (
     <section className="mix" ref={mixRef}>
       <header className="mix-top">
-        <div className="mix-top-left">
-          <button type="button" className="mix-back" onClick={onBackToSongs}>
-            <BackArrow />
-            Library
-          </button>
-        </div>
+        <button type="button" className="mix-back" onClick={onBackToSongs}>
+          <BackArrow />
+          Library
+        </button>
         <div className="mix-top-title">
           <strong>{track.title}</strong>
-          <span>{track.artist ?? 'Unknown artist'}</span>
-        </div>
-        <div className="mix-top-right">
+          <span className="mix-top-artist">{track.artist ?? 'Unknown artist'}</span>
           <span className="popover-anchor">
             <button
               type="button"
-              className={`mix-version-trigger ${popover === 'versions' ? 'is-open' : ''}`}
+              className={`mix-version-pill ${popover === 'versions' ? 'is-open' : ''}`}
               onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
               aria-haspopup="dialog"
               aria-expanded={popover === 'versions'}
             >
-              <strong>{version.label}</strong>
-              <span>· {version.detail}</span>
+              {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
+              <span>{progressPct !== null ? `${versionLabel} · ${progressPct}%` : versionLabel}</span>
               <Chevron />
             </button>
             {popover === 'versions' ? (
@@ -466,6 +462,8 @@ function MixWorkspaceContent({
               />
             ) : null}
           </span>
+        </div>
+        <div className="mix-top-actions">
           <span className="popover-anchor">
             <button
               type="button"
@@ -520,9 +518,7 @@ function MixWorkspaceContent({
           saving={savingMixRunId === selectedRun.id}
           onApplyTemplate={(stems) => onSaveMix(track.id, selectedRun.id, stems)}
         />
-      ) : (
-        <div />
-      )}
+      ) : null}
 
       {selectedRun && mixable ? (
         <MixPanel
@@ -538,8 +534,6 @@ function MixWorkspaceContent({
               <>
                 <strong>Splitting {selectedRun.processing.profile_label}</strong>
                 <RunStepper status={selectedRun.status} lastActiveStatus={selectedRun.last_active_status} />
-                <ProgressBar value={selectedRun.progress} label={selectedRun.status_message} />
-                <p>Mixing unlocks as soon as the split finishes.</p>
               </>
             ) : RETRYABLE_STATUSES.has(selectedRun.status) ? (
               <>
@@ -562,9 +556,9 @@ function MixWorkspaceContent({
           ) : (
             <>
               <strong>No version yet</strong>
-              <p>Queue the first split from Versions to start mixing.</p>
+              <p>Queue the first split to start mixing.</p>
               <button type="button" className="button-primary" onClick={() => setPopover('versions')}>
-                Open Versions
+                New split
               </button>
             </>
           )}

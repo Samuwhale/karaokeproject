@@ -47,7 +47,7 @@ CUSTOM_PROFILE_KEY = "custom"
 
 _VOCAL_INSTRUMENTAL_STEMS: tuple[str, ...] = ("vocals", "instrumental")
 _FOUR_STEM_STEMS: tuple[str, ...] = ("vocals", "drums", "bass", "other")
-_KARAOKE_STEMS: tuple[str, ...] = ("lead_vocals", "backing_vocals", "instrumental")
+_VOCAL_SPLIT_STEMS: tuple[str, ...] = ("lead_vocals", "backing_vocals", "instrumental")
 
 
 PROFILE_DEFINITIONS: tuple[ProfileDefinition, ...] = (
@@ -88,8 +88,8 @@ PROFILE_DEFINITIONS: tuple[ProfileDefinition, ...] = (
         stems=_FOUR_STEM_STEMS,
     ),
     ProfileDefinition(
-        key="karaoke-stems",
-        label="Karaoke stems",
+        key="vocal-split",
+        label="Vocal split",
         strength="Lead + backing vocals split",
         best_for="Keeping backing vocals in the mix, or isolating just the lead.",
         tradeoff="Runs two models back-to-back — roughly twice as slow as Standard.",
@@ -97,7 +97,7 @@ PROFILE_DEFINITIONS: tuple[ProfileDefinition, ...] = (
         # mix, then UVR-BVE-4B splits that vocal stem into lead + backing.
         # Final output: {instrumental (from Standard), lead_vocals, backing_vocals}.
         model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt",
-        stems=_KARAOKE_STEMS,
+        stems=_VOCAL_SPLIT_STEMS,
         followup=FollowupDefinition(
             input_stem="vocals",
             model_filename="UVR-BVE-4B_SN-44100-2.pth",

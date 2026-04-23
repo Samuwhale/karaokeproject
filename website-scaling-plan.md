@@ -45,11 +45,11 @@ Why this is the default:
 
 The current repo already has the right broad shape for this approach:
 
-- React and Vite frontend in [frontend/package.json](/Users/samuel/Documents/Projects/karaokeproject/frontend/package.json)
-- FastAPI backend in [backend/api/main.py](/Users/samuel/Documents/Projects/karaokeproject/backend/api/main.py)
-- async worker loop in [backend/workers/runner.py](/Users/samuel/Documents/Projects/karaokeproject/backend/workers/runner.py)
-- local file and YouTube import flows in [backend/api/routes/imports.py](/Users/samuel/Documents/Projects/karaokeproject/backend/api/routes/imports.py)
-- polling-based frontend state refresh in [frontend/src/hooks/useDashboardData.ts](/Users/samuel/Documents/Projects/karaokeproject/frontend/src/hooks/useDashboardData.ts)
+- React and Vite frontend in [frontend/package.json](./frontend/package.json)
+- FastAPI backend in [backend/api/main.py](./backend/api/main.py)
+- async worker loop in [backend/workers/runner.py](./backend/workers/runner.py)
+- local file and YouTube import flows in [backend/api/routes/imports.py](./backend/api/routes/imports.py)
+- polling-based frontend state refresh in [frontend/src/hooks/useDashboardData.ts](./frontend/src/hooks/useDashboardData.ts)
 
 What is wrong for hosting is not the product shape. It is the current infrastructure assumption that the API, worker, database, uploads, and artifacts all live on one local machine and one filesystem.
 
@@ -155,7 +155,7 @@ That gets the product online without committing to cloud compute costs before de
 
 The current repo is still local-first in several important ways:
 
-- runtime storage is filesystem-first in [backend/core/config.py](/Users/samuel/Documents/Projects/karaokeproject/backend/core/config.py)
+- runtime storage is filesystem-first in [backend/core/config.py](./backend/core/config.py)
 - persistence is SQLite-backed
 - uploads are currently handled through local API upload flow
 - artifacts are currently served from local paths
@@ -169,7 +169,7 @@ The hosted migration therefore needs to do four things:
 
 ## YouTube Caveat
 
-The repo already supports YouTube import through `yt-dlp` in [backend/adapters/youtube.py](/Users/samuel/Documents/Projects/karaokeproject/backend/adapters/youtube.py).
+The repo already supports YouTube import through `yt-dlp` in [backend/adapters/youtube.py](./backend/adapters/youtube.py).
 
 For a hosted product, this is not just a technical feature. It is a policy and compliance decision. The cheapest hosting plan should assume:
 

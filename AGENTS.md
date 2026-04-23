@@ -1,4 +1,4 @@
-The primary users are both solo users, and power users. They use this app to split a song, or a batch of songs, into multiple stems, and to mix an output according to their liking. For example to make a karaoke instrumental, or have a version with backing vocals. Or to simply turn a certain instrument down.
+The primary users are both solo users, and power users. They use this app to split a song, or a batch of songs, into multiple stems, and to mix an output according to their liking. For example to make an instrumental with vocals removed, or have a version with backing vocals kept in. Or to simply turn a certain instrument down.
 
 Always write clean code. Do not take shortcuts.
 

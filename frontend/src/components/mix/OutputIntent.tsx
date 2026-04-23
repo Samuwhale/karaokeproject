@@ -46,6 +46,7 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
   }
 
   async function applyReset() {
+    if (atRest) return
     setPendingIntent('reset')
     try {
       await onApplyTemplate(resolveResetTemplate(run))
@@ -54,37 +55,36 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
     }
   }
 
-  const buttons: Array<
-    | { kind: 'intent'; value: OutputIntent; label: string; active: boolean }
-    | { kind: 'reset'; active: boolean }
-  > = [
-    ...supported.map((spec) => ({
-      kind: 'intent' as const,
-      value: spec.value,
-      label: spec.label,
-      active: activeIntent === spec.value,
-    })),
-    { kind: 'reset' as const, active: atRest && activeIntent === null },
-  ]
+  if (!supported.length && atRest) return null
 
   return (
-    <div className="mix-presets" role="group" aria-label="Starting balance">
-      {buttons.map((button, index) => (
-        <span key={button.kind === 'intent' ? button.value : 'reset'} style={{ display: 'contents' }}>
-          {index > 0 ? <span className="mix-preset-sep" aria-hidden>·</span> : null}
-          <button
-            type="button"
-            className={`mix-preset ${button.active ? 'is-active' : ''}`}
-            aria-pressed={button.active}
-            onClick={() => {
-              if (button.kind === 'intent') void applyIntent(button.value)
-              else void applyReset()
-            }}
-          >
-            {button.kind === 'intent' ? button.label : 'Reset'}
-          </button>
-        </span>
-      ))}
+    <div className="mix-presets" role="group" aria-label="Output preset">
+      {supported.length ? (
+        <div className="mix-preset-group">
+          {supported.map((spec) => {
+            const active = activeIntent === spec.value
+            return (
+              <button
+                key={spec.value}
+                type="button"
+                className={`mix-preset ${active ? 'is-active' : ''}`}
+                aria-pressed={active}
+                onClick={() => void applyIntent(spec.value)}
+              >
+                {spec.label}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+      <button
+        type="button"
+        className="mix-preset-reset"
+        disabled={atRest}
+        onClick={() => void applyReset()}
+      >
+        Reset
+      </button>
     </div>
   )
 }

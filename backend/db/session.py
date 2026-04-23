@@ -40,6 +40,7 @@ _PROFILE_KEY_RENAMES: dict[str, str] = {
     # "vocal-focus" was dropped in favour of "high"; existing runs keep their
     # original label in metadata but their key migrates so lookups still work.
     "vocal-focus": "high",
+    "karaoke-stems": "vocal-split",
 }
 
 _PROFILE_LABEL_RENAMES: dict[str, str] = {
@@ -48,6 +49,7 @@ _PROFILE_LABEL_RENAMES: dict[str, str] = {
     "Clean Instrumental": "High",
     "Maximum": "High",
     "Vocal focus": "High",
+    "Karaoke stems": "Vocal split",
 }
 
 

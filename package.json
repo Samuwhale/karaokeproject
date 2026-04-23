@@ -1,5 +1,5 @@
 {
-  "name": "karaokeproject",
+  "name": "stemstudio",
   "private": true,
   "workspaces": [
     "frontend"

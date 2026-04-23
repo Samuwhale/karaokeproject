@@ -3,9 +3,9 @@ requires = ["setuptools>=69.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "karaokeproject"
+name = "stemstudio"
 version = "0.1.0"
-description = "Local-first stem separation tool with karaoke as an initial use case"
+description = "Local-first stem separation and mixing tool"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

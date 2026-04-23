@@ -1,1 +1,1 @@
-"""Karaoke project backend package."""
+"""Stem studio backend package."""

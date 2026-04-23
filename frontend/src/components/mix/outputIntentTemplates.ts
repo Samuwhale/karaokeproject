@@ -1,7 +1,7 @@
 import type { RunArtifact, RunDetail, RunMixStemEntry } from '../../types'
 import { isStemKind, stemNameFromKind } from '../../stems'
 
-export type OutputIntent = 'karaoke' | 'instrumental-with-backing' | 'acapella'
+export type OutputIntent = 'no-vocals' | 'instrumental-with-backing' | 'acapella'
 
 type IntentSpec = {
   value: OutputIntent
@@ -14,8 +14,8 @@ type IntentSpec = {
 
 export const INTENTS: readonly IntentSpec[] = [
   {
-    value: 'karaoke',
-    label: 'Karaoke',
+    value: 'no-vocals',
+    label: 'No vocals',
     description: 'Instrumental only — every vocal stem muted.',
     mutes: ['vocals', 'lead_vocals', 'backing_vocals'],
     requires: ['vocals', 'lead_vocals', 'backing_vocals'],
@@ -23,10 +23,10 @@ export const INTENTS: readonly IntentSpec[] = [
   {
     value: 'instrumental-with-backing',
     label: 'Instrumental + backing',
-    description: 'Karaoke with the backing vocals kept in.',
+    description: 'Instrumental with the backing vocals kept in.',
     mutes: ['lead_vocals'],
     requires: ['lead_vocals'],
-    requiresProfile: 'karaoke-stems',
+    requiresProfile: 'vocal-split',
   },
   {
     value: 'acapella',

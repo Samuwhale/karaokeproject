@@ -27,11 +27,11 @@ class StemRole:
 # for display and also drives preview / scrubber priority: instrumental first
 # so the default scrubber peaks still line up with what users expect today.
 CANONICAL_STEMS: tuple[StemRole, ...] = (
-    StemRole("instrumental", "Instrumental", ("instrumental", "karaoke", "accompaniment", "no_vocals", "no vocals", "novocals"), 0),
+    StemRole("instrumental", "Instrumental", ("instrumental", "accompaniment", "no_vocals", "no vocals", "novocals"), 0),
     StemRole("vocals", "Vocals", ("vocals", "vocal", "voice"), 1),
     # audio-separator's UVR-BVE model emits filenames containing "(Lead Vocals)"
     # and "(Backing Vocals)" — spaces are preserved, not underscored — so the
-    # space-forms below are load-bearing for the karaoke-stems profile. The
+    # space-forms below are load-bearing for the vocal-split profile. The
     # longer aliases (with spaces) must beat plain "vocals" during the
     # longest-match sort in _ALIAS_LOOKUP.
     StemRole("lead_vocals", "Lead vocals", ("lead vocals", "lead_vocals", "lead-vocals", "main vocals", "main_vocals", "leadvocals"), 2),

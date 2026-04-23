@@ -273,7 +273,7 @@ function App() {
       <div className="shell">
         {!mixActive ? (
           <header className="app-top" inert={anyDialogOpen || undefined}>
-            <strong className="app-top-brand">Karaoke</strong>
+            <strong className="app-top-brand">Stems</strong>
             <div className="app-top-actions">
               {setupRequired ? (
                 <button

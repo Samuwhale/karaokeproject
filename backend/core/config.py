@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class RuntimeSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="KARAOKE_", case_sensitive=False)
+    model_config = SettingsConfigDict(env_prefix="STEMSTUDIO_", case_sensitive=False)
 
     api_host: str = "127.0.0.1"
     api_port: int = 8000

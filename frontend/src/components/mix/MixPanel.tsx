@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 
 import type { RunArtifact, RunDetail, RunMixStemEntry } from '../../types'
 import { MIX_GAIN_DB_MAX, MIX_GAIN_DB_MIN } from '../../types'
 import { compareStemKinds, isStemKind } from '../../stems'
-import { MixScrubber } from './MixScrubber'
+import { StemWaveform } from './StemWaveform'
 import { useStemMixer } from './useStemMixer'
-import { stemIcon, stemTone } from './stemIcons'
 
 type MixPanelProps = {
   run: RunDetail
@@ -17,6 +16,7 @@ type StemRow = {
   artifact_id: string
   label: string
   url: string
+  peaks: number[]
   gain_db: number
   muted: boolean
   soloed: boolean
@@ -25,6 +25,9 @@ type StemRow = {
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'failed'
 
 const SAVE_DEBOUNCE_MS = 400
+const FADER_STEP = 0.5
+const FADER_STEP_FINE = 0.1
+const FADER_STEP_COARSE = 3
 
 function mixableArtifacts(run: RunDetail): RunArtifact[] {
   return run.artifacts
@@ -44,6 +47,7 @@ function initialStems(run: RunDetail): StemRow[] {
       artifact_id: artifact.id,
       label: artifact.label,
       url: artifact.download_url,
+      peaks: artifact.metrics?.peaks ?? [],
       gain_db: entry?.gain_db ?? 0,
       muted: entry?.muted ?? false,
       soloed: false,
@@ -61,6 +65,10 @@ function equalsPersisted(stems: StemRow[], mixStems: RunMixStemEntry[]) {
     if (stem.muted !== persistedMuted) return false
   }
   return true
+}
+
+function clampGain(db: number) {
+  return Math.max(MIX_GAIN_DB_MIN, Math.min(MIX_GAIN_DB_MAX, db))
 }
 
 function formatGain(db: number) {
@@ -105,6 +113,12 @@ function faderFillStyle(gainDb: number): React.CSSProperties {
   return { left: `${center - width}%`, width: `${width}%` }
 }
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable
+}
+
 export function MixPanel({ run, onSave, saving }: MixPanelProps) {
   const [stems, setStems] = useState<StemRow[]>(() => initialStems(run))
   const saveTimerRef = useRef<number | null>(null)
@@ -144,32 +158,32 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
     [stems],
   )
   const mixer = useStemMixer(mixerStems)
-  const overviewPeaks = useMemo(
-    () =>
-      mixableArtifacts(run).find((artifact) => (artifact.metrics?.peaks?.length ?? 0) > 0)?.metrics?.peaks ?? [],
-    [run],
-  )
 
-  async function persistMix(payload: RunMixStemEntry[]) {
-    const saveId = ++latestSaveIdRef.current
-    pendingSavePayloadRef.current = payload
-    setRetryPayload(payload)
-    setSaveState('saving')
-    setSaveError(null)
+  const playDisabled = mixer.loadState !== 'ready'
 
-    try {
-      await onSave(payload)
-      if (tearingDownRef.current || latestSaveIdRef.current !== saveId) return
-      pendingSavePayloadRef.current = null
-      setRetryPayload(null)
-      setSaveState('saved')
-    } catch (error) {
-      if (tearingDownRef.current || latestSaveIdRef.current !== saveId) return
+  const persistMix = useCallback(
+    async (payload: RunMixStemEntry[]) => {
+      const saveId = ++latestSaveIdRef.current
+      pendingSavePayloadRef.current = payload
       setRetryPayload(payload)
-      setSaveState('failed')
-      setSaveError(error instanceof Error ? error.message : 'Could not save mix changes.')
-    }
-  }
+      setSaveState('saving')
+      setSaveError(null)
+
+      try {
+        await onSave(payload)
+        if (tearingDownRef.current || latestSaveIdRef.current !== saveId) return
+        pendingSavePayloadRef.current = null
+        setRetryPayload(null)
+        setSaveState('saved')
+      } catch (error) {
+        if (tearingDownRef.current || latestSaveIdRef.current !== saveId) return
+        setRetryPayload(payload)
+        setSaveState('failed')
+        setSaveError(error instanceof Error ? error.message : 'Could not save mix changes.')
+      }
+    },
+    [onSave],
+  )
 
   function scheduleSave(next: StemRow[]) {
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
@@ -197,73 +211,110 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
     })
   }
 
-  function handleTogglePlay() {
+  const handleTogglePlay = useCallback(() => {
     if (mixer.isPlaying) mixer.pause()
     else mixer.play()
+  }, [mixer])
+
+  useEffect(() => {
+    function handleKey(event: KeyboardEvent) {
+      if (event.code !== 'Space' && event.key !== ' ') return
+      if (isTypingTarget(event.target)) return
+      if (playDisabled) return
+      event.preventDefault()
+      handleTogglePlay()
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [handleTogglePlay, playDisabled])
+
+  function handleFaderKey(index: number, current: number, event: ReactKeyboardEvent<HTMLInputElement>) {
+    const step =
+      event.shiftKey ? FADER_STEP_FINE : event.altKey ? FADER_STEP_COARSE : FADER_STEP
+    const key = event.key
+    if (key === 'ArrowUp' || key === 'ArrowRight') {
+      event.preventDefault()
+      updateStem(index, { gain_db: clampGain(current + step) })
+    } else if (key === 'ArrowDown' || key === 'ArrowLeft') {
+      event.preventDefault()
+      updateStem(index, { gain_db: clampGain(current - step) })
+    }
   }
 
-  const playDisabled = mixer.loadState !== 'ready'
   const anySoloed = stems.some((stem) => stem.soloed)
-  const saveLabel =
-    saving || saveState === 'saving'
-      ? 'Saving…'
-      : saveState === 'failed'
-        ? 'Save failed'
-        : saveState === 'pending' || dirty
-          ? 'Saving…'
-          : 'saved ✓'
-  const saveClass =
-    saveState === 'failed'
-      ? 'is-error'
-      : saving || saveState === 'saving' || saveState === 'pending' || dirty
-        ? 'is-saving'
-        : ''
+
+  const scrubProgress =
+    mixer.duration > 0 ? Math.max(0, Math.min(1, mixer.currentTime / mixer.duration)) : 0
+
+  function handleScrubPointer(event: React.PointerEvent<HTMLDivElement>) {
+    if (playDisabled || mixer.duration === 0) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    if (rect.width === 0) return
+    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
+    mixer.seek(ratio * mixer.duration)
+  }
+
+  const footerVisible =
+    saving || saveState === 'saving' || saveState === 'pending' || saveState === 'failed' || dirty
+  const showErrors = !!saveError || !!mixer.error
+
+  const saveIndicatorLabel = saveState === 'failed' ? 'Save failed' : 'Saving…'
+  const saveIndicatorClass = saveState === 'failed' ? 'is-error' : 'is-saving'
 
   return (
     <>
-      <div className="mix-canvas">
-        <div className="mix-channels" role="group" aria-label="Stem mixer">
-          {stems.map((stem, index) => {
-            const silenced = stem.muted || (anySoloed && !stem.soloed)
-            const fillStyle = faderFillStyle(stem.gain_db)
+      <div className="mix-rows" role="group" aria-label="Stem mixer">
+        {stems.map((stem, index) => {
+          const silenced = stem.muted || (anySoloed && !stem.soloed)
+          const fillStyle = faderFillStyle(stem.gain_db)
 
-            return (
-              <div
-                key={stem.artifact_id}
-                className={`channel ${stem.muted ? 'is-muted' : ''} ${silenced ? 'is-silenced' : ''}`}
-              >
+          return (
+            <div
+              key={stem.artifact_id}
+              className={`stem-row ${stem.muted ? 'is-muted' : ''} ${silenced ? 'is-silenced' : ''}`}
+            >
+              <div className="stem-row-label">
+                <strong>{stem.label}</strong>
+                <span>{formatGain(stem.gain_db)}</span>
+              </div>
+              <div className="stem-row-wave">
+                <StemWaveform
+                  peaks={stem.peaks}
+                  currentTime={mixer.currentTime}
+                  duration={mixer.duration}
+                  onSeek={playDisabled ? undefined : mixer.seek}
+                  disabled={playDisabled}
+                  ariaLabel={`${stem.label} timeline`}
+                />
+              </div>
+              <label className="stem-fader">
+                <span className="stem-fader-center" aria-hidden />
+                <span className="stem-fader-fill" style={fillStyle} aria-hidden />
+                <input
+                  type="range"
+                  min={MIX_GAIN_DB_MIN}
+                  max={MIX_GAIN_DB_MAX}
+                  step={FADER_STEP_FINE}
+                  value={stem.gain_db}
+                  onChange={(event) => updateStem(index, { gain_db: Number(event.target.value) })}
+                  onKeyDown={(event) => handleFaderKey(index, stem.gain_db, event)}
+                  onDoubleClick={() => updateStem(index, { gain_db: 0 })}
+                  aria-label={`${stem.label} gain`}
+                />
+              </label>
+              <div className="stem-row-toggles">
                 <button
                   type="button"
-                  className="channel-icon"
+                  className={`stem-toggle stem-toggle-mute ${stem.muted ? 'is-active' : ''}`}
                   onClick={() => updateStem(index, { muted: !stem.muted })}
                   aria-pressed={stem.muted}
-                  aria-label={`${stem.muted ? 'Unmute' : 'Mute'} ${stem.label}`}
                   title={stem.muted ? `Unmute ${stem.label}` : `Mute ${stem.label}`}
                 >
-                  {stemIcon(stem.label)}
+                  M
                 </button>
-                <div className="channel-name">
-                  <strong>{stem.label}</strong>
-                  <span>{stemTone(stem.label)}</span>
-                </div>
-                <label className="channel-fader">
-                  <span className="channel-fader-center" aria-hidden />
-                  <span className="channel-fader-fill" style={fillStyle} aria-hidden />
-                  <input
-                    type="range"
-                    min={MIX_GAIN_DB_MIN}
-                    max={MIX_GAIN_DB_MAX}
-                    step={0.5}
-                    value={stem.gain_db}
-                    onChange={(event) => updateStem(index, { gain_db: Number(event.target.value) })}
-                    onDoubleClick={() => updateStem(index, { gain_db: 0 })}
-                    aria-label={`${stem.label} gain`}
-                  />
-                </label>
-                <span className="channel-gain">{formatGain(stem.gain_db)}</span>
                 <button
                   type="button"
-                  className={`channel-solo ${stem.soloed ? 'is-active' : ''}`}
+                  className={`stem-toggle stem-toggle-solo ${stem.soloed ? 'is-active' : ''}`}
                   onClick={() => updateStem(index, { soloed: !stem.soloed })}
                   aria-pressed={stem.soloed}
                   title={stem.soloed ? `Unsolo ${stem.label}` : `Solo ${stem.label}`}
@@ -271,9 +322,9 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                   S
                 </button>
               </div>
-            )
-          })}
-        </div>
+            </div>
+          )
+        })}
       </div>
 
       <div className="mix-transport">
@@ -287,42 +338,43 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
           {mixer.isPlaying ? <PauseGlyph /> : <PlayGlyph />}
         </button>
         <span className="mix-time">{formatTime(mixer.currentTime)}</span>
-        <div className="mix-scrubber-wrap">
-          <MixScrubber
-            peaks={overviewPeaks}
-            currentTime={mixer.currentTime}
-            duration={mixer.duration}
-            onSeek={mixer.seek}
-            disabled={playDisabled || mixer.duration === 0}
-          />
+        <div
+          className={`mix-scrub ${playDisabled ? 'is-disabled' : ''}`}
+          role="slider"
+          aria-label="Preview position"
+          aria-valuemin={0}
+          aria-valuemax={Math.max(1, Math.round(mixer.duration))}
+          aria-valuenow={Math.round(mixer.currentTime)}
+          tabIndex={playDisabled ? -1 : 0}
+          onPointerDown={handleScrubPointer}
+        >
+          <span className="mix-scrub-fill" style={{ width: `${scrubProgress * 100}%` }} aria-hidden />
         </div>
         <span className="mix-time">{formatTime(mixer.duration)}</span>
-        <span className={`mix-save-state ${saveClass}`} aria-live="polite">
-          {saveState === 'failed' && retryPayload ? (
-            <>
-              <span>{saveLabel}</span>
-              <button
-                type="button"
-                className="button-link"
-                onClick={() => void persistMix(retryPayload)}
-              >
-                Retry
-              </button>
-            </>
-          ) : (
-            saveLabel
-          )}
-        </span>
       </div>
 
-      {saveError ? (
-        <div className="mix-save-state is-error" style={{ padding: '0 32px 8px' }}>
-          {saveError}
-        </div>
-      ) : null}
-      {mixer.error ? (
-        <div className="mix-save-state is-error" style={{ padding: '0 32px 8px' }}>
-          {mixer.error}
+      {footerVisible || showErrors ? (
+        <div className="mix-footer">
+          {footerVisible ? (
+            <span className={`mix-save-state ${saveIndicatorClass}`} aria-live="polite">
+              <span>{saveIndicatorLabel}</span>
+              {saveState === 'failed' && retryPayload ? (
+                <button
+                  type="button"
+                  className="button-link"
+                  onClick={() => void persistMix(retryPayload)}
+                >
+                  Retry
+                </button>
+              ) : null}
+            </span>
+          ) : null}
+          {showErrors ? (
+            <div className="mix-errors" role="status" aria-live="polite">
+              {saveError ? <p>{saveError}</p> : null}
+              {mixer.error ? <p>{mixer.error}</p> : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </>
