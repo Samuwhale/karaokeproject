@@ -1,6 +1,5 @@
 import { QueueList } from '../QueueList'
 import { StagedImportsPanel } from '../StagedImportsPanel'
-import { RUN_STATUS_LABELS } from '../runStatus'
 import { isActiveRunStatus } from '../runStatus'
 import type {
   ProcessingProfile,
@@ -46,16 +45,24 @@ function formatRelativeShort(value: string) {
   return `${days} day${days === 1 ? '' : 's'} ago`
 }
 
-function queueHeadline(
+function importsHeadline(
   stagedCount: number,
-  activeCount: number,
   readyCount: number,
+  activeCount: number,
   blockedCount: number,
 ) {
-  if (readyCount > 0) return `${readyCount} completed split${readyCount === 1 ? '' : 's'} can move into Studio now.`
-  if (stagedCount > 0) return `${stagedCount} import${stagedCount === 1 ? '' : 's'} need review before the next split starts.`
-  if (activeCount > 0) return `${activeCount} split${activeCount === 1 ? '' : 's'} running in the background right now.`
-  if (blockedCount > 0) return `${blockedCount} run${blockedCount === 1 ? '' : 's'} need attention before work can continue.`
+  if (stagedCount > 0) {
+    return `${stagedCount} source${stagedCount === 1 ? '' : 's'} waiting for import review.`
+  }
+  if (readyCount > 0) {
+    return `${readyCount} finished split${readyCount === 1 ? '' : 's'} ready to open in Mix.`
+  }
+  if (activeCount > 0) {
+    return `${activeCount} split${activeCount === 1 ? '' : 's'} running in the background.`
+  }
+  if (blockedCount > 0) {
+    return `${blockedCount} split${blockedCount === 1 ? '' : 's'} need another decision before work continues.`
+  }
   return 'Nothing is waiting right now.'
 }
 
@@ -88,17 +95,18 @@ export function QueuePage({
   const studioReadyEntries = followUpEntries.filter(
     (entry) => entry.run.status !== 'failed' && entry.run.status !== 'cancelled',
   )
+  const processingEntries = [...activeEntries, ...failedEntries]
 
   return (
     <section className="kp-page kp-queue-page">
       <header className="kp-page-header">
         <div>
-          <h1>Queue</h1>
+          <h1>Imports</h1>
           <p>
-            {queueHeadline(
+            {importsHeadline(
               stagedImports.length,
-              activeEntries.length,
               studioReadyEntries.length,
+              activeEntries.length,
               failedEntries.length,
             )}
           </p>
@@ -112,18 +120,41 @@ export function QueuePage({
         <section className="kp-inline-banner">
           <div>
             <strong>Nothing waiting</strong>
-            <p>Add songs or queue a split from the library to bring work back here.</p>
+            <p>Add songs to stage sources, start splits, and feed the next mix session.</p>
           </div>
         </section>
       ) : null}
 
       <div className="kp-queue-layout">
+        {hasImports ? (
+          <section className="kp-queue-section kp-queue-section-primary">
+            <header className="kp-section-header">
+              <div>
+                <h2>Import Review</h2>
+                <p>Clean titles once, resolve duplicates, then decide whether this batch only enters Songs or starts splitting immediately.</p>
+              </div>
+              <span>{stagedImports.length}</span>
+            </header>
+            <div className="kp-queue-embedded">
+              <StagedImportsPanel
+                stagedImports={stagedImports}
+                profiles={profiles}
+                defaultProfileKey={defaultProfileKey}
+                confirming={confirmingDrafts}
+                onUpdateStagedImport={onUpdateStagedImport}
+                onDiscardStagedImport={onDiscardStagedImport}
+                onConfirmStagedImports={onConfirmStagedImports}
+              />
+            </div>
+          </section>
+        ) : null}
+
         {studioReadyEntries.length > 0 ? (
           <section className="kp-queue-section">
             <header className="kp-section-header">
               <div>
-                <h2>Ready for Studio</h2>
-                <p>Open the next finished result and move straight into review or mix.</p>
+                <h2>Ready for Mix</h2>
+                <p>Open the next finished result and move straight into review or mixing.</p>
               </div>
               <span>{studioReadyEntries.length}</span>
             </header>
@@ -142,7 +173,7 @@ export function QueuePage({
                     className="button-primary"
                     onClick={() => onSelectRun(entry.track_id, entry.run.id)}
                   >
-                    Open in Studio
+                    Open mix
                   </button>
                 </article>
               ))}
@@ -150,42 +181,19 @@ export function QueuePage({
           </section>
         ) : null}
 
-        {hasImports ? (
+        {processingEntries.length > 0 ? (
           <section className="kp-queue-section">
             <header className="kp-section-header">
               <div>
-                <h2>Import review</h2>
-                <p>Clean up names, resolve duplicates once, then decide whether this batch should start splitting now.</p>
+                <h2>Processing & Follow-Up</h2>
+                <p>Keep active splits visible and clear failures so the inbox stays legible.</p>
               </div>
-              <span>{stagedImports.length}</span>
-            </header>
-            <div className="kp-queue-embedded">
-              <StagedImportsPanel
-                stagedImports={stagedImports}
-                profiles={profiles}
-                defaultProfileKey={defaultProfileKey}
-                confirming={confirmingDrafts}
-                onUpdateStagedImport={onUpdateStagedImport}
-                onDiscardStagedImport={onDiscardStagedImport}
-                onConfirmStagedImports={onConfirmStagedImports}
-              />
-            </div>
-          </section>
-        ) : null}
-
-        {activeEntries.length > 0 ? (
-          <section className="kp-queue-section">
-            <header className="kp-section-header">
-              <div>
-                <h2>Separating now</h2>
-                <p>Keep active runs visible, then jump into Studio as soon as one finishes.</p>
-              </div>
-              <span>{activeEntries.length}</span>
+              <span>{processingEntries.length}</span>
             </header>
             <div className="kp-queue-embedded">
               <QueueList
                 showHeader={false}
-                entries={activeEntries}
+                entries={processingEntries}
                 selectedIds={selectedQueueRunIds}
                 onToggleSelect={onToggleQueueSelected}
                 onSelectRun={onSelectRun}
@@ -199,46 +207,6 @@ export function QueuePage({
           </section>
         ) : null}
 
-        {failedEntries.length > 0 ? (
-          <section className="kp-queue-section">
-            <header className="kp-section-header">
-              <div>
-                <h2>Needs attention</h2>
-                <p>Retry failed work or clear it out so the queue stays legible.</p>
-              </div>
-              <span>{failedEntries.length}</span>
-            </header>
-
-            <div className="kp-ready-list">
-              {failedEntries.map((entry) => (
-                <article key={entry.run.id} className="kp-ready-row kp-ready-row-danger">
-                  <div>
-                    <strong>{entry.track_title}</strong>
-                    <p>{RUN_STATUS_LABELS[entry.run.status] ?? entry.run.status}</p>
-                    <small>{entry.run.error_message || 'This run needs another attempt before it can move forward.'}</small>
-                  </div>
-                  <div className="kp-ready-actions">
-                    <button
-                      type="button"
-                      className="button-primary"
-                      disabled={retryingRunId === entry.run.id}
-                      onClick={() => void onRetryRun(entry.run.id)}
-                    >
-                      {retryingRunId === entry.run.id ? 'Retrying…' : 'Retry split'}
-                    </button>
-                    <button
-                      type="button"
-                      className="button-secondary"
-                      onClick={() => void onDismissRun(entry.run.id)}
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        ) : null}
       </div>
     </section>
   )

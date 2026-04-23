@@ -29,8 +29,9 @@ type LibraryPageProps = {
   }
   selectedIds: Set<string>
   onViewChange: (view: LibraryView) => void
-  onOpenQueue: () => void
   onToggleSelect: (trackId: string) => void
+  onSelectAll: () => void
+  onClearSelection: () => void
   onOpenTrack: (track: TrackSummary) => void
   onAddSongs: () => void
 }
@@ -48,16 +49,14 @@ function artistLine(track: TrackSummary) {
   return 'Unknown artist'
 }
 
-function sourceLabel(track: TrackSummary) {
-  return track.source_type === 'youtube' ? 'YouTube' : 'Local file'
-}
-
 function emptyMessage(filter: LibraryFilter) {
   switch (filter) {
-    case 'processing':
-      return 'Nothing is waiting on import or split work right now.'
+    case 'needs-work':
+      return 'Nothing is waiting on import review, split work, or retry right now.'
     case 'ready':
-      return 'Nothing is ready for the mixer right now.'
+      return 'Nothing is ready to open in the mixer right now.'
+    case 'final':
+      return 'No songs have a locked final version yet.'
     default:
       return 'No songs match this search.'
   }
@@ -81,9 +80,9 @@ function nextActionLabel(track: TrackSummary) {
 }
 
 function libraryHeadline(totalCount: number, readyCount: number) {
-  if (totalCount === 0) return 'Build a clean library first, then move straight into the mixer.'
-  if (readyCount === 0) return 'Everything here still needs import review or a split.'
-  return `${readyCount} song${readyCount === 1 ? '' : 's'} can go straight into version review or mix.`
+  if (totalCount === 0) return 'Build the song library first, then move straight into Mix.'
+  if (readyCount === 0) return 'Everything here still needs import review, a split, or a retry.'
+  return `${readyCount} song${readyCount === 1 ? '' : 's'} are ready to review or open in Mix.`
 }
 
 export function LibraryPage({
@@ -96,8 +95,9 @@ export function LibraryPage({
   workQueue,
   selectedIds,
   onViewChange,
-  onOpenQueue,
   onToggleSelect,
+  onSelectAll,
+  onClearSelection,
   onOpenTrack,
   onAddSongs,
 }: LibraryPageProps) {
@@ -105,6 +105,7 @@ export function LibraryPage({
   const libraryEmpty = hasFirstSync && totalCount === 0
   const noMatches = hasFirstSync && totalCount > 0 && tracks.length === 0
   const selectedCount = selectedIds.size
+  const allVisibleSelected = tracks.length > 0 && tracks.every((track) => selectedIds.has(track.id))
   const queueSummary = [
     workQueue.stagedCount > 0
       ? `${workQueue.stagedCount} staged import${workQueue.stagedCount === 1 ? '' : 's'}`
@@ -125,23 +126,16 @@ export function LibraryPage({
         <div>
           <h1>Songs</h1>
           <p>{libraryHeadline(totalCount, countsByFilter.ready)}</p>
+          {queueSummary ? (
+            <p className="kp-page-supporting-copy">
+              Imports: {queueSummary}. Open Imports when you want to review sources or pick up the next finished split.
+            </p>
+          ) : null}
         </div>
         <button type="button" className="button-primary" onClick={onAddSongs}>
           Add songs
         </button>
       </header>
-
-      {queueSummary ? (
-        <section className="kp-inline-banner">
-          <div>
-            <strong>Queue moving</strong>
-            <p>{queueSummary}. Open the queue when you want to resolve imports or jump into the next ready result.</p>
-          </div>
-          <button type="button" className="button-secondary" onClick={onOpenQueue}>
-            Open queue
-          </button>
-        </section>
-      ) : null}
 
       <section className="kp-library-shell">
         <div className="kp-library-toolbar">
@@ -161,6 +155,14 @@ export function LibraryPage({
           </div>
 
           <div className="kp-library-controls">
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={tracks.length === 0}
+              onClick={allVisibleSelected ? onClearSelection : onSelectAll}
+            >
+              {allVisibleSelected ? 'Clear selection' : `Select all shown${tracks.length > 0 ? ` (${tracks.length})` : ''}`}
+            </button>
             <input
               type="search"
               className="kp-search-field"
@@ -209,8 +211,8 @@ export function LibraryPage({
             <div className="kp-library-head" aria-hidden>
               <span />
               <span>Song</span>
-              <span>Status</span>
-              <span>Next</span>
+              <span>Stage</span>
+              <span>Next step</span>
             </div>
 
             {tracks.map((track) => {
@@ -219,7 +221,6 @@ export function LibraryPage({
               const initials = track.title.trim().slice(0, 1).toUpperCase() || 'S'
               const metadata = [
                 artistLine(track),
-                sourceLabel(track),
                 formatDuration(track.duration_seconds),
                 track.run_count === 0
                   ? 'No versions'

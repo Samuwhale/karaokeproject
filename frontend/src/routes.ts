@@ -3,7 +3,7 @@ import type { LibraryFilter, LibrarySort, LibraryView } from './components/track
 export type AppPage = 'library' | 'queue' | 'studio'
 export type StudioTab = 'mix' | 'versions'
 
-const LIBRARY_FILTERS = new Set<LibraryFilter>(['all', 'processing', 'ready'])
+const LIBRARY_FILTERS = new Set<LibraryFilter>(['all', 'needs-work', 'ready', 'final'])
 
 const LIBRARY_SORTS = new Set<LibrarySort>(['recent', 'created', 'title', 'runs'])
 const STUDIO_TABS = new Set<StudioTab>(['mix', 'versions'])
@@ -28,7 +28,7 @@ export function buildLibraryPath(view: LibraryView) {
   if (view.search.trim()) searchParams.set('search', view.search.trim())
 
   const search = searchParams.toString()
-  return search ? `/library?${search}` : '/library'
+  return search ? `/songs?${search}` : '/songs'
 }
 
 export function normalizeStudioTab(tab: string | undefined): StudioTab {

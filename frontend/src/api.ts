@@ -205,6 +205,10 @@ export function dismissRun(runId: string) {
   return fetchJson<{ run: RunSummary }>(`/api/runs/${runId}/dismiss`, { method: 'POST' })
 }
 
+export async function deleteRun(runId: string) {
+  await fetchJson(`/api/runs/${runId}`, { method: 'DELETE' })
+}
+
 export function updateRunMix(trackId: string, runId: string, stems: RunMixStemEntry[]) {
   return putJson<RunDetail>(`/api/tracks/${trackId}/runs/${runId}/mix`, { stems })
 }

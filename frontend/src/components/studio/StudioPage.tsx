@@ -21,7 +21,6 @@ import { RunStepper } from '../feedback/RunStepper'
 import { Skeleton } from '../feedback/Skeleton'
 import { Spinner } from '../feedback/Spinner'
 import { MixPanel } from '../mix/MixPanel'
-import { MixScrubber } from '../mix/MixScrubber'
 import { OutputIntentPicker } from '../mix/OutputIntent'
 import { ModelPicker } from '../ModelPicker'
 import { isValidModelFilename } from '../modelPickerShared'
@@ -41,6 +40,7 @@ type StudioPageProps = {
   creatingRun: boolean
   cancellingRunId: string | null
   retryingRunId: string | null
+  deletingRunId: string | null
   settingKeeper: boolean
   savingMixRunId: string | null
   updatingTrack: boolean
@@ -51,6 +51,7 @@ type StudioPageProps = {
   onCreateRun: (trackId: string, processing: RunProcessingConfigInput) => Promise<unknown>
   onCancelRun: (runId: string) => Promise<void>
   onRetryRun: (runId: string) => Promise<unknown>
+  onDeleteRun: (runId: string) => Promise<void>
   onSetKeeper: (trackId: string, runId: string | null) => Promise<void>
   onPurgeNonKeepers: (trackId: string) => void
   onSaveMix: (trackId: string, runId: string, stems: RunMixStemEntry[]) => Promise<void>
@@ -101,17 +102,6 @@ function selectedRunSummary(run: RunDetail | null) {
 
 function stemCount(run: RunDetail) {
   return run.artifacts.filter((artifact) => isStemKind(artifact.kind)).length
-}
-
-function previewPeaks(run: RunDetail) {
-  return run.artifacts.find((artifact) => (artifact.metrics?.peaks?.length ?? 0) > 0)?.metrics?.peaks ?? []
-}
-
-function previewDuration(run: RunDetail) {
-  return (
-    run.artifacts.find((artifact) => artifact.metrics?.duration_seconds !== null)?.metrics?.duration_seconds ??
-    1
-  )
 }
 
 function buildTrackSummary(track: TrackDetail, run: RunDetail): TrackSummary {
@@ -191,7 +181,11 @@ function StudioPageHeader({
       <div className="kp-studio-header-side">
         <div>
           <strong>{selectedRun ? selectedRun.processing.profile_label : 'No version selected'}</strong>
-          <span>{tab === 'mix' ? 'Focused mix workspace' : 'Version review and split planning'}</span>
+          <span>
+            {selectedRun
+              ? `${statusLabel(selectedRun.status)} · ${formatTimestampShort(selectedRun.updated_at)}`
+              : 'Choose a version to continue'}
+          </span>
         </div>
         <div className="kp-tab-switcher" role="tablist" aria-label="Studio sections">
           <button
@@ -272,10 +266,13 @@ function StudioVersionList({
 function StudioMixTab({
   track,
   run,
+  runs,
+  selectedRunId,
   profiles,
   defaultBitrate,
   savingMix,
   settingKeeper,
+  onSelectRun,
   onRetryRun,
   onChangeTab,
   onSetKeeper,
@@ -286,10 +283,13 @@ function StudioMixTab({
 }: {
   track: TrackDetail
   run: RunDetail | null
+  runs: RunDetail[]
+  selectedRunId: string | null
   profiles: ProcessingProfile[]
   defaultBitrate: string
   savingMix: boolean
   settingKeeper: boolean
+  onSelectRun: (runId: string) => void
   onRetryRun: (runId: string) => Promise<unknown>
   onChangeTab: (tab: StudioTab) => void
   onSetKeeper: (trackId: string, runId: string | null) => Promise<void>
@@ -298,6 +298,8 @@ function StudioMixTab({
   onReveal: (payload: RevealFolderInput) => void | Promise<void>
   onError: (message: string) => void
 }) {
+  const [activePanel, setActivePanel] = useState<'starting-point' | 'export' | null>(null)
+
   if (!run) {
     return (
       <div className="kp-studio-blocked">
@@ -363,8 +365,67 @@ function StudioMixTab({
     : 'Export the saved custom balance or download the stems from the same version.'
 
   return (
-    <div className="kp-studio-mix-shell">
+    <div className={`kp-studio-mix-shell ${activePanel ? 'kp-studio-mix-shell-drawer-open' : ''}`}>
+      <aside className="kp-studio-mix-sidebar">
+        <section className="kp-studio-side-panel">
+          <header className="kp-section-header">
+            <div>
+              <h2>Versions</h2>
+              <p>Keep the winning split close while you mix.</p>
+            </div>
+          </header>
+          <StudioVersionList
+            runs={runs}
+            selectedRunId={selectedRunId}
+            keeperRunId={track.keeper_run_id}
+            compareRunId={null}
+            onSelectRun={onSelectRun}
+          />
+          <button type="button" className="button-secondary" onClick={() => onChangeTab('versions')}>
+            Review version details
+          </button>
+        </section>
+      </aside>
+
       <section className="kp-studio-mix-main">
+        <header className="kp-mix-workspace-head">
+          <div className="kp-mix-workspace-copy">
+            <strong>{run.processing.profile_label}</strong>
+            <p>
+              {keeperSelected
+                ? 'This version is locked as the final result for this song.'
+                : 'Balance this version first, then mark it final only if it wins.'}
+            </p>
+            <small>{selectedRunSummary(run)} · Updated {formatTimestampShort(run.updated_at)}</small>
+          </div>
+          <div className="kp-mix-workspace-actions">
+            <button
+              type="button"
+              className={activePanel === 'starting-point' ? 'button-secondary button-secondary-active' : 'button-secondary'}
+              onClick={() =>
+                setActivePanel((current) => (current === 'starting-point' ? null : 'starting-point'))
+              }
+            >
+              Starting point
+            </button>
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={settingKeeper}
+              onClick={() => void onSetKeeper(track.id, keeperSelected ? null : run.id)}
+            >
+              {keeperSelected ? 'Clear final' : 'Mark final'}
+            </button>
+            <button
+              type="button"
+              className="button-primary"
+              onClick={() => setActivePanel((current) => (current === 'export' ? null : 'export'))}
+            >
+              Export
+            </button>
+          </div>
+        </header>
+
         <MixPanel
           key={mixPanelStateKey(track.id, run)}
           run={run}
@@ -373,83 +434,56 @@ function StudioMixTab({
         />
       </section>
 
-      <aside className="kp-studio-mix-rail">
-        <section className="kp-studio-side-panel">
-          <header className="kp-section-header">
-            <div>
-              <h2>Session</h2>
-              <p>The active version that this mix belongs to.</p>
-            </div>
-          </header>
-          <div className="kp-side-copy">
-            <strong>{run.processing.profile_label}</strong>
-            <p>{keeperSelected ? 'This is the saved final version for the song.' : 'Keep balancing here or switch versions when this split is not the right one.'}</p>
-            <small>{selectedRunSummary(run)} · Updated {formatTimestampShort(run.updated_at)}</small>
-          </div>
-          <div className="kp-inline-actions">
-            <button
-              type="button"
-              className="button-secondary"
-              disabled={settingKeeper}
-              onClick={() => void onSetKeeper(track.id, keeperSelected ? null : run.id)}
-            >
-              {keeperSelected ? 'Clear final' : 'Set as final'}
-            </button>
-            <button type="button" className="button-secondary" onClick={() => onChangeTab('versions')}>
-              Review versions
-            </button>
-          </div>
-          <details className="kp-disclosure">
-            <summary>More song tools</summary>
-            <div className="kp-disclosure-body">
-              <button
-                type="button"
-                className="button-secondary"
-                onClick={() => void onReveal({ kind: 'track-outputs', track_id: track.id })}
-              >
-                Open outputs folder
+      {activePanel ? (
+        <aside className="kp-studio-mix-drawer">
+          <section className="kp-studio-side-panel">
+            <header className="kp-section-header">
+              <div>
+                <h2>{activePanel === 'starting-point' ? 'Starting Point' : 'Export'}</h2>
+                <p>
+                  {activePanel === 'starting-point'
+                    ? 'Use a starting balance or queue a more suitable split when this one is too coarse.'
+                    : mixSummary}
+                </p>
+              </div>
+              <button type="button" className="button-secondary" onClick={() => setActivePanel(null)}>
+                Close
               </button>
-            </div>
-          </details>
-        </section>
+            </header>
 
-        <section className="kp-studio-side-panel">
-          <header className="kp-section-header">
-            <div>
-              <h2>Starting balance</h2>
-              <p>Load a proven mix intent or queue a better split when this one is too coarse.</p>
-            </div>
-          </header>
-          <OutputIntentPicker
-            run={run}
-            profiles={profiles}
-            compact
-            saving={savingMix}
-            onApplyTemplate={(stems) => onSaveMix(track.id, run.id, stems)}
-            onRerunWithProfile={(profileKey) => onCreateRun(track.id, { profile_key: profileKey })}
-          />
-        </section>
-
-        <section className="kp-studio-side-panel">
-          <header className="kp-section-header">
-            <div>
-              <h2>Export</h2>
-              <p>{mixSummary}</p>
-            </div>
-          </header>
-          <ExportBuilder
-            tracks={[trackSummary]}
-            selectedTrackIds={[track.id]}
-            defaultBitrate={defaultBitrate}
-            runIds={{ [track.id]: run.id }}
-            hidePackaging
-            forceMode="single-bundle"
-            mixSummary={mixSummary}
-            onError={onError}
-            onReveal={onReveal}
-          />
-        </section>
-      </aside>
+            {activePanel === 'starting-point' ? (
+              <OutputIntentPicker
+                run={run}
+                profiles={profiles}
+                saving={savingMix}
+                onApplyTemplate={(stems) => onSaveMix(track.id, run.id, stems)}
+                onRerunWithProfile={(profileKey) => onCreateRun(track.id, { profile_key: profileKey })}
+              />
+            ) : (
+              <>
+                <ExportBuilder
+                  tracks={[trackSummary]}
+                  selectedTrackIds={[track.id]}
+                  defaultBitrate={defaultBitrate}
+                  runIds={{ [track.id]: run.id }}
+                  hidePackaging
+                  forceMode="single-bundle"
+                  mixSummary={mixSummary}
+                  onError={onError}
+                  onReveal={onReveal}
+                />
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => void onReveal({ kind: 'track-outputs', track_id: track.id })}
+                >
+                  Open outputs folder
+                </button>
+              </>
+            )}
+          </section>
+        </aside>
+      ) : null}
     </div>
   )
 }
@@ -466,12 +500,14 @@ function StudioVersionsTab({
   creatingRun,
   cancellingRunId,
   retryingRunId,
+  deletingRunId,
   updatingTrack,
   onSelectRun,
   onSelectCompare,
   onCreateRun,
   onCancelRun,
   onRetryRun,
+  onDeleteRun,
   onChangeTab,
   onPurgeNonKeepers,
   onUpdateTrack,
@@ -488,12 +524,14 @@ function StudioVersionsTab({
   creatingRun: boolean
   cancellingRunId: string | null
   retryingRunId: string | null
+  deletingRunId: string | null
   updatingTrack: boolean
   onSelectRun: (runId: string) => void
   onSelectCompare: (runId: string | null) => void
   onCreateRun: (trackId: string, processing: RunProcessingConfigInput) => Promise<unknown>
   onCancelRun: (runId: string) => Promise<void>
   onRetryRun: (runId: string) => Promise<unknown>
+  onDeleteRun: (runId: string) => Promise<void>
   onChangeTab: (tab: StudioTab) => void
   onPurgeNonKeepers: (trackId: string) => void
   onUpdateTrack: (trackId: string, payload: { title?: string; artist?: string | null }) => Promise<void>
@@ -518,6 +556,10 @@ function StudioVersionsTab({
   const customModelValid = !isCustomProfile || isValidModelFilename(nextProcessing.model_filename ?? '')
   const splitQueueRuns = track.runs.filter((run) => run.status !== 'completed')
   const selectedRunMixable = selectedRun ? isMixableRun(selectedRun) : false
+  const canDeleteSelectedRun =
+    !!selectedRun &&
+    selectedRun.id !== track.keeper_run_id &&
+    !isActiveRunStatus(selectedRun.status)
 
   async function handleCreate() {
     await onCreateRun(track.id, nextProcessing)
@@ -589,6 +631,17 @@ function StudioVersionsTab({
                     {retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry split'}
                   </button>
                 ) : null}
+                {canDeleteSelectedRun ? (
+                  <ConfirmInline
+                    label="Delete version"
+                    pendingLabel="Deleting…"
+                    confirmLabel="Delete version"
+                    cancelLabel="Keep it"
+                    prompt="Delete this version and its output files?"
+                    pending={deletingRunId === selectedRun.id}
+                    onConfirm={() => onDeleteRun(selectedRun.id)}
+                  />
+                ) : null}
               </div>
             </header>
 
@@ -630,20 +683,17 @@ function StudioVersionsTab({
             </div>
 
             <div className="kp-wave-panel">
-              <MixScrubber
-                peaks={previewPeaks(selectedRun)}
-                currentTime={previewDuration(selectedRun) * 0.42}
-                duration={previewDuration(selectedRun)}
-                onSeek={() => undefined}
-                disabled
-              />
+              <div>
+                <strong>Ready to audition this version?</strong>
+                <p>Open Mix to hear the real stem balance and make changes that save back to this version.</p>
+              </div>
               <button
                 type="button"
                 className="button-primary"
                 onClick={() => onChangeTab('mix')}
                 disabled={!selectedRunMixable}
               >
-                Preview in mix
+                Open mix
               </button>
             </div>
 
@@ -828,6 +878,7 @@ export function StudioPage({
   creatingRun,
   cancellingRunId,
   retryingRunId,
+  deletingRunId,
   settingKeeper,
   savingMixRunId,
   updatingTrack,
@@ -838,6 +889,7 @@ export function StudioPage({
   onCreateRun,
   onCancelRun,
   onRetryRun,
+  onDeleteRun,
   onSetKeeper,
   onPurgeNonKeepers,
   onSaveMix,
@@ -879,10 +931,13 @@ export function StudioPage({
           <StudioMixTab
             track={track}
             run={selectedRun}
+            runs={track.runs}
+            selectedRunId={selectedRun?.id ?? null}
             profiles={profiles}
             defaultBitrate={defaultBitrate}
             savingMix={selectedRun ? savingMixRunId === selectedRun.id : false}
             settingKeeper={settingKeeper}
+            onSelectRun={onSelectRun}
             onRetryRun={onRetryRun}
             onChangeTab={onChangeTab}
             onSetKeeper={onSetKeeper}
@@ -904,12 +959,14 @@ export function StudioPage({
             creatingRun={creatingRun}
             cancellingRunId={cancellingRunId}
             retryingRunId={retryingRunId}
+            deletingRunId={deletingRunId}
             updatingTrack={updatingTrack}
             onSelectRun={onSelectRun}
             onSelectCompare={onSelectCompare}
             onCreateRun={onCreateRun}
             onCancelRun={onCancelRun}
             onRetryRun={onRetryRun}
+            onDeleteRun={onDeleteRun}
             onChangeTab={onChangeTab}
             onPurgeNonKeepers={onPurgeNonKeepers}
             onUpdateTrack={onUpdateTrack}

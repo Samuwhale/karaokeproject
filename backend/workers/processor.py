@@ -138,6 +138,8 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         # the downstream "move into stems/ and register artifacts" loop stays
         # model-agnostic.
         raw_stems: dict[str, Path] = dict(primary_separation.stems)
+        if not raw_stems:
+            raise SeparationError("Separation produced no stems.")
 
         if followup is not None:
             input_stem = str(followup["input_stem"])
@@ -176,6 +178,9 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
                         collision += 1
                     name = f"{name}-{collision}"
                 raw_stems[name] = path
+
+        if not raw_stems:
+            raise SeparationError("Separation finished without any usable stems.")
 
         stems_directory.mkdir(parents=True, exist_ok=True)
 

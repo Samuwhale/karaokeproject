@@ -165,13 +165,13 @@ export function QueueList({
         {showHeader ? (
           <div className="section-head">
             <div className="section-head-copy">
-              <h2>Queue</h2>
+              <h2>Processing</h2>
               <p>Watch active splits and jump straight back into the exact result that needs attention.</p>
             </div>
           </div>
         ) : null}
         <p className="empty-state">
-          Nothing is running right now. Queue a split from imported songs or from a song in the library to see progress here.
+          Nothing is running right now. Start a split from Imports or from a song in Songs to see progress here.
         </p>
       </div>
     )
@@ -182,7 +182,7 @@ export function QueueList({
       {showHeader ? (
         <div className="section-head">
           <div className="section-head-copy">
-            <h2>Queue</h2>
+            <h2>Processing</h2>
             <p>Keep active splits visible and clear anything that needs follow-up.</p>
           </div>
         </div>

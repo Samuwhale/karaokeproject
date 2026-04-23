@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import Select, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, object_session, selectinload
 
 from backend.core.config import RuntimeSettings
 from backend.core.stems import is_stem_kind
@@ -148,6 +148,10 @@ def serialize_run_summary(run: Run) -> RunSummaryResponse:
 
 def mixable_artifacts(run: Run) -> list[RunArtifact]:
     return [artifact for artifact in run.artifacts if is_stem_kind(artifact.kind)]
+
+
+def _run_has_mixable_stems(run: Run) -> bool:
+    return bool(mixable_artifacts(run))
 
 
 def _is_default_stem(entry: dict[str, Any] | RunMixStemEntry) -> bool:
@@ -350,6 +354,10 @@ def create_track(
 
 
 def create_run(track: Track, processing: dict[str, str]) -> Run:
+    session = object_session(track)
+    if session is not None:
+        prune_terminal_runs_without_stems(session, track)
+
     track.updated_at = datetime.utcnow()
     run = Run(
         track_id=track.id,
@@ -508,6 +516,23 @@ def dismiss_run(session: Session, run_id: str) -> Run:
     return run
 
 
+def delete_run(session: Session, run_id: str) -> None:
+    run = session.get(Run, run_id, options=[selectinload(Run.track), selectinload(Run.artifacts)])
+    if run is None:
+        raise LookupError(f"Run '{run_id}' does not exist.")
+    if run.status not in TERMINAL_RUN_STATUSES:
+        raise ValueError("Only completed, failed, or cancelled runs can be deleted.")
+    if run.track and run.track.keeper_run_id == run.id:
+        raise ValueError("Clear the final version before deleting this run.")
+
+    if run.track is not None:
+        run.track.updated_at = datetime.utcnow()
+
+    _delete_run_files(run, include_source=False)
+    session.delete(run)
+    session.commit()
+
+
 def retry_run(session: Session, run_id: str) -> Run:
     source_run = session.get(Run, run_id, options=[selectinload(Run.track)])
     if source_run is None:
@@ -528,6 +553,23 @@ def retry_run(session: Session, run_id: str) -> Run:
     session.commit()
     session.refresh(new_run)
     return new_run
+
+
+def prune_terminal_runs_without_stems(session: Session, track: Track) -> int:
+    deleted = 0
+    for run in list(track.runs):
+        if run.status not in TERMINAL_RUN_STATUSES:
+            continue
+        if run.id == track.keeper_run_id:
+            continue
+        if _run_has_mixable_stems(run):
+            continue
+
+        _delete_run_files(run, include_source=False)
+        session.delete(run)
+        deleted += 1
+
+    return deleted
 
 
 RUN_NOTE_MAX_LENGTH = 280

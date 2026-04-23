@@ -99,16 +99,27 @@ function stripTone(label: string) {
 export function MixPanel({ run, onSave, saving }: MixPanelProps) {
   const [stems, setStems] = useState<StemRow[]>(() => initialStems(run))
   const saveTimerRef = useRef<number | null>(null)
+  const pendingSavePayloadRef = useRef<RunMixStemEntry[] | null>(null)
   const latestSaveIdRef = useRef(0)
+  const tearingDownRef = useRef(false)
   const [retryPayload, setRetryPayload] = useState<RunMixStemEntry[] | null>(null)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
+      tearingDownRef.current = true
+      const pendingTimer = saveTimerRef.current
+      if (pendingTimer !== null) {
+        window.clearTimeout(pendingTimer)
+        saveTimerRef.current = null
+      }
+      const pendingPayload = pendingSavePayloadRef.current
+      if (pendingTimer !== null && pendingPayload) {
+        void onSave(pendingPayload)
+      }
     }
-  }, [])
+  }, [onSave])
 
   const dirty = !equalsPersisted(stems, run.mix.stems)
   const showsDefault = isDefaultMix(stems)
@@ -133,17 +144,19 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
 
   async function persistMix(payload: RunMixStemEntry[]) {
     const saveId = ++latestSaveIdRef.current
+    pendingSavePayloadRef.current = payload
     setRetryPayload(payload)
     setSaveState('saving')
     setSaveError(null)
 
     try {
       await onSave(payload)
-      if (latestSaveIdRef.current !== saveId) return
+      if (tearingDownRef.current || latestSaveIdRef.current !== saveId) return
+      pendingSavePayloadRef.current = null
       setRetryPayload(null)
       setSaveState('saved')
     } catch (error) {
-      if (latestSaveIdRef.current !== saveId) return
+      if (tearingDownRef.current || latestSaveIdRef.current !== saveId) return
       setRetryPayload(payload)
       setSaveState('failed')
       setSaveError(error instanceof Error ? error.message : 'Could not save mix changes.')
@@ -157,6 +170,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
       gain_db: Math.round(stem.gain_db * 10) / 10,
       muted: stem.muted,
     }))
+    pendingSavePayloadRef.current = payload
     setRetryPayload(payload)
     setSaveState('pending')
     setSaveError(null)
@@ -203,11 +217,11 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
     <section className="kp-mix-panel">
       <header className="kp-mix-header">
         <div className="kp-mix-header-copy">
-          <h2>Mix workspace</h2>
-          <p>Balance stems live, keep the arrangement intact, and save the result automatically as you work.</p>
+          <strong>Live stem balance</strong>
+          <span>{stems.length} stems ready for mute, solo, and level changes.</span>
         </div>
         <div className="kp-mix-header-actions">
-          <span className="kp-mix-status">
+          <span className="kp-mix-status" aria-live="polite">
             {saving || saveState === 'saving' ? (
               <>
                 <Spinner /> {statusLabel}
@@ -235,14 +249,6 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
       <section className="kp-mix-transport">
         <div className="kp-mix-transport-main">
           <div className="kp-mix-transport-controls">
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={handleReset}
-              disabled={showsDefault && stems.every((stem) => !stem.soloed)}
-            >
-              Recenter
-            </button>
             <button
               type="button"
               className="button-primary kp-mix-play"

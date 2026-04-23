@@ -33,6 +33,7 @@ from backend.services.processing import build_processing_from_request
 from backend.services.settings import get_or_create_settings
 from backend.services.tracks import (
     create_run,
+    delete_run,
     delete_track,
     dismiss_run,
     get_track,
@@ -146,6 +147,17 @@ def cancel_run_endpoint(run_id: str, session: Session = Depends(get_db_session))
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     return CreateRunResponse(run=serialize_run_summary(run))
+
+
+@router.delete("/runs/{run_id}")
+def delete_run_endpoint(run_id: str, session: Session = Depends(get_db_session)) -> dict[str, bool]:
+    try:
+        delete_run(session, run_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"ok": True}
 
 
 @router.put("/runs/{run_id}/note", response_model=RunDetailResponse)

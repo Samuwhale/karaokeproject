@@ -14,6 +14,7 @@ import {
   cleanupTempStorage,
   confirmImportDrafts,
   createRun,
+  deleteRun,
   discardImportDraft,
   dismissRun,
   flushPendingLibraryCleanup,
@@ -152,6 +153,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
   const [creatingRun, setCreatingRun] = useState(false)
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null)
   const [retryingRunId, setRetryingRunId] = useState<string | null>(null)
+  const [deletingRunId, setDeletingRunId] = useState<string | null>(null)
   const [savingSettings, setSavingSettings] = useState(false)
   const [cleaningTempStorage, setCleaningTempStorage] = useState(false)
   const [cleaningExportBundles, setCleaningExportBundles] = useState(false)
@@ -565,6 +567,20 @@ export function useDashboardData(selection: { trackId: string | null }) {
       throw error
     } finally {
       setRetryingRunId(null)
+    }
+  }
+
+  async function handleDeleteRun(runId: string) {
+    setDeletingRunId(runId)
+    try {
+      await deleteRun(runId)
+      pushToast('success', 'Deleted version.')
+      await refreshDashboard()
+    } catch (error) {
+      pushToast('error', getErrorMessage(error))
+      throw error
+    } finally {
+      setDeletingRunId(null)
     }
   }
 
@@ -1105,6 +1121,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     creatingRun,
     cancellingRunId,
     retryingRunId,
+    deletingRunId,
     savingSettings,
     cleaningTempStorage,
     cleaningExportBundles,
@@ -1123,6 +1140,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     handleCreateRun,
     handleCancelRun,
     handleRetryRun,
+    handleDeleteRun,
     handleDismissRun,
     handleRevealFolder,
     handleSaveSettings,

@@ -176,6 +176,7 @@ export function StagedImportsPanel({
   onDiscardStagedImport,
   onConfirmStagedImports,
 }: StagedImportsPanelProps) {
+  const [startSplitAfterImport, setStartSplitAfterImport] = useState(true)
   const [queueProfileState, setQueueProfileState] = useState<QueueProfileState>({
     sourceKey: defaultProfileKey,
     value: defaultProfileKey,
@@ -220,12 +221,6 @@ export function StagedImportsPanel({
               {unresolvedCount > 0
                 ? `${unresolvedCount} still ${unresolvedCount === 1 ? 'needs' : 'need'} a duplicate decision.`
                 : 'Everything is ready to continue.'}
-            </span>
-          </div>
-          <div className="staged-import-summary-copy">
-            <strong>{defaultProfileLabel}</strong>
-            <span>
-              Queue now with {createNewCount} new, {reuseCount} attached, and {skipCount} skipped.
             </span>
           </div>
         </section>
@@ -365,25 +360,24 @@ export function StagedImportsPanel({
           ) : unresolvedCount > 0 ? (
             <span>Resolve every duplicate decision before continuing.</span>
           ) : (
-            <span>Choose whether this batch should only enter the library or start its first split immediately.</span>
+            <span>
+              {startSplitAfterImport
+                ? `This batch will enter Songs and start its first split with ${defaultProfileLabel}.`
+                : `This batch will enter Songs without starting a split yet. ${createNewCount} new, ${reuseCount} attached, ${skipCount} skipped.`}
+            </span>
           )}
         </div>
-        <div className="import-flow-footer-actions import-flow-footer-actions-stacked">
-          <button
-            type="button"
-            className="button-secondary"
-            disabled={!canConfirm}
-            onClick={() => void confirm(false)}
-          >
-            {confirming ? (
-              <>
-                <Spinner /> Importing…
-              </>
-            ) : (
-              'Import Only'
-            )}
-          </button>
-          <div className="import-flow-queue-action">
+        <div className="import-flow-footer-actions staged-imports-footer-actions">
+          <label className="staged-imports-toggle">
+            <input
+              type="checkbox"
+              checked={startSplitAfterImport}
+              disabled={!canConfirm || confirming}
+              onChange={(event) => setStartSplitAfterImport(event.target.checked)}
+            />
+            <span>Start first split after import</span>
+          </label>
+          {startSplitAfterImport ? (
             <label className="field field-inline import-flow-profile-select">
               <span>Split with</span>
               <select
@@ -403,21 +397,23 @@ export function StagedImportsPanel({
                 ))}
               </select>
             </label>
-            <button
-              type="button"
-              className="button-primary"
-              disabled={!canConfirm}
-              onClick={() => void confirm(true)}
-            >
-              {confirming ? (
-                <>
-                  <Spinner /> Queueing…
-                </>
-              ) : (
-                'Start All'
-              )}
-            </button>
-          </div>
+          ) : null}
+          <button
+            type="button"
+            className="button-primary"
+            disabled={!canConfirm}
+            onClick={() => void confirm(startSplitAfterImport)}
+          >
+            {confirming ? (
+              <>
+                <Spinner /> {startSplitAfterImport ? 'Queueing…' : 'Importing…'}
+              </>
+            ) : startSplitAfterImport ? (
+              'Import & Start Split'
+            ) : (
+              'Add to Songs'
+            )}
+          </button>
         </div>
       </footer>
     </div>

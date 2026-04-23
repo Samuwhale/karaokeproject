@@ -38,8 +38,8 @@ function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const studioMatch = useMatch('/studio/:trackId/:tab')
-  const libraryActive = location.pathname === '/library'
-  const queueActive = location.pathname === '/queue'
+  const libraryActive = location.pathname === '/songs'
+  const queueActive = location.pathname === '/imports'
   const studioActive = !!studioMatch
   const studioTrackId = studioMatch?.params.trackId ?? null
   const studioTab = normalizeStudioTab(studioMatch?.params.tab)
@@ -62,6 +62,7 @@ function App() {
     toggleLibrarySelected,
     toggleQueueRunSelected,
     clearSelection,
+    selectAll,
     toasts,
     dismissToast,
     pushToast,
@@ -72,6 +73,7 @@ function App() {
     creatingRun,
     cancellingRunId,
     retryingRunId,
+    deletingRunId,
     savingSettings,
     cleaningTempStorage,
     cleaningExportBundles,
@@ -89,6 +91,7 @@ function App() {
     handleCreateRun,
     handleCancelRun,
     handleRetryRun,
+    handleDeleteRun,
     handleDismissRun,
     handleRevealFolder,
     handleSaveSettings,
@@ -195,7 +198,7 @@ function App() {
   function openTrackWorkspace(track: TrackSummary, options?: { runId?: string | null; runStatus?: string | null }) {
     const stage = trackStageSummary(track)
     if (stage.key === 'rendering') {
-      navigate('/queue')
+      navigate('/imports')
       return
     }
 
@@ -249,7 +252,7 @@ function App() {
     if (!studioActive) return
     const trackKnown = studioTrackId ? tracks.some((track) => track.id === studioTrackId) : false
     if (hasFirstSync && !selectedTrack && !trackKnown) {
-      navigate('/library', { replace: true })
+      navigate('/songs', { replace: true })
       return
     }
     if (!selectedTrack) return
@@ -316,7 +319,7 @@ function App() {
       const files = filterImportableMediaFiles(event.dataTransfer?.files ?? [])
       if (files.length) {
         handleResolveLocalImport(files)
-          .then(() => navigate('/queue'))
+          .then(() => navigate('/imports'))
           .catch(() => undefined)
         return
       }
@@ -349,7 +352,7 @@ function App() {
       if (!text || !/^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\b/i.test(text)) return
       event.preventDefault()
       handleResolveYouTube(text)
-        .then(() => navigate('/queue'))
+        .then(() => navigate('/imports'))
         .catch(() => undefined)
     }
 
@@ -453,34 +456,8 @@ function App() {
     const selectedIds = new Set(librarySelectionList)
     return tracks.filter((track) => selectedIds.has(track.id) && track.keeper_run_id).length
   }, [librarySelectionList, tracks])
-  const studioLandingTrack = tracks[0] ?? null
-  const studioLandingPath = studioLandingTrack
-    ? buildStudioPath(
-        studioLandingTrack.id,
-        preferredStudioTabForTrack(studioLandingTrack, {
-          runId: studioLandingTrack.keeper_run_id ?? studioLandingTrack.latest_run?.id ?? null,
-          runStatus: studioLandingTrack.latest_run?.status ?? null,
-        }),
-        {
-          runId: studioLandingTrack.keeper_run_id ?? studioLandingTrack.latest_run?.id ?? null,
-        },
-      )
-    : null
   const mixWorkspaceActive = studioActive && studioTab === 'mix'
-  const shellTitle = libraryActive
-    ? 'Songs'
-    : queueActive
-      ? 'Queue'
-      : selectedTrack?.title ?? 'Studio'
-  const shellMeta = libraryActive
-    ? `${tracks.length} song${tracks.length === 1 ? '' : 's'} ready to revisit, split, or mix`
-    : queueActive
-      ? `${drafts.length} staged · ${queueRuns.length} job${queueRuns.length === 1 ? '' : 's'} in flight or review`
-      : studioActive
-        ? studioTab === 'mix'
-          ? 'Focused mix workspace'
-          : 'Version review and split planning'
-        : 'Stem splitter'
+  const showRailStatus = setupRequired || connection.state !== 'ready'
   const suiteMainClassName = `suite-main ${mixWorkspaceActive ? 'suite-main-fixed-workspace' : ''}`
   return (
     <ErrorBoundary>
@@ -492,34 +469,28 @@ function App() {
           </div>
 
           <nav className="shell-rail-nav" aria-label="Primary navigation">
-            <NavLink to="/library" className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}>
+            <NavLink to="/songs" className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}>
               <LibraryIcon />
-              <span>Library</span>
+              <span>Songs</span>
             </NavLink>
-            <NavLink to="/queue" className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}>
+            <NavLink to="/imports" className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}>
               <QueueIcon />
-              <span>Processing</span>
+              <span>Imports</span>
             </NavLink>
-            {studioLandingPath ? (
-              <NavLink
-                to={studioActive ? location.pathname + location.search : studioLandingPath}
-                className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}
-              >
-                <StudioIcon />
-                <span>Studio</span>
-              </NavLink>
-            ) : (
-              <span className="shell-rail-link shell-rail-link-disabled">
-                <StudioIcon />
-                <span>Studio</span>
-              </span>
-            )}
           </nav>
 
           <div className="shell-rail-footer">
             <button type="button" className="button-primary shell-rail-add" onClick={() => setImportOpen(true)}>
               Add songs
             </button>
+            {showRailStatus ? (
+              <StatusChip
+                className="shell-rail-status"
+                connection={connection}
+                setupRequired={setupRequired}
+                onOpenSettings={() => openSettings(setupRequired ? 'maintenance' : 'preferences')}
+              />
+            ) : null}
             <button
               type="button"
               className="shell-rail-settings"
@@ -532,65 +503,11 @@ function App() {
         </aside>
 
         <div className={`shell-canvas ${mixWorkspaceActive ? 'shell-canvas-focus-mode' : ''}`}>
-          {!mixWorkspaceActive ? (
-            <header className="shell-topbar" inert={anyDialogOpen || undefined}>
-              <div className="shell-topbar-main">
-                <div className="shell-topbar-copy">
-                  <strong>{shellTitle}</strong>
-                  <span>{shellMeta}</span>
-                </div>
-                <nav className="shell-topbar-nav" aria-label="Workspace sections">
-                  <NavLink
-                    to="/library"
-                    className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}
-                  >
-                    Songs
-                  </NavLink>
-                  <NavLink
-                    to="/queue"
-                    className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}
-                  >
-                    Queue
-                  </NavLink>
-                  {studioLandingPath ? (
-                    <NavLink
-                      to={studioActive ? location.pathname + location.search : studioLandingPath}
-                      className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}
-                    >
-                      Studio
-                    </NavLink>
-                  ) : (
-                    <span className="topbar-nav-link topbar-nav-link-disabled">Studio</span>
-                  )}
-                </nav>
-              </div>
-              <div className="shell-topbar-meta">
-                <StatusChip
-                  connection={connection}
-                  setupRequired={setupRequired}
-                  onOpenSettings={() => openSettings('maintenance')}
-                />
-                <button
-                  type="button"
-                  className="topbar-gear"
-                  onClick={() => openSettings('preferences')}
-                  aria-label="Open settings"
-                  title="Settings (⌘,)"
-                >
-                  <GearIcon />
-                </button>
-                <span className="shell-avatar" aria-hidden>
-                  S
-                </span>
-              </div>
-            </header>
-          ) : null}
-
           <main className={suiteMainClassName} inert={anyDialogOpen || undefined}>
             <Routes>
-              <Route path="/" element={<Navigate to="/library" replace />} />
+              <Route path="/" element={<Navigate to="/songs" replace />} />
               <Route
-                path="/library"
+                path="/songs"
                 element={
                   <LibraryPage
                     view={libraryView}
@@ -606,18 +523,25 @@ function App() {
                     }}
                     selectedIds={selectedLibraryIds}
                     onViewChange={(nextView) => openLibrary(nextView)}
-                    onOpenQueue={() => navigate('/queue')}
                     onToggleSelect={(trackId) => {
                       if (selectedQueueRunIds.size > 0) clearSelection('queue')
                       toggleLibrarySelected(trackId)
                     }}
+                    onSelectAll={() => {
+                      if (selectedQueueRunIds.size > 0) clearSelection('queue')
+                      selectAll(
+                        'library',
+                        visibleTracks.map((track) => track.id),
+                      )
+                    }}
+                    onClearSelection={() => clearSelection('library')}
                     onOpenTrack={(track) => openTrackWorkspace(track)}
                     onAddSongs={() => setImportOpen(true)}
                   />
                 }
               />
               <Route
-                path="/queue"
+                path="/imports"
                 element={
                   <QueuePage
                     stagedImports={drafts}
@@ -661,8 +585,8 @@ function App() {
                       await handleConfirmDrafts(payload)
                       navigate(
                         payload.queue
-                          ? '/queue'
-                          : buildLibraryPath({ ...DEFAULT_LIBRARY_VIEW, filter: 'processing' }),
+                          ? '/imports'
+                          : buildLibraryPath({ ...DEFAULT_LIBRARY_VIEW, filter: 'needs-work' }),
                       )
                     }}
                   />
@@ -683,6 +607,7 @@ function App() {
                     creatingRun={creatingRun}
                     cancellingRunId={cancellingRunId}
                     retryingRunId={retryingRunId}
+                    deletingRunId={deletingRunId}
                     settingKeeper={settingKeeper}
                     savingMixRunId={savingMixRunId}
                     updatingTrack={updatingTrack}
@@ -725,20 +650,21 @@ function App() {
                         openStudio(selectedTrack.id, { tab: 'versions', runId: (result as { run: { id: string } }).run.id })
                       }
                     }}
+                    onDeleteRun={handleDeleteRun}
                     onSetKeeper={handleSetKeeper}
                     onPurgeNonKeepers={handlePurgeNonKeepers}
                     onSaveMix={handleSaveMix}
                     onUpdateTrack={handleUpdateTrack}
                     onDeleteTrack={(trackId) => {
                       handleDeleteTrack(trackId)
-                      navigate('/library')
+                      navigate('/songs')
                     }}
                     onReveal={handleRevealFolder}
                     onError={(message) => pushToast('error', message)}
                   />
                 }
               />
-              <Route path="*" element={<Navigate to="/library" replace />} />
+              <Route path="*" element={<Navigate to="/songs" replace />} />
             </Routes>
           </main>
         </div>
@@ -759,7 +685,7 @@ function App() {
               disabled={batching}
               onClick={() => void handleBatchQueueRuns(librarySelectionList, defaultProcessing)}
             >
-              Queue splits
+              Start splits
             </button>
             <button
               type="button"
@@ -808,7 +734,7 @@ function App() {
         {queueActive && queueSelectionList.length > 0 ? (
           <BatchActionBar
             selectedCount={queueSelectionList.length}
-            selectionLabel="queue items"
+            selectionLabel="import items"
             onClear={() => clearSelection('queue')}
             busy={batching}
             inert={anyDialogOpen}
@@ -830,7 +756,7 @@ function App() {
                 disabled={batching}
                 onClick={() => void handleBatchRetryQueueRuns(selectedQueueFollowUpIds)}
               >
-                Retry follow-up ({selectedQueueFollowUpIds.length})
+                Retry selected ({selectedQueueFollowUpIds.length})
               </button>
             ) : null}
             {selectedQueueFollowUpIds.length > 0 ? (
@@ -840,7 +766,7 @@ function App() {
                 disabled={batching}
                 onClick={() => void handleBatchDismissQueueRuns(selectedQueueFollowUpIds)}
               >
-                Dismiss follow-up ({selectedQueueFollowUpIds.length})
+                Dismiss selected ({selectedQueueFollowUpIds.length})
               </button>
             ) : null}
           </BatchActionBar>
@@ -869,7 +795,7 @@ function App() {
           open={importOpen}
           stagedImports={drafts}
           onClose={() => setImportOpen(false)}
-          onSourcesStaged={() => navigate('/queue')}
+          onSourcesStaged={() => navigate('/imports')}
           resolvingYoutubeImport={resolvingYoutubeImport}
           resolvingLocalImport={resolvingLocalImport}
           onResolveYouTube={async (sourceUrl) => {
@@ -911,12 +837,13 @@ function App() {
 }
 
 type StatusChipProps = {
+  className?: string
   connection: Connection
   setupRequired: boolean
   onOpenSettings: () => void
 }
 
-function StatusChip({ connection, setupRequired, onOpenSettings }: StatusChipProps) {
+function StatusChip({ className, connection, setupRequired, onOpenSettings }: StatusChipProps) {
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -929,7 +856,7 @@ function StatusChip({ connection, setupRequired, onOpenSettings }: StatusChipPro
     return (
       <button
         type="button"
-        className="topbar-chip topbar-chip-warn"
+        className={className ?? 'topbar-chip topbar-chip-warn'}
         onClick={onOpenSettings}
         title="Open settings to resolve"
       >
@@ -943,7 +870,7 @@ function StatusChip({ connection, setupRequired, onOpenSettings }: StatusChipPro
     const retryInMs = connection.nextRetryAt ? connection.nextRetryAt - now : 0
     const retryIn = Math.max(0, Math.ceil(retryInMs / 1000))
     return (
-      <span className="topbar-chip" title={connection.lastError ?? 'Connection error'}>
+      <span className={className ?? 'topbar-chip'} title={connection.lastError ?? 'Connection error'}>
         <span className="topbar-dot topbar-dot-offline" />
         offline · retry {retryIn}s
       </span>
@@ -952,7 +879,7 @@ function StatusChip({ connection, setupRequired, onOpenSettings }: StatusChipPro
 
   if (connection.lastSyncAt === 0) {
     return (
-      <span className="topbar-chip">
+      <span className={className ?? 'topbar-chip'}>
         <span className="topbar-dot topbar-dot-syncing" />
         loading
       </span>
@@ -1005,17 +932,6 @@ function QueueIcon() {
       <path d="M3 8H10.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
       <path d="M3 11.75H8.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
       <circle cx="12" cy="11.75" r="1.75" stroke="currentColor" strokeWidth="1.25" />
-    </svg>
-  )
-}
-
-function StudioIcon() {
-  return (
-    <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <rect x="2.5" y="2.5" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.25" />
-      <path d="M5 10.75V7.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-      <path d="M8 10.75V5.75" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-      <path d="M11 10.75V8.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
     </svg>
   )
 }
