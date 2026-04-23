@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react'
 
-import { QueueList } from './QueueList'
-import { RUN_STATUS_LABELS } from '../runStatus'
+import { describeRun, isActiveRunStatus, RUN_STATUS_LABELS } from '../runStatus'
 import { SONG_BROWSE_SORT_OPTIONS, applySongBrowse, trackStageSummary } from '../trackListView'
 import type { SongsView } from '../../routes'
-import type { QueueRunEntry, TrackSummary } from '../../types'
+import type { QueueRunEntry, RunSummary, TrackSummary } from '../../types'
 
 type SongsPageProps = {
   view: SongsView
@@ -12,11 +11,15 @@ type SongsPageProps = {
   currentTrackId: string | null
   stagedImportsCount: number
   queueRuns: QueueRunEntry[]
+  cancellingRunId: string | null
   onViewChange: (view: SongsView) => void
   onOpenTrack: (track: TrackSummary, options?: { runId?: string | null }) => void
   onAddSongs: () => void
   onReviewImports: () => void
+  onCancelRun: (runId: string) => Promise<void>
+  onBatchSplit: (trackIds: string[]) => void
   onBatchExport: (trackIds: string[]) => void
+  onBatchDelete: (trackIds: string[]) => void
 }
 
 function formatDuration(seconds: number | null) {
@@ -31,18 +34,152 @@ type RowStatus = { text: string | null; tone: 'processing' | 'attn' | 'final' | 
 
 function rowStatus(track: TrackSummary): RowStatus {
   const stage = trackStageSummary(track)
-  const run = track.latest_run
-  if (stage.key === 'processing' && run) {
-    const label = RUN_STATUS_LABELS[run.status] ?? 'Processing'
-    const percent = run.status === 'queued' ? null : Math.round(run.progress)
-    return { text: percent === null ? label : `${label} · ${percent}%`, tone: 'processing' }
+  if (stage.key === 'processing') {
+    const run = track.latest_run
+    const stageLabel = run ? (RUN_STATUS_LABELS[run.status] ?? 'Splitting') : 'Splitting'
+    if (!run || run.status === 'queued') return { text: stageLabel, tone: 'processing' }
+    const pct = Math.round(run.progress * 100)
+    return { text: `${stageLabel} · ${pct}%`, tone: 'processing' }
   }
   if (stage.key === 'needs-attention') {
-    return { text: run?.status === 'cancelled' ? 'Cancelled' : 'Split failed', tone: 'attn' }
+    return {
+      text: track.latest_run?.status === 'cancelled' ? 'Cancelled' : 'Split failed',
+      tone: 'attn',
+    }
   }
   if (stage.key === 'needs-split') return { text: 'No split yet', tone: null }
   if (stage.key === 'final') return { text: 'Final', tone: 'final' }
   return { text: null, tone: null }
+}
+
+function RowProgressBar({ run }: { run: RunSummary }) {
+  const fraction = Math.max(0, Math.min(1, run.progress))
+  return (
+    <span
+      className="song-row-progress"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(fraction * 100)}
+      aria-label={describeRun(run)}
+    >
+      <span className="song-row-progress-fill" style={{ width: `${fraction * 100}%` }} />
+    </span>
+  )
+}
+
+function QueueStrip({
+  draftsCount,
+  activeRuns,
+  failedRuns,
+  cancellingRunId,
+  onReviewImports,
+  onOpenRun,
+  onCancelRun,
+}: {
+  draftsCount: number
+  activeRuns: QueueRunEntry[]
+  failedRuns: QueueRunEntry[]
+  cancellingRunId: string | null
+  onReviewImports: () => void
+  onOpenRun: (entry: QueueRunEntry) => void
+  onCancelRun: (runId: string) => Promise<void>
+}) {
+  const activeCount = activeRuns.length
+  const failedCount = failedRuns.length
+  const summary: string[] = []
+  if (draftsCount > 0) summary.push(`${draftsCount} import${draftsCount === 1 ? '' : 's'} to review`)
+  if (activeCount > 0) summary.push(`${activeCount} split${activeCount === 1 ? '' : 's'} running`)
+  if (failedCount > 0) summary.push(`${failedCount} need${failedCount === 1 ? 's' : ''} attention`)
+  const attn = failedCount > 0 && draftsCount === 0 && activeCount === 0
+  const aggregate =
+    activeCount > 0
+      ? activeRuns.reduce((sum, entry) => sum + Math.max(0, Math.min(1, entry.run.progress)), 0) / activeCount
+      : 0
+
+  return (
+    <section className={`library-queue ${attn ? 'is-attn' : ''}`}>
+      <div className="library-queue-head">
+        <span className="library-queue-summary">{summary.join(' · ')}</span>
+        {draftsCount > 0 ? (
+          <button type="button" className="button-primary" onClick={onReviewImports}>
+            Review imports
+          </button>
+        ) : null}
+      </div>
+
+      {activeCount > 0 ? (
+        <>
+          <div
+            className="library-queue-aggregate"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(aggregate * 100)}
+            aria-label="Overall split progress"
+          >
+            <span className="library-queue-aggregate-fill" style={{ width: `${aggregate * 100}%` }} />
+          </div>
+          <ul className="library-queue-list">
+            {activeRuns.map((entry) => {
+              const fraction = Math.max(0, Math.min(1, entry.run.progress))
+              const pct = Math.round(fraction * 100)
+              const label = describeRun(entry.run) || 'Queued'
+              const cancelling = cancellingRunId === entry.run.id
+              return (
+                <li key={entry.run.id} className="library-queue-row">
+                  <button type="button" className="library-queue-item" onClick={() => onOpenRun(entry)}>
+                    <span className="library-queue-item-title" title={entry.track_title}>
+                      {entry.track_title}
+                    </span>
+                    <span className="library-queue-item-profile" title={entry.run.processing.profile_label}>
+                      {entry.run.processing.profile_label}
+                    </span>
+                    <span className="library-queue-item-stage">{label}</span>
+                    <span className="library-queue-item-bar" aria-hidden>
+                      <span className="library-queue-item-fill" style={{ width: `${fraction * 100}%` }} />
+                    </span>
+                    <span className="library-queue-item-pct">{pct}%</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="library-queue-cancel"
+                    disabled={cancelling}
+                    onClick={() => void onCancelRun(entry.run.id)}
+                    aria-label={`Cancel split for ${entry.track_title}`}
+                  >
+                    {cancelling ? 'Cancelling…' : 'Cancel'}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </>
+      ) : null}
+
+      {failedCount > 0 ? (
+        <ul className="library-queue-list library-queue-failed">
+          {failedRuns.map((entry) => {
+            const reason = entry.run.error_message?.trim() || entry.run.status_message?.trim() || 'No detail recorded'
+            const label = entry.run.status === 'cancelled' ? 'Cancelled' : 'Failed'
+            return (
+              <li key={entry.run.id}>
+                <button type="button" className="library-queue-item is-failed" onClick={() => onOpenRun(entry)}>
+                  <span className="library-queue-item-title" title={entry.track_title}>
+                    {entry.track_title}
+                  </span>
+                  <span className="library-queue-item-stage">{label}</span>
+                  <span className="library-queue-item-reason" title={reason}>
+                    {reason}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+    </section>
+  )
 }
 
 const TRACK_WAVE_VIEW_WIDTH = 320
@@ -100,11 +237,15 @@ export function SongsPage({
   currentTrackId,
   stagedImportsCount,
   queueRuns,
+  cancellingRunId,
   onViewChange,
   onOpenTrack,
   onAddSongs,
   onReviewImports,
+  onCancelRun,
+  onBatchSplit,
   onBatchExport,
+  onBatchDelete,
 }: SongsPageProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -112,16 +253,38 @@ export function SongsPage({
     () => applySongBrowse(tracks, { search: view.search, sort: view.sort }),
     [tracks, view.search, view.sort],
   )
-  const exportableIds = useMemo(() => {
-    const ids = new Set<string>()
+  const activeRuns = useMemo(
+    () => queueRuns.filter((entry) => isActiveRunStatus(entry.run.status)),
+    [queueRuns],
+  )
+  const failedRuns = useMemo(
+    () => queueRuns.filter((entry) => entry.run.status === 'failed' || entry.run.status === 'cancelled'),
+    [queueRuns],
+  )
+  const showQueue = stagedImportsCount > 0 || activeRuns.length > 0 || failedRuns.length > 0
+
+  const { exportableIds, splittableIds } = useMemo(() => {
+    const exportable = new Set<string>()
+    const splittable = new Set<string>()
     for (const track of browseTracks) {
       const stage = trackStageSummary(track)
-      if (stage.key === 'ready' || stage.key === 'final') ids.add(track.id)
+      if (stage.key === 'ready' || stage.key === 'final') exportable.add(track.id)
+      if (stage.key !== 'processing') splittable.add(track.id)
     }
-    return ids
+    return { exportableIds: exportable, splittableIds: splittable }
   }, [browseTracks])
-  const selectedCount = selected.size
-  const allSelected = exportableIds.size > 0 && Array.from(exportableIds).every((id) => selected.has(id))
+
+  const browseTrackIds = useMemo(() => new Set(browseTracks.map((track) => track.id)), [browseTracks])
+  const { selectedIds, splitEligible, exportEligible } = useMemo(() => {
+    const ids = Array.from(selected).filter((id) => browseTrackIds.has(id))
+    return {
+      selectedIds: ids,
+      splitEligible: ids.filter((id) => splittableIds.has(id)),
+      exportEligible: ids.filter((id) => exportableIds.has(id)),
+    }
+  }, [browseTrackIds, selected, splittableIds, exportableIds])
+  const selectedCount = selectedIds.length
+  const allSelected = browseTracks.length > 0 && browseTracks.every((track) => selectedIds.includes(track.id))
 
   function toggleSelect(trackId: string) {
     setSelected((current) => {
@@ -134,16 +297,28 @@ export function SongsPage({
 
   function toggleAll() {
     if (allSelected) setSelected(new Set())
-    else setSelected(new Set(exportableIds))
-  }
-
-  function handleBatchExport() {
-    if (selectedCount === 0) return
-    onBatchExport(Array.from(selected))
-    setSelected(new Set())
+    else setSelected(new Set(browseTracks.map((track) => track.id)))
   }
 
   function clearSelection() {
+    setSelected(new Set())
+  }
+
+  function handleSplit() {
+    if (!splitEligible.length) return
+    onBatchSplit(splitEligible)
+    setSelected(new Set())
+  }
+
+  function handleExport() {
+    if (!exportEligible.length) return
+    onBatchExport(exportEligible)
+    setSelected(new Set())
+  }
+
+  function handleDelete() {
+    if (!selectedCount) return
+    onBatchDelete(selectedIds)
     setSelected(new Set())
   }
 
@@ -151,15 +326,20 @@ export function SongsPage({
     <section className="library">
       <h1 className="library-hero">Library</h1>
 
-      <QueueList
-        draftsCount={stagedImportsCount}
-        queueRuns={queueRuns}
-        onReviewImports={onReviewImports}
-        onOpenRun={(entry) => {
-          const track = tracks.find((item) => item.id === entry.track_id)
-          if (track) onOpenTrack(track, { runId: entry.run.id })
-        }}
-      />
+      {showQueue ? (
+        <QueueStrip
+          draftsCount={stagedImportsCount}
+          activeRuns={activeRuns}
+          failedRuns={failedRuns}
+          cancellingRunId={cancellingRunId}
+          onReviewImports={onReviewImports}
+          onOpenRun={(entry) => {
+            const track = tracks.find((item) => item.id === entry.track_id)
+            if (track) onOpenTrack(track, { runId: entry.run.id })
+          }}
+          onCancelRun={onCancelRun}
+        />
+      ) : null}
 
       <div className="library-toolbar">
         <input
@@ -190,12 +370,13 @@ export function SongsPage({
             const status = rowStatus(track)
             const isActive = currentTrackId === track.id
             const isSelected = selected.has(track.id)
-            const canSelect = exportableIds.has(track.id)
             const initials = track.title.trim().slice(0, 1).toUpperCase() || 'S'
             const meta = [track.artist ?? 'Unknown artist', formatDuration(track.duration_seconds)]
               .filter(Boolean)
               .join(' · ')
 
+            const activeRun =
+              track.latest_run && isActiveRunStatus(track.latest_run.status) ? track.latest_run : null
             return (
               <div
                 key={track.id}
@@ -203,13 +384,12 @@ export function SongsPage({
                 className={`song-row ${isActive ? 'is-active' : ''} ${isSelected ? 'is-selected' : ''}`}
               >
                 <label
-                  className={`song-row-check ${canSelect ? '' : 'is-disabled'}`}
+                  className="song-row-check"
                   onClick={(event) => event.stopPropagation()}
                 >
                   <input
                     type="checkbox"
                     checked={isSelected}
-                    disabled={!canSelect}
                     onChange={() => toggleSelect(track.id)}
                     aria-label={`Select ${track.title}`}
                   />
@@ -226,8 +406,8 @@ export function SongsPage({
                     <span className="song-row-title">{track.title}</span>
                     <span className="song-row-sub">{meta}</span>
                   </span>
-                  <span className="song-row-wave-cell" aria-hidden>
-                    <TrackWaveThumb track={track} />
+                  <span className="song-row-wave-cell" aria-hidden={!activeRun}>
+                    {activeRun ? <RowProgressBar run={activeRun} /> : <TrackWaveThumb track={track} />}
                   </span>
                   {status.text ? (
                     <span className={`song-row-status ${status.tone ? `is-${status.tone}` : ''}`}>
@@ -254,18 +434,30 @@ export function SongsPage({
       )}
 
       {selectedCount > 0 ? (
-        <div className="batch-bar" role="status">
-          <span className="batch-bar-count">{selectedCount} selected</span>
+        <div className="batch-bar" role="toolbar" aria-label="Batch actions">
+          <span className="batch-bar-count" aria-live="polite">
+            {selectedCount} selected
+          </span>
           <div className="batch-bar-spacer" />
           <button type="button" className="button-link" onClick={toggleAll}>
-            {allSelected ? 'Clear all' : 'Select all ready'}
+            {allSelected ? 'Clear all' : 'Select all'}
           </button>
           <button type="button" className="button-link" onClick={clearSelection}>
             Cancel
           </button>
-          <button type="button" className="button-primary" onClick={handleBatchExport}>
-            Export selection
+          <button type="button" className="button-danger" onClick={handleDelete}>
+            Delete {selectedCount}
           </button>
+          {exportEligible.length > 0 ? (
+            <button type="button" className="button-secondary" onClick={handleExport}>
+              Export {exportEligible.length}
+            </button>
+          ) : null}
+          {splitEligible.length > 0 ? (
+            <button type="button" className="button-primary" onClick={handleSplit}>
+              Split {splitEligible.length}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </section>

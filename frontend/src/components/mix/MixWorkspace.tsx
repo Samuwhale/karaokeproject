@@ -22,7 +22,6 @@ type MixWorkspaceProps = {
   track: TrackDetail | null
   selectedRunId: string | null
   profiles: ProcessingProfile[]
-  defaultProfileKey: string
   defaultBitrate: string
   creatingRun: boolean
   cancellingRunId: string | null
@@ -103,7 +102,6 @@ type VersionsPopoverProps = {
   track: TrackDetail
   selectedRun: RunDetail | null
   profiles: ProcessingProfile[]
-  defaultProfileKey: string
   creatingRun: boolean
   cancellingRunId: string | null
   retryingRunId: string | null
@@ -118,11 +116,27 @@ type VersionsPopoverProps = {
   onSetKeeper: (runId: string | null) => Promise<void>
 }
 
+function pickRepresentativeRun(
+  runs: RunDetail[],
+  profileKey: string,
+  keeperId: string | null,
+): RunDetail | null {
+  const matches = runs.filter((run) => run.processing.profile_key === profileKey)
+  if (matches.length === 0) return null
+  const sorted = [...matches].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+  const keeper = sorted.find((run) => run.id === keeperId)
+  if (keeper) return keeper
+  const completed = sorted.find((run) => run.status === 'completed')
+  if (completed) return completed
+  const active = sorted.find((run) => isActiveRunStatus(run.status))
+  if (active) return active
+  return sorted[0]
+}
+
 function VersionsPopover({
   track,
   selectedRun,
   profiles,
-  defaultProfileKey,
   creatingRun,
   cancellingRunId,
   retryingRunId,
@@ -136,17 +150,24 @@ function VersionsPopover({
   onDeleteRun,
   onSetKeeper,
 }: VersionsPopoverProps) {
-  const activeProfile = profiles.some((profile) => profile.key === defaultProfileKey)
-    ? defaultProfileKey
-    : profiles[0]?.key ?? defaultProfileKey
-  const [profileKey, setProfileKey] = useState(activeProfile)
   const keeperId = track.keeper_run_id
-  const selectedId = selectedRun?.id ?? null
   const selectedIsKeeper = !!selectedRun && keeperId === selectedRun.id
   const canDeleteSelected =
     !!selectedRun && selectedRun.id !== keeperId && !isActiveRunStatus(selectedRun.status)
+  const [armedKey, setArmedKey] = useState<string | null>(null)
 
-  async function queueSplit() {
+  useEffect(() => {
+    if (!armedKey) return
+    const timeoutId = window.setTimeout(() => setArmedKey(null), 5000)
+    return () => window.clearTimeout(timeoutId)
+  }, [armedKey])
+
+  const rows = profiles.map((profile) => ({
+    profile,
+    run: pickRepresentativeRun(track.runs, profile.key, keeperId),
+  }))
+
+  async function generate(profileKey: string) {
     const result = await onCreateRun({ profile_key: profileKey })
     if (result && typeof result === 'object' && 'run' in result) {
       const runId = (result as { run: { id: string } }).run.id
@@ -155,37 +176,103 @@ function VersionsPopover({
     onClose()
   }
 
+  async function retry(run: RunDetail) {
+    onSelectRun(run.id)
+    await onRetryRun(run.id)
+    onClose()
+  }
+
+  function handleRowClick(profileKey: string, run: RunDetail | null) {
+    if (!run || RETRYABLE_STATUSES.has(run.status)) {
+      setArmedKey(profileKey)
+      return
+    }
+    onSelectRun(run.id)
+    onClose()
+  }
+
+  function stateLabel(run: RunDetail | null): string {
+    if (!run) return creatingRun ? 'Queueing…' : 'Generate'
+    if (isActiveRunStatus(run.status)) return `${Math.round(run.progress * 100)}%`
+    if (RETRYABLE_STATUSES.has(run.status)) {
+      return retryingRunId === run.id ? 'Retrying…' : 'Retry'
+    }
+    return 'Ready'
+  }
+
+  function detailLine(profile: ProcessingProfile, run: RunDetail | null): string | null {
+    if (!run) return profile.best_for || null
+    if (isActiveRunStatus(run.status)) return run.status_message || formatStatus(run.status)
+    const when = formatTimestampShort(run.updated_at)
+    if (run.status === 'completed') {
+      return run.id === keeperId ? `Final · ${when}` : when
+    }
+    return `${formatStatus(run.status)} · ${when}`
+  }
+
   return (
     <>
       <div className="popover-backdrop" onClick={onClose} aria-hidden />
       <div className="popover popover-center popover-wide" role="dialog" aria-label="Versions">
         <div className="popover-title">Versions</div>
-        {track.runs.length === 0 ? (
-          <p className="popover-empty">No splits yet. Queue the first one below.</p>
+        {rows.length === 0 ? (
+          <p className="popover-empty">No profiles configured.</p>
         ) : (
           <div className="popover-list" role="list">
-            {track.runs.map((run) => {
-              const isActive = run.id === selectedId
-              const isKeeper = run.id === keeperId
-              const detail = `${formatStatus(run.status)} · ${formatTimestampShort(run.updated_at)}${isKeeper ? ' · Final' : ''}`
-              const state = isActiveRunStatus(run.status)
-                ? `${Math.round(run.progress)}%`
-                : formatStatus(run.status)
+            {rows.map(({ profile, run }) => {
+              const isActive = !!run && run.id === selectedRun?.id
+              const isArmed = armedKey === profile.key
+              const detail = detailLine(profile, run)
+              const disabled =
+                (!run && creatingRun) ||
+                (!!run && RETRYABLE_STATUSES.has(run.status) && retryingRunId === run.id)
+
+              if (isArmed) {
+                const isRetry = !!run && RETRYABLE_STATUSES.has(run.status)
+                return (
+                  <div key={profile.key} className="popover-row is-armed" role="group">
+                    <span className="popover-row-copy">
+                      <strong>{profile.label}</strong>
+                      <span>{isRetry ? 'Retry this split?' : 'Generate this version?'}</span>
+                    </span>
+                    <span className="popover-row-confirm">
+                      <button
+                        type="button"
+                        className="button-primary"
+                        disabled={disabled}
+                        onClick={() => {
+                          setArmedKey(null)
+                          if (isRetry && run) void retry(run)
+                          else void generate(profile.key)
+                        }}
+                      >
+                        {isRetry ? 'Retry' : 'Generate'}
+                      </button>
+                      <button
+                        type="button"
+                        className="button-secondary"
+                        onClick={() => setArmedKey(null)}
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  </div>
+                )
+              }
+
               return (
                 <button
-                  key={run.id}
+                  key={profile.key}
                   type="button"
                   className={`popover-row ${isActive ? 'is-active' : ''}`}
-                  onClick={() => {
-                    onSelectRun(run.id)
-                    onClose()
-                  }}
+                  disabled={disabled}
+                  onClick={() => handleRowClick(profile.key, run)}
                 >
                   <span className="popover-row-copy">
-                    <strong>{run.processing.profile_label}</strong>
-                    <span>{detail}</span>
+                    <strong>{profile.label}</strong>
+                    {detail ? <span>{detail}</span> : null}
                   </span>
-                  <span className="popover-row-state">{state}</span>
+                  <span className="popover-row-state">{stateLabel(run)}</span>
                 </button>
               )
             })}
@@ -202,18 +289,6 @@ function VersionsPopover({
             pending={cancellingRunId === selectedRun.id}
             onConfirm={() => onCancelRun(selectedRun.id)}
           />
-        ) : null}
-
-        {selectedRun && RETRYABLE_STATUSES.has(selectedRun.status) ? (
-          <div className="popover-foot">
-            <button
-              type="button"
-              className="button-primary"
-              onClick={() => void onRetryRun(selectedRun.id)}
-            >
-              {retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry split'}
-            </button>
-          </div>
         ) : null}
 
         {selectedRun && selectedRun.status === 'completed' ? (
@@ -239,35 +314,6 @@ function VersionsPopover({
             ) : null}
           </div>
         ) : null}
-
-        <div className="popover-foot popover-foot-split">
-          <select
-            className="popover-select"
-            value={profileKey}
-            onChange={(event) => setProfileKey(event.target.value)}
-            aria-label="Split profile"
-          >
-            {profiles.map((profile) => (
-              <option key={profile.key} value={profile.key}>
-                {profile.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="button-primary"
-            disabled={creatingRun}
-            onClick={() => void queueSplit()}
-          >
-            {creatingRun ? (
-              <>
-                <Spinner /> Queueing…
-              </>
-            ) : (
-              'New split'
-            )}
-          </button>
-        </div>
       </div>
     </>
   )
@@ -380,7 +426,6 @@ function MixWorkspaceContent({
   track,
   selectedRunId,
   profiles,
-  defaultProfileKey,
   defaultBitrate,
   creatingRun,
   cancellingRunId,
@@ -408,7 +453,7 @@ function MixWorkspaceContent({
   const canExport = !!selectedRun && selectedRun.status === 'completed'
   const versionLabel = versionSummary(selectedRun, track.keeper_run_id)
   const activeSplit = selectedRun && isActiveRunStatus(selectedRun.status)
-  const progressPct = activeSplit ? Math.round(selectedRun.progress) : null
+  const progressPct = activeSplit ? Math.round(selectedRun.progress * 100) : null
 
   const mixRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
@@ -448,7 +493,6 @@ function MixWorkspaceContent({
                 track={track}
                 selectedRun={selectedRun}
                 profiles={profiles}
-                defaultProfileKey={defaultProfileKey}
                 creatingRun={creatingRun}
                 cancellingRunId={cancellingRunId}
                 retryingRunId={retryingRunId}
@@ -534,8 +578,32 @@ function MixWorkspaceContent({
           {selectedRun ? (
             isActiveRunStatus(selectedRun.status) ? (
               <>
-                <strong>Splitting {selectedRun.processing.profile_label}</strong>
+                <div className="mix-progress-head">
+                  <strong>Splitting {selectedRun.processing.profile_label}</strong>
+                  <span className="mix-progress-pct">{Math.round(selectedRun.progress * 100)}%</span>
+                </div>
+                <div
+                  className="mix-progress-bar"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(selectedRun.progress * 100)}
+                >
+                  <span
+                    className="mix-progress-fill"
+                    style={{ width: `${Math.max(0, Math.min(1, selectedRun.progress)) * 100}%` }}
+                  />
+                </div>
                 <RunStepper status={selectedRun.status} lastActiveStatus={selectedRun.last_active_status} />
+                <ConfirmInline
+                  label="Cancel split"
+                  pendingLabel="Cancelling…"
+                  confirmLabel="Cancel split"
+                  cancelLabel="Keep running"
+                  prompt="Stop this split?"
+                  pending={cancellingRunId === selectedRun.id}
+                  onConfirm={() => onCancelRun(selectedRun.id)}
+                />
               </>
             ) : RETRYABLE_STATUSES.has(selectedRun.status) ? (
               <>

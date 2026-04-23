@@ -454,6 +454,34 @@ export function useDashboardData(selection: { trackId: string | null }) {
     }
   }
 
+  async function handleBatchCreateRun(
+    trackIds: string[],
+    processing: RunProcessingConfigInput,
+  ) {
+    if (!trackIds.length) return
+    setCreatingRun(true)
+    try {
+      const results = await Promise.allSettled(
+        trackIds.map((id) => createRun(id, processing)),
+      )
+      const ok = results.filter((result) => result.status === 'fulfilled').length
+      const failed = results.length - ok
+      if (failed === 0) {
+        pushToast('success', `Queued ${ok} split${ok === 1 ? '' : 's'}.`)
+      } else if (ok === 0) {
+        const firstError = results.find(
+          (result): result is PromiseRejectedResult => result.status === 'rejected',
+        )
+        pushToast('error', getErrorMessage(firstError?.reason))
+      } else {
+        pushToast('error', `Queued ${ok} · ${failed} failed.`)
+      }
+      await refreshDashboard()
+    } finally {
+      setCreatingRun(false)
+    }
+  }
+
   async function handleCancelRun(runId: string) {
     setCancellingRunId(runId)
     try {
@@ -563,6 +591,10 @@ export function useDashboardData(selection: { trackId: string | null }) {
 
   function handleDeleteTrack(trackId: string) {
     scheduleTrackDelete([trackId])
+  }
+
+  function handleBatchDeleteTracks(trackIds: string[]) {
+    scheduleTrackDelete(trackIds)
   }
 
   async function handleSaveMix(trackId: string, runId: string, stems: RunMixStemEntry[]) {
@@ -775,6 +807,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     handleDiscardDraft,
     handleConfirmDrafts,
     handleCreateRun,
+    handleBatchCreateRun,
     handleCancelRun,
     handleRetryRun,
     handleDeleteRun,
@@ -789,6 +822,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     handleSaveMix,
     handleUpdateTrack,
     handleDeleteTrack,
+    handleBatchDeleteTracks,
   }
 }
 

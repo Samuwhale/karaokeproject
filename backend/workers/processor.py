@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 from sqlalchemy.orm import Session, selectinload
@@ -32,6 +33,38 @@ from backend.services.tracks import (
 
 class RunCancelled(Exception):
     pass
+
+
+def _stage_progress_updater(
+    session: Session,
+    run: Run,
+    *,
+    stage: RunStatus,
+    stage_range: tuple[float, float],
+    status_message: str,
+) -> Callable[[float], None]:
+    """Map a 0.0–1.0 sub-task fraction into a global run percentage and commit."""
+    start, end = stage_range
+    span = max(0.0, end - start)
+    last_progress = run.progress
+
+    def callback(fraction: float) -> None:
+        nonlocal last_progress
+        _check_cancellation(session, run)
+        clamped = max(0.0, min(1.0, fraction))
+        global_progress = start + span * clamped
+        if global_progress <= last_progress:
+            return
+        set_run_state(
+            run,
+            status=stage,
+            progress=global_progress,
+            status_message=status_message,
+        )
+        session.commit()
+        last_progress = global_progress
+
+    return callback
 
 
 def _check_cancellation(session: Session, run: Run) -> None:
@@ -74,7 +107,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         set_run_state(
             run,
             status=RunStatus.preparing,
-            progress=0.1,
+            progress=0.06,
             status_message="Probing source audio",
         )
         session.commit()
@@ -84,7 +117,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         set_run_state(
             run,
             status=RunStatus.preparing,
-            progress=0.2,
+            progress=0.09,
             status_message="Normalising loudness",
         )
         session.commit()
@@ -118,11 +151,22 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         profile_label = processing.get("profile_label") or processing.get("profile_key") or "stem model"
         followup = processing.get("followup") if isinstance(processing.get("followup"), dict) else None
 
+        # Total separating work spans 0.10 → 0.85 of the run. Split evenly
+        # across the primary (and optional followup) passes so sub-progress
+        # from tqdm maps into an honest global percentage.
+        if followup is not None:
+            primary_range = (0.10, 0.48)
+            followup_range = (0.48, 0.85)
+        else:
+            primary_range = (0.10, 0.85)
+            followup_range = None
+
+        primary_message = f"Splitting with {profile_label}{' (1/2)' if followup else ''}"
         set_run_state(
             run,
             status=RunStatus.separating,
-            progress=0.4,
-            status_message=f"Running {profile_label}{' (1/2)' if followup else ''}",
+            progress=primary_range[0],
+            status_message=primary_message,
         )
         session.commit()
 
@@ -131,6 +175,13 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             output_dir=raw_stems_directory / "primary",
             model_cache_dir=storage_paths.model_cache_dir,
             model_filename=processing["model_filename"],
+            progress_callback=_stage_progress_updater(
+                session,
+                run,
+                stage=RunStatus.separating,
+                stage_range=primary_range,
+                status_message=primary_message,
+            ),
         )
 
         # stem_name → raw WAV path. The followup pass (if any) replaces the
@@ -150,11 +201,13 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
                 )
 
             _check_cancellation(session, run)
+            assert followup_range is not None
+            followup_message = f"Splitting with {profile_label} (2/2)"
             set_run_state(
                 run,
                 status=RunStatus.separating,
-                progress=0.6,
-                status_message=f"Running {profile_label} (2/2)",
+                progress=followup_range[0],
+                status_message=followup_message,
             )
             session.commit()
 
@@ -163,6 +216,13 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
                 output_dir=raw_stems_directory / "followup",
                 model_cache_dir=storage_paths.model_cache_dir,
                 model_filename=str(followup["model_filename"]),
+                progress_callback=_stage_progress_updater(
+                    session,
+                    run,
+                    stage=RunStatus.separating,
+                    stage_range=followup_range,
+                    status_message=followup_message,
+                ),
             )
             if not followup_separation.stems:
                 raise SeparationError("Followup separation produced no stems.")
@@ -208,7 +268,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         set_run_state(
             run,
             status=RunStatus.exporting,
-            progress=0.84,
+            progress=0.87,
             status_message="Copying stems",
         )
         session.commit()
@@ -230,7 +290,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         set_run_state(
             run,
             status=RunStatus.exporting,
-            progress=0.9,
+            progress=0.93,
             status_message="Writing metadata",
         )
         session.commit()
@@ -250,7 +310,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         set_run_state(
             run,
             status=RunStatus.exporting,
-            progress=0.96,
+            progress=0.97,
             status_message="Rendering mixdown",
         )
         session.commit()

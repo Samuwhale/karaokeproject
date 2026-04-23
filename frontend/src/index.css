@@ -1,5 +1,20 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@500;700;800&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400..700&family=Bricolage+Grotesk:opsz,wght@12..96,400..800&display=swap');
+
+@font-face {
+  font-family: 'Commit Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/CommitMono-400-Regular.otf') format('opentype');
+}
+
+@font-face {
+  font-family: 'Commit Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/CommitMono-700-Regular.otf') format('opentype');
+}
 
 :root {
   color-scheme: light;
@@ -8,61 +23,132 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --bg: #fcf9f5;
-  --surface: #ffffff;
-  --surface-2: #f6f3ef;
-  --surface-sunk: #f6f3ef;
-  --surface-hover: #efeae4;
-  --surface-active: #e7e0d8;
+  /* Surfaces — warm cream paper, all hues anchored to the accent family. */
+  --bg:             oklch(97.5% 0.012 80);
+  --surface:        oklch(99%   0.006 80);
+  --surface-2:      oklch(95.2% 0.014 78);
+  --surface-sunk:   oklch(94%   0.016 76);
+  --surface-hover:  oklch(92.5% 0.020 72);
+  --surface-active: oklch(89%   0.024 68);
 
-  --border: #ddd6ce;
-  --border-soft: #ebe4dc;
-  --border-strong: #bdb4aa;
+  /* Borders — same hue family, low chroma. */
+  --border:         oklch(86%   0.018 72);
+  --border-soft:    oklch(91%   0.014 74);
+  --border-strong:  oklch(74%   0.024 66);
 
-  --text: #171715;
-  --text-2: #2b302d;
-  --text-muted: #666e6a;
-  --text-faint: #8b908b;
+  /* Ink — warm graphite, never pure black. */
+  --text:           oklch(22%   0.014 60);
+  --text-2:         oklch(32%   0.014 60);
+  --text-muted:     oklch(50%   0.018 64);
+  --text-faint:     oklch(64%   0.020 68);
 
-  --accent: #005f53;
-  --accent-press: #00473f;
-  --accent-dim: color-mix(in srgb, var(--accent) 14%, transparent);
-  --accent-ink: #ffffff;
+  /* Accent — single warm copper, used as a scarce resource. */
+  --accent:         oklch(58%   0.13  55);
+  --accent-press:   oklch(50%   0.14  50);
+  --accent-dim:     color-mix(in oklch, var(--accent) 14%, transparent);
+  --accent-ink:     oklch(99%   0.006 80);
 
-  --ok: #4a9e86;
-  --warn: #b17b1f;
-  --err: #ba1a1a;
-  --info: #296a9a;
+  /* Status — warm-leaning, distinguishable from accent. */
+  --ok:             oklch(58%   0.11 145);
+  --warn:           oklch(66%   0.13  72);
+  --err:            oklch(56%   0.17  30);
+  --info:           oklch(58%   0.10 230);
 
+  /* Spacing — 4pt rhythm. */
   --space-2xs: 2px;
-  --space-xs: 6px;
-  --space-sm: 10px;
-  --space-md: 14px;
-  --space-lg: 20px;
-  --space-xl: 28px;
+  --space-xs:  6px;
+  --space-sm:  10px;
+  --space-md:  14px;
+  --space-lg:  20px;
+  --space-xl:  28px;
   --space-2xl: 40px;
 
+  /* Radius. */
   --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 14px;
 
-  --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
-  --font-display: 'Manrope', 'Inter', -apple-system, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  /* Type stacks. */
+  --font-display: 'Bricolage Grotesk', 'Archivo', -apple-system, system-ui, sans-serif;
+  --font-sans:    'Archivo', -apple-system, system-ui, sans-serif;
+  --font-mono:    'Commit Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
   --line-height-base: 1.5;
   --line-height-mono: 1.6;
 
-  --t-micro: 11px;
-  --t-xs: 12px;
-  --t-sm: 13px;
-  --t-base: 14px;
-  --t-md: 15px;
-  --t-lg: 18px;
-  --t-xl: 24px;
+  /* Type sizes — fixed rem scale. Use weight + size for hierarchy, never color. */
+  --t-micro: 0.6875rem;
+  --t-xs:    0.75rem;
+  --t-sm:    0.8125rem;
+  --t-base:  0.875rem;
+  --t-md:    0.9375rem;
+  --t-lg:    1.125rem;
+  --t-xl:    1.5rem;
 
+  /* Layout. */
   --topbar-h: 64px;
-  --rail-w: 232px;
+  --rail-w:   232px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    /* Warm graphite — same hue family as light, just inverted lightness. */
+    --bg:             oklch(18%   0.010 60);
+    --surface:        oklch(22%   0.012 60);
+    --surface-2:      oklch(25%   0.014 62);
+    --surface-sunk:   oklch(15%   0.010 60);
+    --surface-hover:  oklch(28%   0.016 64);
+    --surface-active: oklch(33%   0.018 66);
+
+    --border:         oklch(32%   0.014 62);
+    --border-soft:    oklch(28%   0.012 60);
+    --border-strong:  oklch(48%   0.020 66);
+
+    --text:           oklch(95%   0.010 80);
+    --text-2:         oklch(86%   0.012 78);
+    --text-muted:     oklch(68%   0.016 74);
+    --text-faint:     oklch(54%   0.018 70);
+
+    --accent:         oklch(72%   0.13  60);
+    --accent-press:   oklch(78%   0.13  60);
+    --accent-ink:     oklch(16%   0.012 60);
+
+    --ok:             oklch(72%   0.11 145);
+    --warn:           oklch(76%   0.14  72);
+    --err:            oklch(68%   0.17  30);
+    --info:           oklch(70%   0.10 230);
+  }
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg:             oklch(18%   0.010 60);
+  --surface:        oklch(22%   0.012 60);
+  --surface-2:      oklch(25%   0.014 62);
+  --surface-sunk:   oklch(15%   0.010 60);
+  --surface-hover:  oklch(28%   0.016 64);
+  --surface-active: oklch(33%   0.018 66);
+
+  --border:         oklch(32%   0.014 62);
+  --border-soft:    oklch(28%   0.012 60);
+  --border-strong:  oklch(48%   0.020 66);
+
+  --text:           oklch(95%   0.010 80);
+  --text-2:         oklch(86%   0.012 78);
+  --text-muted:     oklch(68%   0.016 74);
+  --text-faint:     oklch(54%   0.018 70);
+
+  --accent:         oklch(72%   0.13  60);
+  --accent-press:   oklch(78%   0.13  60);
+  --accent-ink:     oklch(16%   0.012 60);
+
+  --ok:             oklch(72%   0.11 145);
+  --warn:           oklch(76%   0.14  72);
+  --err:            oklch(68%   0.17  30);
+  --info:           oklch(70%   0.10 230);
 }
 
 * {

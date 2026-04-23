@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useMatch, useNavigate } from 'react-router-dom'
 
 import './App.css'
@@ -9,6 +9,7 @@ import { ImportsOverlay } from './components/imports/ImportsOverlay'
 import { BatchExportOverlay } from './components/export/BatchExportOverlay'
 import { SettingsDrawer } from './components/SettingsDrawer'
 import { ToastStack } from './components/feedback/ToastStack'
+import { BatchSplitOverlay } from './components/mix/BatchSplitOverlay'
 import { MixWorkspace } from './components/mix/MixWorkspace'
 import { SongsPage } from './components/songs/SongsPage'
 import { applySongBrowse } from './components/trackListView'
@@ -68,6 +69,7 @@ function App() {
     handleDiscardDraft,
     handleConfirmDrafts,
     handleCreateRun,
+    handleBatchCreateRun,
     handleCancelRun,
     handleRetryRun,
     handleDeleteRun,
@@ -81,6 +83,7 @@ function App() {
     handleSaveMix,
     handleUpdateTrack,
     handleDeleteTrack,
+    handleBatchDeleteTracks,
   } = dashboard
 
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -90,6 +93,7 @@ function App() {
   const [importOpen, setImportOpen] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [batchExportIds, setBatchExportIds] = useState<string[] | null>(null)
+  const [batchSplitIds, setBatchSplitIds] = useState<string[] | null>(null)
   const [dragOverlayActive, setDragOverlayActive] = useState(false)
   const dragCounterRef = useRef(0)
 
@@ -121,6 +125,11 @@ function App() {
     const runId = options?.runId ?? track.keeper_run_id ?? track.latest_run?.id ?? null
     openMix(track.id, { runId })
   }
+
+  const revealImportReview = useEffectEvent(() => {
+    if (mixActive) openSongs()
+    setReviewOpen(true)
+  })
 
   useEffect(() => {
     if (!mixActive) return
@@ -185,8 +194,7 @@ function App() {
       if (files.length) {
         handleResolveLocalImport(files)
           .then(() => {
-            if (mixActive) openSongs()
-            setReviewOpen(true)
+            revealImportReview()
           })
           .catch(() => undefined)
         return
@@ -206,7 +214,7 @@ function App() {
       dragCounterRef.current = 0
       setDragOverlayActive(false)
     }
-  }, [handleResolveLocalImport, importOpen, mixActive, pushToast])
+  }, [handleResolveLocalImport, importOpen, pushToast])
 
   useEffect(() => {
     function onPaste(event: ClipboardEvent) {
@@ -221,15 +229,14 @@ function App() {
       event.preventDefault()
       handleResolveYouTube(text)
         .then(() => {
-          if (mixActive) openSongs()
-          setReviewOpen(true)
+          revealImportReview()
         })
         .catch(() => undefined)
     }
 
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
-  }, [handleResolveYouTube, mixActive])
+  }, [handleResolveYouTube])
 
   function selectAdjacentTrack(offset: number) {
     if (!browseTracks.length) return
@@ -263,10 +270,11 @@ function App() {
       else if (importOpen) setImportOpen(false)
       else if (reviewOpen) setReviewOpen(false)
       else if (batchExportIds) setBatchExportIds(null)
+      else if (batchSplitIds) setBatchSplitIds(null)
     },
   })
 
-  const anyDialogOpen = settingsOpen || importOpen || reviewOpen || !!batchExportIds
+  const anyDialogOpen = settingsOpen || importOpen || reviewOpen || !!batchExportIds || !!batchSplitIds
 
   return (
     <ErrorBoundary>
@@ -317,11 +325,15 @@ function App() {
                   currentTrackId={mixTrackId}
                   stagedImportsCount={drafts.length}
                   queueRuns={queueRuns}
+                  cancellingRunId={cancellingRunId}
                   onViewChange={(next) => navigate(buildSongsPath(next), { state: { songsView: next } })}
                   onOpenTrack={openTrackWorkspace}
                   onAddSongs={() => setImportOpen(true)}
                   onReviewImports={() => setReviewOpen(true)}
+                  onCancelRun={handleCancelRun}
+                  onBatchSplit={(ids) => setBatchSplitIds(ids)}
                   onBatchExport={(ids) => setBatchExportIds(ids)}
+                  onBatchDelete={handleBatchDeleteTracks}
                 />
               }
             />
@@ -332,7 +344,6 @@ function App() {
                   track={selectedTrack}
                   selectedRunId={mixRunId}
                   profiles={settings?.profiles ?? []}
-                  defaultProfileKey={defaultProcessing.profile_key}
                   defaultBitrate={defaultBitrate}
                   creatingRun={creatingRun}
                   cancellingRunId={cancellingRunId}
@@ -425,6 +436,20 @@ function App() {
           onError={(message) => pushToast('error', message)}
         />
 
+        <BatchSplitOverlay
+          open={!!batchSplitIds}
+          tracks={tracks}
+          selectedTrackIds={batchSplitIds ?? []}
+          profiles={settings?.profiles ?? []}
+          defaultProfileKey={defaultProcessing.profile_key}
+          busy={creatingRun}
+          onClose={() => setBatchSplitIds(null)}
+          onConfirm={async (ids, processing) => {
+            await handleBatchCreateRun(ids, processing)
+            setBatchSplitIds(null)
+          }}
+        />
+
         <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
         {dragOverlayActive ? (
@@ -441,15 +466,20 @@ function App() {
 }
 
 function ConnectionDot({ connection, hasFirstSync }: { connection: Connection; hasFirstSync: boolean }) {
-  const [, setTick] = useState(0)
+  const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    if (connection.state !== 'offline') return
-    const id = window.setInterval(() => setTick((n) => n + 1), 1000)
-    return () => window.clearInterval(id)
+    if (connection.state !== 'offline') return undefined
+    const syncNow = () => setNow(Date.now())
+    const timeoutId = window.setTimeout(syncNow, 0)
+    const intervalId = window.setInterval(syncNow, 1000)
+    return () => {
+      window.clearTimeout(timeoutId)
+      window.clearInterval(intervalId)
+    }
   }, [connection.state])
 
   if (connection.state === 'offline') {
-    const retryInMs = connection.nextRetryAt ? connection.nextRetryAt - Date.now() : 0
+    const retryInMs = connection.nextRetryAt ? connection.nextRetryAt - now : 0
     const retryIn = Math.max(0, Math.ceil(retryInMs / 1000))
     return (
       <span className="topbar-chip" title={connection.lastError ?? 'Connection error'}>
