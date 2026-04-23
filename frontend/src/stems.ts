@@ -6,22 +6,25 @@ type CanonicalStem = {
   name: string
   label: string
   displayOrder: number
+  color: string
 }
 
 // Mirrors backend/core/stems.py CANONICAL_STEMS. Kept in sync by convention:
 // when a new canonical role is added on the backend, add it here too so the
-// UI can label and order it without waiting on the API.
+// UI can label, order, and color it without waiting on the API.
 const CANONICAL_STEMS: readonly CanonicalStem[] = [
-  { name: 'instrumental', label: 'Instrumental', displayOrder: 0 },
-  { name: 'vocals', label: 'Vocals', displayOrder: 1 },
-  { name: 'lead_vocals', label: 'Lead vocals', displayOrder: 2 },
-  { name: 'backing_vocals', label: 'Backing vocals', displayOrder: 3 },
-  { name: 'drums', label: 'Drums', displayOrder: 4 },
-  { name: 'bass', label: 'Bass', displayOrder: 5 },
-  { name: 'other', label: 'Other', displayOrder: 6 },
-  { name: 'piano', label: 'Piano', displayOrder: 7 },
-  { name: 'guitar', label: 'Guitar', displayOrder: 8 },
+  { name: 'instrumental', label: 'Instrumental', displayOrder: 0, color: '#2f8f7f' },
+  { name: 'vocals', label: 'Vocals', displayOrder: 1, color: '#c24a47' },
+  { name: 'lead_vocals', label: 'Lead vocals', displayOrder: 2, color: '#c24a47' },
+  { name: 'backing_vocals', label: 'Backing vocals', displayOrder: 3, color: '#d08a3f' },
+  { name: 'drums', label: 'Drums', displayOrder: 4, color: '#b97012' },
+  { name: 'bass', label: 'Bass', displayOrder: 5, color: '#7a5bb5' },
+  { name: 'other', label: 'Other', displayOrder: 6, color: '#4f7a9a' },
+  { name: 'piano', label: 'Piano', displayOrder: 7, color: '#4c8fbf' },
+  { name: 'guitar', label: 'Guitar', displayOrder: 8, color: '#6b9c4f' },
 ]
+
+const FALLBACK_COLOR = '#7a7f80'
 
 const BY_NAME = new Map(CANONICAL_STEMS.map((stem) => [stem.name, stem] as const))
 
@@ -65,4 +68,13 @@ export function compareStemKinds(a: string, b: string): number {
 
 export function exportStemKind(stemName: string, fmt: 'wav' | 'mp3'): string {
   return `${fmt === 'wav' ? EXPORT_STEM_WAV_PREFIX : EXPORT_STEM_MP3_PREFIX}${stemName}`
+}
+
+export function stemColor(stemName: string | null | undefined): string {
+  if (!stemName) return FALLBACK_COLOR
+  return BY_NAME.get(stemName)?.color ?? FALLBACK_COLOR
+}
+
+export function stemColorFromKind(kind: string): string {
+  return stemColor(stemNameFromKind(kind))
 }

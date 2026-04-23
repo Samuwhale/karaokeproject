@@ -73,7 +73,6 @@ function BatchExportOverlayContent({
             <p className="imports-empty">No exportable tracks in this selection.</p>
           ) : (
             <ExportBuilder
-              tracks={readyTracks}
               selectedTrackIds={exportableIds}
               defaultBitrate={defaultBitrate}
               runIds={runIds}

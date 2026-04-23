@@ -159,6 +159,7 @@ export type TrackSummary = {
   run_count: number
   keeper_run_id: string | null
   has_custom_mix: boolean
+  source_peaks: number[]
 }
 
 export type TrackDetail = {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent a
 
 import type { RunArtifact, RunDetail, RunMixStemEntry } from '../../types'
 import { MIX_GAIN_DB_MAX, MIX_GAIN_DB_MIN } from '../../types'
-import { compareStemKinds, isStemKind } from '../../stems'
+import { compareStemKinds, isStemKind, stemColorFromKind } from '../../stems'
 import { StemWaveform } from './StemWaveform'
 import { useStemMixer } from './useStemMixer'
 
@@ -17,6 +17,7 @@ type StemRow = {
   label: string
   url: string
   peaks: number[]
+  color: string
   gain_db: number
   muted: boolean
   soloed: boolean
@@ -48,6 +49,7 @@ function initialStems(run: RunDetail): StemRow[] {
       label: artifact.label,
       url: artifact.download_url,
       peaks: artifact.metrics?.peaks ?? [],
+      color: stemColorFromKind(artifact.kind),
       gain_db: entry?.gain_db ?? 0,
       muted: entry?.muted ?? false,
       soloed: false,
@@ -243,17 +245,6 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
 
   const anySoloed = stems.some((stem) => stem.soloed)
 
-  const scrubProgress =
-    mixer.duration > 0 ? Math.max(0, Math.min(1, mixer.currentTime / mixer.duration)) : 0
-
-  function handleScrubPointer(event: React.PointerEvent<HTMLDivElement>) {
-    if (playDisabled || mixer.duration === 0) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    if (rect.width === 0) return
-    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
-    mixer.seek(ratio * mixer.duration)
-  }
-
   const footerVisible =
     saving || saveState === 'saving' || saveState === 'pending' || saveState === 'failed' || dirty
   const showErrors = !!saveError || !!mixer.error
@@ -272,22 +263,47 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
             <div
               key={stem.artifact_id}
               className={`stem-row ${stem.muted ? 'is-muted' : ''} ${silenced ? 'is-silenced' : ''}`}
+              style={{ '--stem-color': stem.color } as React.CSSProperties}
             >
-              <div className="stem-row-label">
-                <strong>{stem.label}</strong>
-                <span>{formatGain(stem.gain_db)}</span>
+              <div className="stem-row-head">
+                <span className="stem-row-dot" aria-hidden />
+                <div className="stem-row-label">
+                  <strong>{stem.label}</strong>
+                  <span>{formatGain(stem.gain_db)}</span>
+                </div>
+                <div className="stem-row-toggles">
+                  <button
+                    type="button"
+                    className={`stem-toggle stem-toggle-mute ${stem.muted ? 'is-active' : ''}`}
+                    onClick={() => updateStem(index, { muted: !stem.muted })}
+                    aria-pressed={stem.muted}
+                    title={stem.muted ? `Unmute ${stem.label}` : `Mute ${stem.label}`}
+                  >
+                    M
+                  </button>
+                  <button
+                    type="button"
+                    className={`stem-toggle stem-toggle-solo ${stem.soloed ? 'is-active' : ''}`}
+                    onClick={() => updateStem(index, { soloed: !stem.soloed })}
+                    aria-pressed={stem.soloed}
+                    title={stem.soloed ? `Unsolo ${stem.label}` : `Solo ${stem.label}`}
+                  >
+                    S
+                  </button>
+                </div>
               </div>
               <div className="stem-row-wave">
                 <StemWaveform
                   peaks={stem.peaks}
                   currentTime={mixer.currentTime}
                   duration={mixer.duration}
+                  color={stem.color}
                   onSeek={playDisabled ? undefined : mixer.seek}
                   disabled={playDisabled}
                   ariaLabel={`${stem.label} timeline`}
                 />
               </div>
-              <label className="stem-fader">
+              <label className="stem-fader" aria-label={`${stem.label} gain`}>
                 <span className="stem-fader-center" aria-hidden />
                 <span className="stem-fader-fill" style={fillStyle} aria-hidden />
                 <input
@@ -302,26 +318,6 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                   aria-label={`${stem.label} gain`}
                 />
               </label>
-              <div className="stem-row-toggles">
-                <button
-                  type="button"
-                  className={`stem-toggle stem-toggle-mute ${stem.muted ? 'is-active' : ''}`}
-                  onClick={() => updateStem(index, { muted: !stem.muted })}
-                  aria-pressed={stem.muted}
-                  title={stem.muted ? `Unmute ${stem.label}` : `Mute ${stem.label}`}
-                >
-                  M
-                </button>
-                <button
-                  type="button"
-                  className={`stem-toggle stem-toggle-solo ${stem.soloed ? 'is-active' : ''}`}
-                  onClick={() => updateStem(index, { soloed: !stem.soloed })}
-                  aria-pressed={stem.soloed}
-                  title={stem.soloed ? `Unsolo ${stem.label}` : `Solo ${stem.label}`}
-                >
-                  S
-                </button>
-              </div>
             </div>
           )
         })}
@@ -338,19 +334,9 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
           {mixer.isPlaying ? <PauseGlyph /> : <PlayGlyph />}
         </button>
         <span className="mix-time">{formatTime(mixer.currentTime)}</span>
-        <div
-          className={`mix-scrub ${playDisabled ? 'is-disabled' : ''}`}
-          role="slider"
-          aria-label="Preview position"
-          aria-valuemin={0}
-          aria-valuemax={Math.max(1, Math.round(mixer.duration))}
-          aria-valuenow={Math.round(mixer.currentTime)}
-          tabIndex={playDisabled ? -1 : 0}
-          onPointerDown={handleScrubPointer}
-        >
-          <span className="mix-scrub-fill" style={{ width: `${scrubProgress * 100}%` }} aria-hidden />
-        </div>
-        <span className="mix-time">{formatTime(mixer.duration)}</span>
+        <span className="mix-time-sep" aria-hidden>/</span>
+        <span className="mix-time mix-time-total">{formatTime(mixer.duration)}</span>
+        <span className="mix-transport-hint">Click any waveform to scrub · Space to play</span>
       </div>
 
       {footerVisible || showErrors ? (

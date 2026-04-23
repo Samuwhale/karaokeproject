@@ -103,6 +103,7 @@ class TrackSummaryResponse(BaseModel):
     run_count: int
     keeper_run_id: str | None = None
     has_custom_mix: bool = False
+    source_peaks: list[float] = Field(default_factory=list)
 
 
 class TrackDetailResponse(BaseModel):

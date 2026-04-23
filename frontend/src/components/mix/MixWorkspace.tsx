@@ -427,9 +427,11 @@ function MixWorkspaceContent({
           Library
         </button>
         <div className="mix-top-title">
-          <strong>{track.title}</strong>
-          <span className="mix-top-artist">{track.artist ?? 'Unknown artist'}</span>
-          <span className="popover-anchor">
+          <div className="mix-top-title-lines">
+            <strong title={track.title}>{track.title}</strong>
+            <span className="mix-top-artist">{track.artist ?? 'Unknown artist'}</span>
+          </div>
+          <span className="popover-anchor mix-top-version">
             <button
               type="button"
               className={`mix-version-pill ${popover === 'versions' ? 'is-open' : ''}`}

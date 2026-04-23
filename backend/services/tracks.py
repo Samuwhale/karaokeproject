@@ -246,6 +246,18 @@ def set_run_mix(session: Session, track_id: str, run_id: str, payload: RunMixInp
     return run
 
 
+def _collect_source_peaks(runs: list[Run]) -> list[float]:
+    for run in runs:
+        for artifact in run.artifacts:
+            if artifact.kind != "source":
+                continue
+            metrics = artifact.metrics_json or {}
+            peaks = metrics.get("peaks")
+            if isinstance(peaks, list) and peaks:
+                return [float(value) for value in peaks if isinstance(value, (int, float))]
+    return []
+
+
 def serialize_track_summary(track: Track) -> TrackSummaryResponse:
     runs = _sorted_runs(track)
     latest_run = runs[0] if runs else None
@@ -269,6 +281,7 @@ def serialize_track_summary(track: Track) -> TrackSummaryResponse:
         run_count=len(runs),
         keeper_run_id=track.keeper_run_id,
         has_custom_mix=has_custom_mix,
+        source_peaks=_collect_source_peaks(runs),
     )
 
 

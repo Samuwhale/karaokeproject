@@ -11,8 +11,6 @@ import type {
 } from '../../types'
 import { exportStemKind } from '../../stems'
 
-type Preset = 'final-mix' | 'stems-for-editing' | 'full-package'
-
 type MixExportPopoverProps = {
   track: TrackDetail
   run: RunDetail
@@ -22,17 +20,7 @@ type MixExportPopoverProps = {
   onError: (message: string) => void
 }
 
-const PRESET_LABEL: Record<Preset, string> = {
-  'final-mix': 'Edited mix',
-  'stems-for-editing': 'Raw stems',
-  'full-package': 'Mix + raw stems',
-}
-
-const PRESET_DESC: Record<Preset, string> = {
-  'final-mix': 'One rendered file using your saved balance.',
-  'stems-for-editing': 'Separated stems, untouched.',
-  'full-package': 'Edited mix plus raw stems.',
-}
+type Format = 'mp3' | 'wav'
 
 function stemNames(run: RunDetail): string[] {
   const names = new Set<string>()
@@ -49,21 +37,19 @@ function stemNames(run: RunDetail): string[] {
 }
 
 function buildArtifactList(
-  preset: Preset,
+  includeMix: boolean,
+  includeStems: boolean,
   stems: string[],
-  mixdownFmt: 'mp3' | 'wav',
-  stemFmt: 'mp3' | 'wav',
+  mixFmt: Format,
+  stemFmt: Format,
 ): ExportArtifactKind[] {
   const kinds: ExportArtifactKind[] = []
-  if (preset === 'final-mix' || preset === 'full-package') {
-    kinds.push(mixdownFmt === 'wav' ? 'mix-wav' : 'mix-mp3')
-  }
-  if (preset === 'stems-for-editing' || preset === 'full-package') {
+  if (includeMix) kinds.push(mixFmt === 'wav' ? 'mix-wav' : 'mix-mp3')
+  if (includeStems) {
     for (const name of stems) {
       kinds.push(exportStemKind(name, stemFmt) as ExportArtifactKind)
     }
   }
-  if (preset === 'full-package') kinds.push('source')
   return kinds
 }
 
@@ -82,18 +68,21 @@ export function MixExportPopover({
   onReveal,
   onError,
 }: MixExportPopoverProps) {
-  const [preset, setPreset] = useState<Preset>('final-mix')
-  const [mixdownFmt, setMixdownFmt] = useState<'mp3' | 'wav'>('mp3')
-  const [stemFmt, setStemFmt] = useState<'mp3' | 'wav'>('wav')
+  const stems = useMemo(() => stemNames(run), [run])
+  const hasStems = stems.length > 0
+
+  const [includeMix, setIncludeMix] = useState(true)
+  const [includeStems, setIncludeStems] = useState(false)
+  const [mixFmt, setMixFmt] = useState<Format>('mp3')
+  const [stemFmt, setStemFmt] = useState<Format>('wav')
   const [plannedBytes, setPlannedBytes] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ExportBundleResponse | null>(null)
 
-  const stems = useMemo(() => stemNames(run), [run])
-  const hasStems = stems.length > 0
+  const effectiveIncludeStems = includeStems && hasStems
   const artifactList = useMemo(
-    () => buildArtifactList(preset, stems, mixdownFmt, stemFmt),
-    [preset, stems, mixdownFmt, stemFmt],
+    () => buildArtifactList(includeMix, effectiveIncludeStems, stems, mixFmt, stemFmt),
+    [includeMix, effectiveIncludeStems, stems, mixFmt, stemFmt],
   )
 
   useEffect(() => {
@@ -167,83 +156,46 @@ export function MixExportPopover({
     )
   }
 
+  const canBuild = artifactList.length > 0 && !busy
+
   return (
     <>
       <div className="popover-backdrop" onClick={onClose} aria-hidden />
       <div className="popover popover-right popover-wide" role="dialog" aria-label="Export">
         <div className="popover-title">Export</div>
-        <div className="export-pop-presets">
-          {(['final-mix', 'stems-for-editing', 'full-package'] as Preset[]).map((value) => {
-            const active = preset === value
-            const disabled = (value === 'stems-for-editing' || value === 'full-package') && !hasStems
-            return (
-              <button
-                key={value}
-                type="button"
-                className={`export-pop-preset ${active ? 'is-active' : ''}`}
-                disabled={disabled}
-                onClick={() => setPreset(value)}
-              >
-                <strong>{PRESET_LABEL[value]}</strong>
-                <span>{PRESET_DESC[value]}</span>
-              </button>
-            )
-          })}
+        <div className="export-pop-rows">
+          <ExportPopRow
+            checked={includeMix}
+            onToggle={() => setIncludeMix((value) => !value)}
+            label="Edited mix"
+            hint="One rendered file using your current balance."
+            format={mixFmt}
+            onFormatChange={setMixFmt}
+          />
+          <ExportPopRow
+            checked={effectiveIncludeStems}
+            disabled={!hasStems}
+            onToggle={() => setIncludeStems((value) => !value)}
+            label="Raw stems"
+            hint={hasStems ? 'Separated tracks, untouched.' : 'This version has no stems.'}
+            format={stemFmt}
+            onFormatChange={setStemFmt}
+          />
         </div>
 
-        {preset === 'final-mix' || preset === 'full-package' ? (
-          <div className="export-pop-format">
-            <span>Mix</span>
-            <div className="import-source-toggle">
-              <button
-                type="button"
-                className={`segmented ${mixdownFmt === 'mp3' ? 'segmented-active' : ''}`}
-                onClick={() => setMixdownFmt('mp3')}
-              >
-                MP3
-              </button>
-              <button
-                type="button"
-                className={`segmented ${mixdownFmt === 'wav' ? 'segmented-active' : ''}`}
-                onClick={() => setMixdownFmt('wav')}
-              >
-                WAV
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {preset === 'stems-for-editing' || preset === 'full-package' ? (
-          <div className="export-pop-format">
-            <span>Stems</span>
-            <div className="import-source-toggle">
-              <button
-                type="button"
-                className={`segmented ${stemFmt === 'mp3' ? 'segmented-active' : ''}`}
-                onClick={() => setStemFmt('mp3')}
-              >
-                MP3
-              </button>
-              <button
-                type="button"
-                className={`segmented ${stemFmt === 'wav' ? 'segmented-active' : ''}`}
-                onClick={() => setStemFmt('wav')}
-              >
-                WAV
-              </button>
-            </div>
-          </div>
-        ) : null}
-
         <div className="export-pop-status">
-          {plannedBytes !== null ? `Estimated ${formatBytes(plannedBytes)}.` : 'Sizing…'}
+          {artifactList.length === 0
+            ? 'Pick at least one thing to include.'
+            : plannedBytes !== null
+              ? `Estimated ${formatBytes(plannedBytes)}.`
+              : 'Sizing…'}
         </div>
 
         <div className="popover-foot">
           <button
             type="button"
             className="button-primary"
-            disabled={busy || !artifactList.length}
+            disabled={!canBuild}
             onClick={() => void handleExport()}
           >
             {busy ? (
@@ -260,5 +212,50 @@ export function MixExportPopover({
         </div>
       </div>
     </>
+  )
+}
+
+type ExportPopRowProps = {
+  checked: boolean
+  disabled?: boolean
+  onToggle: () => void
+  label: string
+  hint: string
+  format: Format
+  onFormatChange: (next: Format) => void
+}
+
+function ExportPopRow({ checked, disabled, onToggle, label, hint, format, onFormatChange }: ExportPopRowProps) {
+  return (
+    <label className={`export-pop-row ${checked ? 'is-on' : ''} ${disabled ? 'is-disabled' : ''}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={onToggle}
+      />
+      <div className="export-pop-row-copy">
+        <strong>{label}</strong>
+        <span>{hint}</span>
+      </div>
+      <div className="import-source-toggle export-pop-row-fmt">
+        <button
+          type="button"
+          className={`segmented ${format === 'mp3' ? 'segmented-active' : ''}`}
+          disabled={!checked || disabled}
+          onClick={() => onFormatChange('mp3')}
+        >
+          MP3
+        </button>
+        <button
+          type="button"
+          className={`segmented ${format === 'wav' ? 'segmented-active' : ''}`}
+          disabled={!checked || disabled}
+          onClick={() => onFormatChange('wav')}
+        >
+          WAV
+        </button>
+      </div>
+    </label>
   )
 }

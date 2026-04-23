@@ -3316,161 +3316,6 @@ code {
 
 /* ----- Export modal ----- */
 
-.export-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding: var(--space-sm) 0;
-  border-bottom: 1px solid var(--border-soft);
-}
-
-.export-section:last-of-type {
-  border-bottom: none;
-}
-
-.export-section h3 {
-  font-size: var(--t-sm);
-  color: var(--text);
-  margin: 0;
-  font-weight: 600;
-}
-
-.export-preset-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--space-xs);
-}
-
-.export-preset {
-  display: grid;
-  gap: 4px;
-  text-align: left;
-  padding: var(--space-sm);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-}
-
-.export-preset span {
-  font-size: var(--t-xs);
-  color: var(--text-muted);
-}
-
-.export-preset-active {
-  border-color: var(--accent);
-  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
-}
-
-.export-inline-warning {
-  font-size: var(--t-xs);
-  color: var(--warn);
-}
-
-.export-artifact-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.export-artifact-group + .export-artifact-group {
-  margin-top: 0.75rem;
-}
-
-.export-artifact-group h4 {
-  font-size: var(--t-xs);
-  font-weight: 600;
-  color: var(--text-muted);
-  margin: 0;
-}
-
-.export-artifacts {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.export-advanced {
-  display: grid;
-  gap: var(--space-sm);
-  padding: var(--space-md);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: color-mix(in oklch, var(--surface) 86%, var(--surface-sunk));
-}
-
-.export-quick-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  padding: var(--space-md);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  flex-wrap: wrap;
-}
-
-.export-quick-summary-copy {
-  display: grid;
-  gap: 4px;
-}
-
-.export-quick-summary-copy p {
-  font-size: var(--t-xs);
-  color: var(--text-muted);
-}
-
-.export-artifact-row {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-sm);
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.export-artifact-row:hover {
-  background: var(--surface-hover);
-}
-
-.export-artifact-row input {
-  margin-top: 3px;
-}
-
-.export-artifact-row div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.export-artifact-row strong {
-  color: var(--text);
-  font-weight: 500;
-}
-
-.export-artifact-row span {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.export-format-toggle {
-  margin-top: var(--space-sm);
-  width: fit-content;
-}
-
-.export-mixdown-summary {
-  margin: var(--space-sm) 0 0;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.export-section-extras {
-  /* Demoted extras (Source audio etc.) sit visually quieter than the primary
-     Mixdown + Stems groups. */
-  padding-top: var(--space-xs);
-}
-
 .export-stem-chips {
   display: flex;
   flex-wrap: wrap;
@@ -3864,8 +3709,7 @@ code {
   margin: 0;
 }
 
-.import-flow-section-head p,
-.output-intent-summary {
+.import-flow-section-head p {
   margin: 0;
   font-size: var(--t-sm);
   color: var(--text-muted);
@@ -4163,7 +4007,6 @@ code {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .export-quick-summary,
   .track-result-actions,
   .track-result-actions-buttons,
   .output-intent-head {
@@ -4207,8 +4050,7 @@ code {
 .studio-section-head,
 .studio-mix-intro,
 .studio-mix-results,
-.library-toolbar,
-.export-quick-summary {
+.library-toolbar {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -4970,8 +4812,7 @@ code {
   .studio-header,
   .studio-section-head,
   .studio-mix-intro,
-  .library-toolbar,
-  .export-quick-summary {
+  .library-toolbar {
     flex-direction: column;
   }
 
@@ -5499,8 +5340,7 @@ code {
 .studio-header h1,
 .queue-section-head h2,
 .studio-section-head h2,
-.studio-side-section h3,
-.export-section h3 {
+.studio-side-section h3 {
   font-family: var(--font-display);
 }
 
@@ -6514,13 +6354,7 @@ code {
   background: rgba(255, 255, 255, 0.62);
 }
 
-.export-section {
-  padding: 0;
-  border: 0;
-}
-
 .export-result,
-.export-preset,
 .export-plan,
 .export-plan-track {
   border-radius: 12px;

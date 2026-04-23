@@ -4,6 +4,7 @@ type StemWaveformProps = {
   peaks: number[]
   currentTime: number
   duration: number
+  color?: string
   onSeek?: (seconds: number) => void
   disabled?: boolean
   ariaLabel?: string
@@ -18,6 +19,7 @@ export function StemWaveform({
   peaks,
   currentTime,
   duration,
+  color,
   onSeek,
   disabled = false,
   ariaLabel,
@@ -30,6 +32,8 @@ export function StemWaveform({
   const barCount = peaks.length
   const barWidth = barCount > 0 ? VIEW_WIDTH / barCount : VIEW_WIDTH
   const interactive = !!onSeek && !disabled && safeDuration > 0
+
+  const style = color ? ({ '--wave-color': color } as React.CSSProperties) : undefined
 
   function seekFromClientX(clientX: number) {
     const svg = svgRef.current
@@ -67,6 +71,7 @@ export function StemWaveform({
     <svg
       ref={svgRef}
       className={`stem-waveform ${interactive ? 'is-interactive' : ''}`}
+      style={style}
       viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
       preserveAspectRatio="none"
       role={interactive ? 'slider' : undefined}
