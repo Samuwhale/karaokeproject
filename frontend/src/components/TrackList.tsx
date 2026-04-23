@@ -1,23 +1,13 @@
 import type { TrackSummary } from '../types'
 import { ProgressBar } from './feedback/ProgressBar'
 import { Skeleton } from './feedback/Skeleton'
-
-export type LibrarySort = 'recent' | 'created' | 'title' | 'runs'
-export type LibraryFilter = 'all' | 'failed' | 'has-keeper' | 'no-keeper'
-
-export type LibraryView = {
-  search: string
-  sort: LibrarySort
-  filter: LibraryFilter
-}
-
-export const DEFAULT_LIBRARY_VIEW: LibraryView = {
-  search: '',
-  sort: 'recent',
-  filter: 'all',
-}
-
-const ACTIVE_RUN_STATUSES = new Set(['queued', 'preparing', 'separating', 'exporting'])
+import { isActiveRunStatus } from './runStatus'
+import {
+  type LibrarySort,
+  type LibraryView,
+  libraryFilterMeta,
+  trackStageSummary,
+} from './trackListView'
 
 const SORT_OPTIONS: { value: LibrarySort; label: string }[] = [
   { value: 'recent', label: 'Recently updated' },
@@ -25,46 +15,6 @@ const SORT_OPTIONS: { value: LibrarySort; label: string }[] = [
   { value: 'title', label: 'Title A–Z' },
   { value: 'runs', label: 'Most runs' },
 ]
-
-const FILTER_OPTIONS: { value: LibraryFilter; label: string }[] = [
-  { value: 'all', label: 'All tracks' },
-  { value: 'failed', label: 'Failed' },
-  { value: 'has-keeper', label: 'With final render' },
-  { value: 'no-keeper', label: 'Without final render' },
-]
-
-export function applyLibraryView(tracks: TrackSummary[], view: LibraryView): TrackSummary[] {
-  const query = view.search.trim().toLowerCase()
-  const matches = tracks.filter((track) => {
-    if (query) {
-      const haystack = `${track.title} ${track.artist ?? ''}`.toLowerCase()
-      if (!haystack.includes(query)) return false
-    }
-    const latestStatus = track.latest_run?.status ?? null
-    switch (view.filter) {
-      case 'failed':
-        return latestStatus === 'failed'
-      case 'has-keeper':
-        return !!track.keeper_run_id
-      case 'no-keeper':
-        return !track.keeper_run_id
-      default:
-        return true
-    }
-  })
-  return [...matches].sort((a, b) => {
-    switch (view.sort) {
-      case 'title':
-        return a.title.localeCompare(b.title)
-      case 'runs':
-        return b.run_count - a.run_count
-      case 'created':
-        return b.created_at.localeCompare(a.created_at)
-      default:
-        return b.updated_at.localeCompare(a.updated_at)
-    }
-  })
-}
 
 type TrackListProps = {
   tracks: TrackSummary[]
@@ -74,7 +24,6 @@ type TrackListProps = {
   view: LibraryView
   onViewChange: (view: LibraryView) => void
   onSelect: (trackId: string) => void
-  onAddTracks: () => void
   selectionMode: boolean
   onSelectionModeChange: (enabled: boolean) => void
   selectedIds: Set<string>
@@ -104,7 +53,6 @@ export function TrackList({
   view,
   onViewChange,
   onSelect,
-  onAddTracks,
   selectionMode,
   onSelectionModeChange,
   selectedIds,
@@ -115,13 +63,26 @@ export function TrackList({
   const libraryEmpty = hasFirstSync && totalCount === 0
   const showSkeleton = !hasFirstSync && totalCount === 0
   const noMatches = hasFirstSync && totalCount > 0 && tracks.length === 0
-  const isFiltered = view.search.trim() !== '' || view.filter !== 'all'
-  const countLabel = hasFirstSync
-    ? isFiltered
-      ? `${tracks.length} of ${totalCount}`
-      : `${totalCount}`
-    : null
+  const countLabel = hasFirstSync ? `${tracks.length} of ${totalCount}` : null
   const allSelected = tracks.length > 0 && tracks.every((track) => selectedIds.has(track.id))
+  const activeFilter = libraryFilterMeta(view.filter)
+
+  function emptyMessage() {
+    switch (view.filter) {
+      case 'needs-attention':
+        return 'No songs need follow-up right now.'
+      case 'ready-to-render':
+        return 'No songs are waiting for a first render.'
+      case 'rendering':
+        return 'Nothing is rendering right now.'
+      case 'ready':
+        return 'No songs are ready for a final decision yet.'
+      case 'final':
+        return 'No songs have a chosen final version yet.'
+      default:
+        return 'No tracks match this search.'
+    }
+  }
 
   function handleToggleAll() {
     if (allSelected) onClearSelection()
@@ -131,17 +92,17 @@ export function TrackList({
   return (
     <div className="track-list-wrap">
       <div className="section-head">
-        <h2>Library</h2>
+        <div className="section-head-copy">
+          <h2>Songs</h2>
+          <p>{activeFilter.description}</p>
+        </div>
         <div className="track-list-head-actions">
           <button
             type="button"
             className="button-secondary"
             onClick={() => onSelectionModeChange(!selectionMode)}
           >
-            {selectionMode ? 'Done' : 'Select'}
-          </button>
-          <button type="button" className="button-primary" onClick={onAddTracks}>
-            Add sources
+            {selectionMode ? 'Done' : 'Batch Select'}
           </button>
         </div>
       </div>
@@ -151,7 +112,7 @@ export function TrackList({
           <input
             type="search"
             className="library-search"
-            placeholder="Search title or artist"
+            placeholder="Search songs"
             aria-label="Search tracks by title or artist"
             value={view.search}
             onChange={(event) => onViewChange({ ...view, search: event.target.value })}
@@ -168,18 +129,7 @@ export function TrackList({
                 </option>
               ))}
             </select>
-            <select
-              aria-label="Filter"
-              value={view.filter}
-              onChange={(event) => onViewChange({ ...view, filter: event.target.value as LibraryFilter })}
-            >
-              {FILTER_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            {countLabel ? <span className="library-count">{countLabel}</span> : null}
+            {countLabel ? <span className="library-count">{activeFilter.label} · Showing {countLabel}</span> : null}
           </div>
           {selectionMode && tracks.length > 0 ? (
             <div className="list-controls">
@@ -203,20 +153,51 @@ export function TrackList({
         </div>
       ) : libraryEmpty ? (
         <p className="empty-state track-list-empty">
-          Library is empty. Add files or paste a YouTube URL to stage sources, then choose how to render them.
+          No songs yet. Import files or paste a YouTube URL, review the staged songs, then choose whether to render immediately or later.
         </p>
       ) : noMatches ? (
         <p className="empty-state track-list-empty">
-          No tracks match this search or filter.
+          {emptyMessage()}
         </p>
       ) : (
         <div className="track-list">
           {tracks.map((track) => {
             const latest = track.latest_run
-            const isActive = latest ? ACTIVE_RUN_STATUSES.has(latest.status) : false
-            const isFailed = latest?.status === 'failed'
             const isSelected = selectedIds.has(track.id)
-            const hasKeeper = !!track.keeper_run_id
+            const stage = trackStageSummary(track)
+            const latestRunActive = latest ? isActiveRunStatus(latest.status) : false
+            const metaSummary = [
+              track.source_type === 'youtube' ? 'YouTube' : 'Local file',
+              formatDuration(track.duration_seconds),
+              track.run_count === 0
+                ? 'No renders yet'
+                : `${track.run_count} render${track.run_count === 1 ? '' : 's'}`,
+            ].join(' · ')
+
+            const content = (
+              <>
+                <div className="track-card-header">
+                  <div>
+                    <strong>{track.title}</strong>
+                    <p>{artistLine(track)}</p>
+                  </div>
+                  <span className={`track-card-stage ${stage.toneClassName}`}>
+                    {stage.label}
+                  </span>
+                </div>
+                <p className="track-card-summary">{stage.detail}</p>
+                <div className="track-card-footer">
+                  <span>{metaSummary}</span>
+                  {track.has_custom_mix ? <span>Custom mix saved</span> : null}
+                </div>
+                {latestRunActive && latest ? (
+                  <div className="track-card-progress">
+                    <ProgressBar value={latest.progress} />
+                  </div>
+                ) : null}
+              </>
+            )
+
             return (
               <div
                 key={track.id}
@@ -234,43 +215,10 @@ export function TrackList({
                 ) : null}
                 <button
                   type="button"
-                  className="track-card"
+                  className="track-card track-card-main"
                   onClick={() => onSelect(track.id)}
                 >
-                  <div className="track-card-header">
-                    <div>
-                      <strong>{track.title}</strong>
-                      <p>{artistLine(track)}</p>
-                    </div>
-                    {isFailed ? (
-                      <span className="track-card-status track-card-status-failed">
-                        <span className="topbar-dot topbar-dot-err" /> Failed
-                      </span>
-                    ) : hasKeeper ? (
-                      <span
-                        className="track-card-status track-card-status-final"
-                        title="A render is marked as final"
-                      >
-                        Final render
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="track-card-footer">
-                    <span>
-                      {track.source_type === 'youtube' ? 'YouTube' : 'local'} ·{' '}
-                      {formatDuration(track.duration_seconds)}
-                    </span>
-                    <span>
-                      {track.run_count === 0
-                        ? 'no renders'
-                        : `${track.run_count} render${track.run_count === 1 ? '' : 's'}`}
-                    </span>
-                  </div>
-                  {isActive && latest ? (
-                    <div className="track-card-progress">
-                      <ProgressBar value={latest.progress} />
-                    </div>
-                  ) : null}
+                  {content}
                 </button>
               </div>
             )

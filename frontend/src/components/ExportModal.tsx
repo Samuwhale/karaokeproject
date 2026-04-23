@@ -23,12 +23,17 @@ type ExportModalProps = {
   defaultBitrate: string
   // Per-track run override map. Absent keys fall back to the latest completed run.
   selectedRunIdByTrack?: Record<string, string>
+  initialPreset?: ExportPreset
+  lockPreset?: boolean
+  contextTitle?: string
+  contextDescription?: string
   onError: (message: string) => void
   onReveal: (payload: RevealFolderInput) => void | Promise<void>
 }
 
 type MixdownFormat = 'mp3' | 'wav'
 type StemFormat = 'mp3' | 'wav'
+export type ExportPreset = 'final-mix' | 'stems-for-editing' | 'full-package'
 
 const BITRATE_PATTERN = /^\d{2,3}k$/
 const BITRATE_HINT = 'Use a value like 192k or 320k.'
@@ -40,6 +45,27 @@ function formatBytes(bytes: number) {
   return `${bytes} B`
 }
 
+function artifactListForPreset(
+  preset: ExportPreset,
+  stemOptions: ExportStemOption[],
+  mixdownFormat: MixdownFormat,
+  stemFormat: StemFormat,
+) {
+  const kinds: ExportArtifactKind[] = []
+  if (preset === 'final-mix' || preset === 'full-package') {
+    kinds.push(mixdownFormat === 'wav' ? 'mix-wav' : 'mix-mp3')
+  }
+  if (preset === 'stems-for-editing' || preset === 'full-package') {
+    for (const option of stemOptions) {
+      kinds.push(exportStemKind(option.name, stemFormat) as ExportArtifactKind)
+    }
+  }
+  if (preset === 'full-package') {
+    kinds.push('source')
+  }
+  return kinds
+}
+
 export function ExportModal({
   open,
   onClose,
@@ -47,21 +73,78 @@ export function ExportModal({
   selectedTrackIds,
   defaultBitrate,
   selectedRunIdByTrack,
+  initialPreset,
+  lockPreset,
+  contextTitle,
+  contextDescription,
   onError,
   onReveal,
 }: ExportModalProps) {
-  useDialogFocus(open)
-  const [stemOptions, setStemOptions] = useState<ExportStemOption[]>([])
-  const [stemsLoading, setStemsLoading] = useState(false)
+  if (!open) return null
 
-  const [includeMixdown, setIncludeMixdown] = useState(true)
+  const runIds = selectedRunIdByTrack ?? {}
+  const sessionKey = [
+    defaultBitrate,
+    selectedTrackIds.join('|'),
+    initialPreset ?? 'preset',
+    lockPreset ? 'locked' : 'editable',
+    contextTitle ?? '',
+    contextDescription ?? '',
+    Object.entries(runIds)
+      .sort()
+      .map(([trackId, runId]) => `${trackId}=${runId}`)
+      .join('|'),
+  ].join('::')
+
+  return (
+    <ExportModalContent
+      key={sessionKey}
+      onClose={onClose}
+      tracks={tracks}
+      selectedTrackIds={selectedTrackIds}
+      defaultBitrate={defaultBitrate}
+      runIds={runIds}
+      initialPreset={initialPreset}
+      lockPreset={lockPreset ?? false}
+      contextTitle={contextTitle}
+      contextDescription={contextDescription}
+      onError={onError}
+      onReveal={onReveal}
+    />
+  )
+}
+
+type ExportModalContentProps = Omit<ExportModalProps, 'open' | 'selectedRunIdByTrack'> & {
+  runIds: Record<string, string>
+}
+
+function ExportModalContent({
+  onClose,
+  tracks,
+  selectedTrackIds,
+  defaultBitrate,
+  runIds,
+  initialPreset,
+  lockPreset,
+  contextTitle,
+  contextDescription,
+  onError,
+  onReveal,
+}: ExportModalContentProps) {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+  useDialogFocus(true, { containerRef: panelRef, initialFocusRef: closeButtonRef })
+  const [loadedStemOptions, setLoadedStemOptions] = useState<{
+    key: string
+    stems: ExportStemOption[]
+  } | null>(null)
+
+  const [preset, setPreset] = useState<ExportPreset>(initialPreset ?? 'final-mix')
   const [mixdownFormat, setMixdownFormat] = useState<MixdownFormat>('mp3')
   const [stemFormat, setStemFormat] = useState<StemFormat>('wav')
-  const [selectedStems, setSelectedStems] = useState<Set<string>>(() => new Set())
-  const [includeSource, setIncludeSource] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const selectedTrackIdsKey = useMemo(() => selectedTrackIds.join(','), [selectedTrackIds])
 
-  const selectedTrackIdsKey = selectedTrackIds.join('|')
-  const runIds = useMemo(() => selectedRunIdByTrack ?? {}, [selectedRunIdByTrack])
   const runIdsKey = useMemo(
     () =>
       Object.entries(runIds)
@@ -70,100 +153,75 @@ export function ExportModal({
         .join('|'),
     [runIds],
   )
+  const stemOptionsKey = `${selectedTrackIdsKey}|${runIdsKey}`
+  const stemOptions = useMemo(
+    () => (loadedStemOptions?.key === stemOptionsKey ? loadedStemOptions.stems : []),
+    [loadedStemOptions, stemOptionsKey],
+  )
+  const stemsLoading = selectedTrackIds.length > 0 && loadedStemOptions?.key !== stemOptionsKey
 
   useEffect(() => {
-    if (!open) return
-    if (!selectedTrackIds.length) {
-      setStemOptions([])
-      return
-    }
+    if (!selectedTrackIds.length) return
     let cancelled = false
-    setStemsLoading(true)
     listExportStems({ track_ids: selectedTrackIds, run_ids: runIds })
       .then((response) => {
-        if (!cancelled) setStemOptions(response.stems)
+        if (!cancelled) {
+          setLoadedStemOptions({ key: stemOptionsKey, stems: response.stems })
+        }
       })
       .catch(() => {
-        if (!cancelled) setStemOptions([])
-      })
-      .finally(() => {
-        if (!cancelled) setStemsLoading(false)
+        if (!cancelled) {
+          setLoadedStemOptions({ key: stemOptionsKey, stems: [] })
+        }
       })
     return () => {
       cancelled = true
     }
-  }, [open, selectedTrackIds, runIds])
-
-  useEffect(() => {
-    if (!open) return
-    setIncludeMixdown(true)
-    setMixdownFormat('mp3')
-    setStemFormat('wav')
-    setSelectedStems(new Set())
-    setIncludeSource(false)
-  }, [open, selectedTrackIdsKey])
+  }, [runIds, selectedTrackIds, stemOptionsKey])
 
   const [mode, setMode] = useState<ExportOutputMode>('single-bundle')
   const [bitrate, setBitrate] = useState(defaultBitrate)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ExportBundleResponse | null>(null)
-  const [plan, setPlan] = useState<ExportPlanResponse | null>(null)
-  const [planLoading, setPlanLoading] = useState(false)
+  const [plannedResponse, setPlannedResponse] = useState<{
+    key: string
+    plan: ExportPlanResponse | null
+  } | null>(null)
   const doneButtonRef = useRef<HTMLButtonElement | null>(null)
-
-  useEffect(() => {
-    if (!open) {
-      setResult(null)
-      setBusy(false)
-      setPlan(null)
-      setPlanLoading(false)
-      return
-    }
-    setBitrate(defaultBitrate)
-  }, [open, defaultBitrate])
 
   useEffect(() => {
     if (result) doneButtonRef.current?.focus()
   }, [result])
 
   const selectedTracks = useMemo(
-    () => tracks.filter((track) => selectedTrackIds.includes(track.id)),
+    () => {
+      const selectedIds = new Set(selectedTrackIds)
+      return tracks.filter((track) => selectedIds.has(track.id))
+    },
     [tracks, selectedTrackIds],
   )
 
   const singleTrack = selectedTracks.length === 1 ? selectedTracks[0] : null
 
-  const artifactList = useMemo<ExportArtifactKind[]>(() => {
-    const kinds: ExportArtifactKind[] = []
-    if (includeMixdown) kinds.push(mixdownFormat === 'wav' ? 'mix-wav' : 'mix-mp3')
-    for (const stemName of selectedStems) {
-      kinds.push(exportStemKind(stemName, stemFormat) as ExportArtifactKind)
-    }
-    if (includeSource) kinds.push('source')
-    return kinds
-  }, [includeMixdown, mixdownFormat, selectedStems, stemFormat, includeSource])
+  const artifactList = useMemo(
+    () => artifactListForPreset(preset, stemOptions, mixdownFormat, stemFormat),
+    [preset, stemOptions, mixdownFormat, stemFormat],
+  )
 
   const bitrateValid = BITRATE_PATTERN.test(bitrate)
   const mp3Requested =
-    (includeMixdown && mixdownFormat === 'mp3') ||
-    (selectedStems.size > 0 && stemFormat === 'mp3')
+    ((preset === 'final-mix' || preset === 'full-package') && mixdownFormat === 'mp3') ||
+    ((preset === 'stems-for-editing' || preset === 'full-package') && stemFormat === 'mp3')
 
   const planKey = useMemo(() => {
-    return `${selectedTrackIds.join(',')}|${runIdsKey}|${artifactList.slice().sort().join(',')}|${mode}|${bitrate}`
-  }, [selectedTrackIds, runIdsKey, artifactList, mode, bitrate])
-
+    return `${selectedTrackIdsKey}|${runIdsKey}|${artifactList.slice().sort().join(',')}|${mode}|${bitrate}`
+  }, [selectedTrackIdsKey, runIdsKey, artifactList, mode, bitrate])
+  const canPlan = !!selectedTrackIds.length && !!artifactList.length && (!mp3Requested || bitrateValid)
+  const plan = canPlan && plannedResponse?.key === planKey ? plannedResponse.plan : null
+  const planLoading = canPlan && plannedResponse?.key !== planKey
   useEffect(() => {
-    if (!open || result) return
-    if (!selectedTrackIds.length || !artifactList.length) {
-      setPlan(null)
-      return
-    }
-    if (mp3Requested && !bitrateValid) {
-      setPlan(null)
-      return
-    }
+    if (result || !canPlan) return
     let cancelled = false
-    setPlanLoading(true)
     const timer = window.setTimeout(async () => {
       try {
         const response = await planExportBundle({
@@ -173,32 +231,21 @@ export function ExportModal({
           mode,
           bitrate,
         })
-        if (!cancelled) setPlan(response)
+        if (!cancelled) {
+          setPlannedResponse({ key: planKey, plan: response })
+        }
       } catch (error) {
         if (!cancelled) {
-          setPlan(null)
+          setPlannedResponse({ key: planKey, plan: null })
           onError(error instanceof Error ? error.message : 'Could not plan export.')
         }
-      } finally {
-        if (!cancelled) setPlanLoading(false)
       }
     }, 150)
     return () => {
       cancelled = true
       window.clearTimeout(timer)
     }
-    // planKey folds in all relevant deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, planKey, result])
-
-  function toggleStem(name: string) {
-    setSelectedStems((current) => {
-      const next = new Set(current)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
-    })
-  }
+  }, [artifactList, bitrate, canPlan, mode, onError, planKey, result, runIds, selectedTrackIds])
 
   async function handleExport() {
     if (!artifactList.length) return
@@ -213,7 +260,6 @@ export function ExportModal({
         bitrate,
       })
       setResult(response)
-      triggerDownload(response.download_url, response.filename)
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Export failed.')
     } finally {
@@ -221,26 +267,51 @@ export function ExportModal({
     }
   }
 
-  if (!open) return null
-
   const totalBytes = plan?.total_bytes ?? 0
   const includedCount = plan?.included_track_count ?? 0
   const skippedCount = plan?.skipped_track_count ?? 0
   const showPackaging = selectedTrackIds.length > 1
-  const mixdownSummary = resolveMixdownSummary(singleTrack, selectedTracks)
+  const usesExplicitRunSelection = Object.keys(runIds).length > 0
+  const mixdownSummary = resolveMixdownSummary(
+    singleTrack,
+    selectedTracks,
+    usesExplicitRunSelection,
+  )
+  const quickExportSummary = [
+    preset === 'final-mix'
+      ? `Mixdown: ${mixdownFormat.toUpperCase()}`
+      : preset === 'stems-for-editing'
+        ? `Stems: ${stemFormat.toUpperCase()}`
+        : `Mixdown ${mixdownFormat.toUpperCase()} + stems ${stemFormat.toUpperCase()}`,
+    showPackaging ? (mode === 'single-bundle' ? 'One zip' : 'Zip per track') : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const presetLabel =
+    preset === 'final-mix'
+      ? 'Final mix'
+      : preset === 'stems-for-editing'
+        ? 'Stems for editing'
+        : 'Full package'
 
   return (
     <div className="import-modal" role="dialog" aria-modal="true" aria-label="Export tracks">
-      <button
-        type="button"
-        className="import-modal-backdrop"
-        aria-label="Close"
-        onClick={onClose}
-      />
-      <div className="import-modal-panel">
+      <div className="import-modal-backdrop" aria-hidden="true" onClick={onClose} />
+      <div className="import-modal-panel" ref={panelRef} tabIndex={-1}>
         <header className="import-modal-head">
-          <h2>Export files for {selectedTrackIds.length} track{selectedTrackIds.length === 1 ? '' : 's'}</h2>
-          <button type="button" className="button-secondary" onClick={onClose}>
+          <div className="import-flow-head-copy">
+            <h2>
+              {contextTitle ??
+                `Export files for ${selectedTrackIds.length} track${selectedTrackIds.length === 1 ? '' : 's'}`}
+            </h2>
+            <p>
+              {contextDescription ??
+                (selectedTrackIds.length > 1 && usesExplicitRunSelection
+                  ? 'Batch export uses the selected final version for each song.'
+                  : 'Review the exact files and packaging before building the export bundle.')}
+            </p>
+          </div>
+          <button ref={closeButtonRef} type="button" className="button-secondary" onClick={onClose}>
             Close
           </button>
         </header>
@@ -270,11 +341,11 @@ export function ExportModal({
               ) : null}
               <div className="export-result-actions">
                 <a
-                  className="button-secondary"
+                  className="button-primary"
                   href={result.download_url}
                   download={result.filename}
                 >
-                  Download again
+                  Download export
                 </a>
                 <button
                   type="button"
@@ -288,147 +359,79 @@ export function ExportModal({
                   className="button-secondary"
                   onClick={() => setResult(null)}
                 >
-                  New export
+                  Build another export
                 </button>
                 <button
                   ref={doneButtonRef}
                   type="button"
-                  className="button-primary"
+                  className="button-secondary"
                   onClick={onClose}
                 >
-                  Done
+                  Close
                 </button>
               </div>
             </div>
           ) : (
             <>
               <section className="export-section">
-                <h3>Mixdown</h3>
-                <label className="export-artifact-row">
-                  <input
-                    type="checkbox"
-                    checked={includeMixdown}
-                    onChange={(event) => setIncludeMixdown(event.target.checked)}
-                  />
-                  <div>
-                    <strong>Include the mixdown</strong>
-                    <span>Rendered audio with your stem balance applied.</span>
-                  </div>
-                </label>
-                {includeMixdown ? (
-                  <>
-                    <div className="import-source-toggle export-format-toggle">
-                      <button
-                        type="button"
-                        className={`segmented ${mixdownFormat === 'mp3' ? 'segmented-active' : ''}`}
-                        onClick={() => setMixdownFormat('mp3')}
-                      >
-                        MP3
-                      </button>
-                      <button
-                        type="button"
-                        className={`segmented ${mixdownFormat === 'wav' ? 'segmented-active' : ''}`}
-                        onClick={() => setMixdownFormat('wav')}
-                      >
-                        WAV
-                      </button>
-                    </div>
-                    {mixdownSummary ? (
-                      <p className="export-mixdown-summary">{mixdownSummary}</p>
-                    ) : null}
-                  </>
-                ) : null}
-              </section>
-
-              <section className="export-section">
-                <h3>Stems</h3>
-                {stemsLoading && !stemOptions.length ? (
-                  <p className="inline-hint">Looking up available stems…</p>
-                ) : stemOptions.length ? (
-                  <>
-                    <StemChips
-                      options={stemOptions}
-                      totalTracks={selectedTracks.length}
-                      selected={selectedStems}
-                      onToggle={toggleStem}
-                    />
-                    {selectedStems.size > 0 ? (
-                      <div className="import-source-toggle export-format-toggle">
-                        <button
-                          type="button"
-                          className={`segmented ${stemFormat === 'mp3' ? 'segmented-active' : ''}`}
-                          onClick={() => setStemFormat('mp3')}
-                        >
-                          MP3
-                        </button>
-                        <button
-                          type="button"
-                          className={`segmented ${stemFormat === 'wav' ? 'segmented-active' : ''}`}
-                          onClick={() => setStemFormat('wav')}
-                        >
-                          WAV
-                        </button>
-                      </div>
-                    ) : null}
-                  </>
+                <h3>1. Export preset</h3>
+                {lockPreset ? (
+                  <p className="output-intent-summary">
+                    {presetLabel} is already selected for this export. Adjust format or packaging only if you need to.
+                  </p>
                 ) : (
-                  <p className="inline-hint">No separated stems available for this selection.</p>
+                  <p className="output-intent-summary">
+                    Start with the outcome you want to hand off. Most exports can stay on the quick
+                    defaults below.
+                  </p>
+                )}
+                {lockPreset ? (
+                  <div className="export-preset-grid">
+                    <div className="export-preset export-preset-active" aria-live="polite">
+                      <strong>{presetLabel}</strong>
+                      <span>
+                        {preset === 'final-mix'
+                          ? 'Just the rendered mixdown.'
+                          : preset === 'stems-for-editing'
+                            ? 'Export the separated stems without a finished mixdown.'
+                            : 'Mixdown, stems, and the source audio together.'}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="export-preset-grid">
+                    <button
+                      type="button"
+                      className={`export-preset ${preset === 'final-mix' ? 'export-preset-active' : ''}`}
+                      onClick={() => setPreset('final-mix')}
+                    >
+                      <strong>Final mix</strong>
+                      <span>Just the rendered mixdown.</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`export-preset ${preset === 'stems-for-editing' ? 'export-preset-active' : ''}`}
+                      onClick={() => setPreset('stems-for-editing')}
+                      disabled={stemOptions.length === 0}
+                    >
+                      <strong>Stems for editing</strong>
+                      <span>Export the separated stems without a finished mixdown.</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`export-preset ${preset === 'full-package' ? 'export-preset-active' : ''}`}
+                      onClick={() => setPreset('full-package')}
+                      disabled={stemOptions.length === 0}
+                    >
+                      <strong>Full package</strong>
+                      <span>Mixdown, stems, and the source audio together.</span>
+                    </button>
+                  </div>
                 )}
               </section>
 
-              {mp3Requested ? (
-                <label className="field export-bitrate-field">
-                  <span>MP3 bitrate</span>
-                  <input
-                    type="text"
-                    value={bitrate}
-                    aria-invalid={!bitrateValid}
-                    onChange={(event) => setBitrate(event.target.value)}
-                  />
-                  {!bitrateValid ? (
-                    <span className="field-error">{BITRATE_HINT}</span>
-                  ) : null}
-                </label>
-              ) : null}
-
-              <section className="export-section export-section-extras">
-                <label className="export-artifact-row">
-                  <input
-                    type="checkbox"
-                    checked={includeSource}
-                    onChange={(event) => setIncludeSource(event.target.checked)}
-                  />
-                  <div>
-                    <strong>Include the source file</strong>
-                    <span>Original imported audio, bundled alongside each track.</span>
-                  </div>
-                </label>
-              </section>
-
-              {showPackaging ? (
-                <section className="export-section">
-                  <h3>Packaging</h3>
-                  <div className="import-source-toggle">
-                    <button
-                      type="button"
-                      className={`segmented ${mode === 'single-bundle' ? 'segmented-active' : ''}`}
-                      onClick={() => setMode('single-bundle')}
-                    >
-                      All tracks in one zip
-                    </button>
-                    <button
-                      type="button"
-                      className={`segmented ${mode === 'zip-per-track' ? 'segmented-active' : ''}`}
-                      onClick={() => setMode('zip-per-track')}
-                    >
-                      One zip per track
-                    </button>
-                  </div>
-                </section>
-              ) : null}
-
               <section className="export-section">
-                <h3>Included</h3>
+                <h3>2. Review what will be included</h3>
                 {planLoading && !plan ? (
                   <p className="inline-hint">
                     <Spinner /> Checking which artifacts are available…
@@ -445,6 +448,127 @@ export function ExportModal({
                   </p>
                 )}
               </section>
+
+              <section className="export-section export-quick-summary">
+                <div className="export-quick-summary-copy">
+                  <h3>3. Export defaults</h3>
+                  <p>{quickExportSummary}</p>
+                </div>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => setShowAdvanced((current) => !current)}
+                >
+                  {showAdvanced ? 'Hide advanced options' : 'Adjust format and packaging'}
+                </button>
+              </section>
+
+              {showAdvanced ? (
+                <section className="export-section export-advanced">
+                  {preset === 'final-mix' || preset === 'full-package' ? (
+                    <section className="export-section">
+                      <h3>Mixdown format</h3>
+                      <div className="import-source-toggle export-format-toggle">
+                        <button
+                          type="button"
+                          className={`segmented ${mixdownFormat === 'mp3' ? 'segmented-active' : ''}`}
+                          onClick={() => setMixdownFormat('mp3')}
+                        >
+                          MP3
+                        </button>
+                        <button
+                          type="button"
+                          className={`segmented ${mixdownFormat === 'wav' ? 'segmented-active' : ''}`}
+                          onClick={() => setMixdownFormat('wav')}
+                        >
+                          WAV
+                        </button>
+                      </div>
+                      {mixdownSummary ? (
+                        <p className="export-mixdown-summary">{mixdownSummary}</p>
+                      ) : null}
+                    </section>
+                  ) : null}
+
+                  {preset === 'stems-for-editing' || preset === 'full-package' ? (
+                    <section className="export-section">
+                      <h3>Stem format</h3>
+                      {stemsLoading && !stemOptions.length ? (
+                        <p className="inline-hint">Looking up available stems…</p>
+                      ) : stemOptions.length ? (
+                        <>
+                          <p className="inline-hint">
+                            Exporting all available stems for each selected track.
+                          </p>
+                          <div className="import-source-toggle export-format-toggle">
+                            <button
+                              type="button"
+                              className={`segmented ${stemFormat === 'mp3' ? 'segmented-active' : ''}`}
+                              onClick={() => setStemFormat('mp3')}
+                            >
+                              MP3
+                            </button>
+                            <button
+                              type="button"
+                              className={`segmented ${stemFormat === 'wav' ? 'segmented-active' : ''}`}
+                              onClick={() => setStemFormat('wav')}
+                            >
+                              WAV
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="inline-hint">No separated stems available for this selection.</p>
+                      )}
+                    </section>
+                  ) : null}
+
+                  {mp3Requested ? (
+                    <label className="field export-bitrate-field">
+                      <span>MP3 bitrate</span>
+                      <input
+                        type="text"
+                        value={bitrate}
+                        aria-invalid={!bitrateValid}
+                        onChange={(event) => setBitrate(event.target.value)}
+                      />
+                      {!bitrateValid ? (
+                        <span className="field-error">{BITRATE_HINT}</span>
+                      ) : null}
+                    </label>
+                  ) : null}
+
+                  {preset === 'full-package' ? (
+                    <section className="export-section export-section-extras">
+                      <p className="inline-hint">
+                        The original imported source file is included automatically in this preset.
+                      </p>
+                    </section>
+                  ) : null}
+
+                  {showPackaging ? (
+                    <section className="export-section">
+                      <h3>Packaging</h3>
+                      <div className="import-source-toggle">
+                        <button
+                          type="button"
+                          className={`segmented ${mode === 'single-bundle' ? 'segmented-active' : ''}`}
+                          onClick={() => setMode('single-bundle')}
+                        >
+                          All tracks in one zip
+                        </button>
+                        <button
+                          type="button"
+                          className={`segmented ${mode === 'zip-per-track' ? 'segmented-active' : ''}`}
+                          onClick={() => setMode('zip-per-track')}
+                        >
+                          One zip per track
+                        </button>
+                      </div>
+                    </section>
+                  ) : null}
+                </section>
+              ) : null}
 
               <div className="import-footer">
                 <span>
@@ -471,7 +595,7 @@ export function ExportModal({
                       <Spinner /> Building
                     </>
                   ) : (
-                    'Build + download'
+                    'Build export'
                   )}
                 </button>
               </div>
@@ -486,7 +610,15 @@ export function ExportModal({
 function resolveMixdownSummary(
   singleTrack: TrackSummary | null,
   allSelected: TrackSummary[],
+  usesExplicitRunSelection: boolean,
 ): string | null {
+  if (usesExplicitRunSelection) {
+    if (!allSelected.length) return null
+    return singleTrack
+      ? 'Using the mix saved on the selected render.'
+      : 'Each selected track uses the mix saved on its chosen render.'
+  }
+
   if (singleTrack) {
     return singleTrack.has_custom_mix
       ? 'Using your custom stem balance.'
@@ -497,39 +629,6 @@ function resolveMixdownSummary(
   if (custom === 0) return 'None of the selected tracks have a custom balance — mixdowns play at unity.'
   if (custom === allSelected.length) return 'Every selected track uses its saved custom balance.'
   return `${custom} of ${allSelected.length} selected tracks have a custom balance; the rest play at unity.`
-}
-
-type StemChipsProps = {
-  options: ExportStemOption[]
-  totalTracks: number
-  selected: Set<string>
-  onToggle: (name: string) => void
-}
-
-function StemChips({ options, totalTracks, selected, onToggle }: StemChipsProps) {
-  return (
-    <div className="export-stem-chips">
-      {options.map((option) => {
-        const isSelected = selected.has(option.name)
-        const partial = totalTracks > 0 && option.track_count < totalTracks
-        return (
-          <button
-            key={option.name}
-            type="button"
-            className={`export-stem-chip ${isSelected ? 'active' : ''}`}
-            aria-pressed={isSelected}
-            onClick={() => onToggle(option.name)}
-            title={partial ? `Only on ${option.track_count} of ${totalTracks} tracks` : undefined}
-          >
-            <span>{option.label}</span>
-            {partial ? (
-              <span className="export-stem-chip-coverage">{option.track_count}/{totalTracks}</span>
-            ) : null}
-          </button>
-        )
-      })}
-    </div>
-  )
 }
 
 type ExportManifestProps = {
@@ -617,14 +716,4 @@ function artifactLabel(value: ExportArtifactKind, stems: ExportStemOption[]): st
     return `${stem?.label ?? stemLabel(name)} WAV`
   }
   return value
-}
-
-function triggerDownload(url: string, filename: string) {
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.rel = 'noopener'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
 }

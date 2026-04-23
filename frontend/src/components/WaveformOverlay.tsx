@@ -68,6 +68,9 @@ export function WaveformOverlay({
 
   useEffect(() => {
     if (!containerARef.current || !containerBRef.current) return
+    setReadyA(false)
+    setReadyB(false)
+    setPlaying(null)
 
     const accent = readToken('--accent')
     const compare = readToken('--warn')

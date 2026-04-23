@@ -192,6 +192,21 @@ def serialize_run_detail(run: Run) -> RunDetailResponse:
     )
 
 
+def _summary_mix_run(runs: list[Run], keeper_run_id: str | None) -> Run | None:
+    if keeper_run_id:
+        keeper_run = next(
+            (
+                run
+                for run in runs
+                if run.id == keeper_run_id and run.status == RunStatus.completed.value
+            ),
+            None,
+        )
+        if keeper_run is not None:
+            return keeper_run
+    return next((run for run in runs if run.status == RunStatus.completed.value), None)
+
+
 def set_run_mix(session: Session, track_id: str, run_id: str, payload: RunMixInput) -> Run:
     track = get_track(session, track_id)
     if track is None:
@@ -229,16 +244,10 @@ def set_run_mix(session: Session, track_id: str, run_id: str, payload: RunMixInp
 def serialize_track_summary(track: Track) -> TrackSummaryResponse:
     runs = _sorted_runs(track)
     latest_run = runs[0] if runs else None
-    # Reflect the run the user is likely looking at — the latest completed run.
-    # Keeper is a cleanup bookmark now, not an export gate, so it no longer
-    # drives this flag.
-    latest_completed = next(
-        (run for run in runs if run.status == RunStatus.completed.value),
-        None,
-    )
+    mix_summary_run = _summary_mix_run(runs, track.keeper_run_id)
     has_custom_mix = (
-        latest_completed is not None
-        and not serialize_run_mix(latest_completed).is_default
+        mix_summary_run is not None
+        and not serialize_run_mix(mix_summary_run).is_default
     )
     return TrackSummaryResponse(
         id=track.id,

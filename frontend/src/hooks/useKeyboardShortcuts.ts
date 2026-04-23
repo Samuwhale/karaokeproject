@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useEffectEvent } from 'react'
 
 type Shortcuts = {
   onNavigatePrev?: () => void
@@ -7,7 +7,6 @@ type Shortcuts = {
   onToggleSettings?: () => void
   onEscape?: () => void
   onSelectRunByIndex?: (index: number) => void
-  onSurfaceByIndex?: (index: number) => void
   onToggleCompare?: () => void
 }
 
@@ -19,64 +18,52 @@ function isEditable(target: EventTarget | null) {
 }
 
 export function useKeyboardShortcuts(shortcuts: Shortcuts) {
-  const latest = useRef(shortcuts)
-  latest.current = shortcuts
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const handlers = latest.current
-
-      if (event.key === 'Escape') {
-        handlers.onEscape?.()
-        return
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key === ',') {
-        event.preventDefault()
-        handlers.onToggleSettings?.()
-        return
-      }
-
-      if (isEditable(event.target)) return
-      if (event.metaKey || event.ctrlKey || event.altKey) return
-
-      if (event.key === 'j' || event.key === 'ArrowDown') {
-        event.preventDefault()
-        handlers.onNavigateNext?.()
-        return
-      }
-
-      if (event.key === 'k' || event.key === 'ArrowUp') {
-        event.preventDefault()
-        handlers.onNavigatePrev?.()
-        return
-      }
-
-      if (event.key === 'r') {
-        event.preventDefault()
-        handlers.onRerun?.()
-        return
-      }
-
-      if (event.key === 'c') {
-        event.preventDefault()
-        handlers.onToggleCompare?.()
-        return
-      }
-
-      if (event.shiftKey && /^[1-9]$/.test(event.key)) {
-        event.preventDefault()
-        const index = Number.parseInt(event.key, 10) - 1
-        handlers.onSurfaceByIndex?.(index)
-        return
-      }
-
-      if (/^[1-9]$/.test(event.key)) {
-        const index = Number.parseInt(event.key, 10) - 1
-        handlers.onSelectRunByIndex?.(index)
-      }
+  const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      shortcuts.onEscape?.()
+      return
     }
 
+    if ((event.metaKey || event.ctrlKey) && event.key === ',') {
+      event.preventDefault()
+      shortcuts.onToggleSettings?.()
+      return
+    }
+
+    if (isEditable(event.target)) return
+    if (event.metaKey || event.ctrlKey || event.altKey) return
+
+    if (event.key === 'j' || event.key === 'ArrowDown') {
+      event.preventDefault()
+      shortcuts.onNavigateNext?.()
+      return
+    }
+
+    if (event.key === 'k' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      shortcuts.onNavigatePrev?.()
+      return
+    }
+
+    if (event.key === 'r') {
+      event.preventDefault()
+      shortcuts.onRerun?.()
+      return
+    }
+
+    if (event.key === 'c') {
+      event.preventDefault()
+      shortcuts.onToggleCompare?.()
+      return
+    }
+
+    if (/^[1-9]$/.test(event.key)) {
+      const index = Number.parseInt(event.key, 10) - 1
+      shortcuts.onSelectRunByIndex?.(index)
+    }
+  })
+
+  useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])

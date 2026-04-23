@@ -1,17 +1,25 @@
-import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import './App.css'
 import { ApplyArtistPrompt, BatchActionBar, OverflowMenu } from './components/BatchActionBar'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { ExportModal } from './components/ExportModal'
+import { ExportModal, type ExportPreset } from './components/ExportModal'
 import { ImportFlowDialog } from './components/ImportFlowDialog'
-import { QueueDock } from './components/QueueDock'
 import { SettingsDrawer } from './components/SettingsDrawer'
 import { TrackDetailPanel } from './components/TrackDetailPanel'
-import { DEFAULT_LIBRARY_VIEW, TrackList, applyLibraryView } from './components/TrackList'
-import type { LibraryView } from './components/TrackList'
+import { TrackList } from './components/TrackList'
+import { WorkInbox } from './components/WorkInbox'
+import { WorkflowSidebar } from './components/WorkflowSidebar'
+import {
+  DEFAULT_LIBRARY_VIEW,
+  applyLibraryView,
+  countLibraryFilters,
+} from './components/trackListView'
+import type { LibraryFilter } from './components/trackListView'
+import type { LibraryView } from './components/trackListView'
 import { ConfirmInline } from './components/feedback/ConfirmInline'
 import { ToastStack } from './components/feedback/ToastStack'
+import { isActiveRunStatus } from './components/runStatus'
 import { useDashboardData } from './hooks/useDashboardData'
 import type { Connection } from './hooks/useDashboardData'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -89,12 +97,24 @@ function App() {
   } = useDashboardData()
 
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsView, setSettingsView] = useState<'preferences' | 'maintenance' | 'storage'>(
+    'preferences',
+  )
   const [importOpen, setImportOpen] = useState(false)
   const [dragOverlayActive, setDragOverlayActive] = useState(false)
   const dragCounterRef = useRef(0)
-  const [exportTargetIds, setExportTargetIds] = useState<string[] | null>(null)
+  const [exportSelection, setExportSelection] = useState<{
+    trackIds: string[]
+    runIds: Record<string, string>
+    initialPreset?: ExportPreset
+    lockPreset?: boolean
+    contextTitle?: string
+    contextDescription?: string
+  } | null>(null)
   const [libraryView, setLibraryView] = useState<LibraryView>(DEFAULT_LIBRARY_VIEW)
   const [librarySelectionMode, setLibrarySelectionMode] = useState(false)
+  const [workspaceView, setWorkspaceView] = useState<'inbox' | 'library'>('inbox')
+  const [compactPane, setCompactPane] = useState<'library' | 'detail'>('library')
 
   useEffect(() => {
     if (importOpen) return
@@ -126,11 +146,12 @@ function App() {
         /^(audio|video)\//.test(file.type),
       )
       if (files.length) {
-        setImportOpen(true)
         handleResolveLocalImport(files).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Drop import failed.'
           pushToast('error', message)
         })
+        setWorkspaceView('inbox')
+        setCompactPane('library')
       }
     }
 
@@ -158,29 +179,215 @@ function App() {
       const text = event.clipboardData?.getData('text/plain').trim() ?? ''
       if (!text || !/^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\b/i.test(text)) return
       event.preventDefault()
-      setImportOpen(true)
       handleResolveYouTube(text).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : 'Paste import failed.'
         pushToast('error', message)
       })
+      setWorkspaceView('inbox')
+      setCompactPane('library')
     }
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
   }, [handleResolveYouTube, pushToast])
 
   const visibleTracks = useMemo(() => applyLibraryView(tracks, libraryView), [tracks, libraryView])
-
+  const countsByFilter = useMemo(() => countLibraryFilters(tracks), [tracks])
+  const focusLibraryFilter = useCallback(
+    (filter: LibraryFilter) => {
+      const nextView = { ...libraryView, filter }
+      setLibraryView(nextView)
+      setWorkspaceView('library')
+      setCompactPane('library')
+      setLibrarySelectionMode(false)
+      clearSelection('library')
+      const nextTracks = applyLibraryView(tracks, nextView)
+      if (nextTracks[0]) {
+        startTransition(() => {
+          handleSelectTrack(nextTracks[0].id, null)
+        })
+      }
+    },
+    [clearSelection, handleSelectTrack, libraryView, tracks],
+  )
+  const openSettings = useCallback((view: 'preferences' | 'maintenance' | 'storage') => {
+    setSettingsView(view)
+    setSettingsOpen(true)
+  }, [])
+  const workflowSummary = useMemo(() => {
+    const attentionTracks = tracks.filter(
+      (track) =>
+        track.latest_run?.status === 'failed' || track.latest_run?.status === 'cancelled',
+    ).length
+    const readyToRender = tracks.filter((track) => track.run_count === 0).length
+    const ready = tracks.filter(
+      (track) => !track.keeper_run_id && track.latest_run?.status === 'completed',
+    ).length
+    const final = tracks.filter(
+      (track) => !!track.keeper_run_id,
+    ).length
+    const activeRuns = queueRuns.filter((entry) => isActiveRunStatus(entry.run.status)).length
+    const queueAttention = queueRuns.length - activeRuns
+    return {
+      drafts: drafts.length,
+      readyToRender,
+      ready,
+      final,
+      activeRuns,
+      queueAttention,
+      attentionCount: attentionTracks + queueAttention,
+    }
+  }, [drafts.length, queueRuns, tracks])
+  const hasFirstSync = connection.lastSyncAt > 0
+  const setupRequired = hasFirstSync && diagnostics ? !diagnostics.app_ready : false
+  const workflowFocus = useMemo(() => {
+    if (setupRequired) {
+      return {
+        title: 'Finish setup before processing',
+        description: 'Open settings to resolve missing tools or storage issues.',
+        actionLabel: 'Open Settings',
+        action: () => openSettings('maintenance'),
+      }
+    }
+    if (workflowSummary.drafts > 0) {
+      return {
+        title: 'Review staged songs',
+        description: `${workflowSummary.drafts} song${workflowSummary.drafts === 1 ? '' : 's'} need title or duplicate decisions before they join the library.`,
+        actionLabel: 'Open Inbox',
+        action: () => {
+          setWorkspaceView('inbox')
+          setCompactPane('library')
+        },
+      }
+    }
+    if (workflowSummary.attentionCount > 0) {
+      return {
+        title: 'Work through the inbox',
+        description:
+          workflowSummary.queueAttention > 0
+            ? 'Staged imports, failed work, or queue items need a decision before the workspace is clean again.'
+            : 'Failed or cancelled renders need a decision before they become usable again.',
+        actionLabel: 'Open Inbox',
+        action: () => {
+          setWorkspaceView('inbox')
+          setCompactPane('library')
+        },
+      }
+    }
+    if (workflowSummary.readyToRender > 0) {
+      return {
+        title: 'Queue the next renders',
+        description: `${workflowSummary.readyToRender} track${workflowSummary.readyToRender === 1 ? '' : 's'} are ready to process from the library.`,
+        actionLabel: 'Open Songs To Render',
+        action: () => focusLibraryFilter('ready-to-render'),
+      }
+    }
+    if (workflowSummary.ready > 0) {
+      return {
+        title: 'Choose the next final version',
+        description: `${workflowSummary.ready} track${workflowSummary.ready === 1 ? '' : 's'} already have a usable result.`,
+        actionLabel: 'Open Ready Songs',
+        action: () => focusLibraryFilter('ready'),
+      }
+    }
+    if (workflowSummary.final > 0) {
+      return {
+        title: 'Revisit final songs',
+        description: `${workflowSummary.final} track${workflowSummary.final === 1 ? '' : 's'} already have a chosen final version.`,
+        actionLabel: 'Open Final Songs',
+        action: () => focusLibraryFilter('final'),
+      }
+    }
+    return {
+      title: 'Start by adding a song',
+      description: 'Import local files or paste a YouTube URL to begin a new job.',
+      actionLabel: 'Add Songs',
+      action: () => {
+        setImportOpen(true)
+      },
+    }
+  }, [focusLibraryFilter, openSettings, setupRequired, workflowSummary])
   const defaultProcessing: RunProcessingConfigInput = {
     profile_key: settings?.default_profile ?? 'standard',
   }
   const defaultBitrate = settings?.export_mp3_bitrate ?? '320k'
 
+  const openTrackRun = useCallback(
+    (trackId: string, runId: string | null) => {
+      setCompactPane('detail')
+      startTransition(() => {
+        handleSelectTrack(trackId, runId)
+      })
+    },
+    [handleSelectTrack],
+  )
+
+  const openExportForTrack = useCallback(
+    (
+      trackId: string,
+      runId: string | null,
+      options?: {
+        initialPreset?: ExportPreset
+        lockPreset?: boolean
+        contextTitle?: string
+        contextDescription?: string
+      },
+    ) => {
+      setExportSelection({
+        trackIds: [trackId],
+        runIds: runId ? { [trackId]: runId } : {},
+        initialPreset: options?.initialPreset,
+        lockPreset: options?.lockPreset,
+        contextTitle: options?.contextTitle,
+        contextDescription: options?.contextDescription,
+      })
+    },
+    [],
+  )
+
+  const openBatchExport = useCallback(
+    (trackIds: string[]) => {
+      const tracksById = new Map(tracks.map((track) => [track.id, track]))
+      const exportableTrackIds: string[] = []
+      const runIds: Record<string, string> = {}
+      let skippedCount = 0
+
+      for (const trackId of trackIds) {
+        const track = tracksById.get(trackId)
+        if (!track) continue
+        if (!track.keeper_run_id) {
+          skippedCount += 1
+          continue
+        }
+        exportableTrackIds.push(track.id)
+        runIds[track.id] = track.keeper_run_id
+      }
+
+      if (exportableTrackIds.length === 0) {
+        pushToast('error', 'Batch export only works for songs with a final version selected.')
+        return
+      }
+
+      if (skippedCount > 0) {
+        pushToast(
+          'error',
+          `${skippedCount} song${skippedCount === 1 ? '' : 's'} skipped because no final version is selected.`,
+        )
+      }
+
+      setExportSelection({
+        trackIds: exportableTrackIds,
+        runIds,
+        contextTitle: `Export final versions for ${exportableTrackIds.length} track${exportableTrackIds.length === 1 ? '' : 's'}`,
+        contextDescription: 'Batch export uses the selected final version for each song.',
+      })
+    },
+    [pushToast, tracks],
+  )
+
   function selectTrackAt(index: number) {
     if (index < 0 || index >= visibleTracks.length) return
     const nextId = visibleTracks[index].id
-    startTransition(() => {
-      handleSelectTrack(nextId)
-    })
+    openTrackRun(nextId, null)
   }
 
   function currentTrackIndex() {
@@ -219,11 +426,15 @@ function App() {
       )
       if (candidate) handleToggleCompare(candidate.id)
     },
-    onToggleSettings: () => setSettingsOpen((value) => !value),
+    onToggleSettings: () => {
+      if (settingsOpen) setSettingsOpen(false)
+      else openSettings('preferences')
+    },
     onEscape: () => {
       if (settingsOpen) setSettingsOpen(false)
       else if (importOpen) setImportOpen(false)
-      else if (exportTargetIds !== null) setExportTargetIds(null)
+      else if (exportSelection !== null) setExportSelection(null)
+      else if (selectedQueueRunIds.size > 0) clearSelection('queue')
       else {
         clearSelection('library')
         setLibrarySelectionMode(false)
@@ -231,12 +442,14 @@ function App() {
     },
   })
 
-  const hasFirstSync = connection.lastSyncAt > 0
-  const setupRequired = hasFirstSync && diagnostics ? !diagnostics.app_ready : false
-  const anyDialogOpen = settingsOpen || importOpen || exportTargetIds !== null
+  const anyDialogOpen = settingsOpen || importOpen || exportSelection !== null
 
   const librarySelectionList = Array.from(selectedLibraryIds)
   const queueSelectionList = Array.from(selectedQueueRunIds)
+  const selectedFinalCount = useMemo(() => {
+    const selectedIds = new Set(librarySelectionList)
+    return tracks.filter((track) => selectedIds.has(track.id) && track.keeper_run_id).length
+  }, [librarySelectionList, tracks])
 
   return (
     <ErrorBoundary>
@@ -244,15 +457,25 @@ function App() {
         <header className="topbar" inert={anyDialogOpen || undefined}>
           <div className="topbar-brand">stems</div>
           <div className="topbar-meta">
+            <button
+              type="button"
+              className="button-primary topbar-add"
+              onClick={() => {
+                setImportOpen(true)
+                setCompactPane('library')
+              }}
+            >
+              Add songs
+            </button>
             <StatusChip
               connection={connection}
               setupRequired={setupRequired}
-              onOpenSettings={() => setSettingsOpen(true)}
+              onOpenSettings={() => openSettings('maintenance')}
             />
             <button
               type="button"
               className="topbar-gear"
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => openSettings('preferences')}
               aria-label="Open settings"
               title="Settings (⌘,)"
             >
@@ -261,34 +484,96 @@ function App() {
           </div>
         </header>
 
-        <main className="workspace" inert={anyDialogOpen || undefined}>
-          <section className="column column-left">
-            <TrackList
-              tracks={visibleTracks}
-              totalCount={tracks.length}
-              selectedTrackId={selectedTrackId}
-              hasFirstSync={hasFirstSync}
-              view={libraryView}
-              onViewChange={setLibraryView}
-              onSelect={(trackId) => {
-                startTransition(() => {
-                  handleSelectTrack(trackId)
-                })
-              }}
-              onAddTracks={() => setImportOpen(true)}
-              selectionMode={librarySelectionMode || librarySelectionList.length > 0}
-              onSelectionModeChange={setLibrarySelectionMode}
-              selectedIds={selectedLibraryIds}
-              onToggleSelect={toggleLibrarySelected}
-              onSelectAll={(ids) => selectAll('library', ids)}
-              onClearSelection={() => {
-                clearSelection('library')
-                setLibrarySelectionMode(false)
-              }}
+        <div className="workspace-mobile-nav" inert={anyDialogOpen || undefined}>
+          <button
+            type="button"
+            className={`workspace-mobile-nav-button ${compactPane === 'library' ? 'workspace-mobile-nav-button-active' : ''}`}
+            onClick={() => setCompactPane('library')}
+          >
+            Workspace
+          </button>
+          <button
+            type="button"
+            className={`workspace-mobile-nav-button ${compactPane === 'detail' ? 'workspace-mobile-nav-button-active' : ''}`}
+            onClick={() => setCompactPane('detail')}
+            disabled={!selectedTrack && tracks.length === 0}
+          >
+            Current song
+          </button>
+        </div>
+
+        <main className={`workspace workspace-pane-${compactPane}`} inert={anyDialogOpen || undefined}>
+          <section className="column column-rail">
+            <WorkflowSidebar
+              view={workspaceView}
+              activeFilter={libraryView.filter}
+              countsByFilter={countsByFilter}
+              workflowFocus={workflowFocus}
+              onViewChange={setWorkspaceView}
+              onFilterChange={focusLibraryFilter}
             />
+
+            {workspaceView === 'inbox' ? (
+              <WorkInbox
+                drafts={drafts}
+                queueRuns={queueRuns}
+                setupRequired={setupRequired}
+                activeRuns={workflowSummary.activeRuns}
+                attentionCount={workflowSummary.attentionCount}
+                profiles={settings?.profiles ?? []}
+                defaultProfileKey={defaultProcessing.profile_key}
+                confirmingDrafts={confirmingDrafts}
+                selectedQueueRunIds={selectedQueueRunIds}
+                onToggleQueueSelected={toggleQueueRunSelected}
+                onSelectAllQueue={(ids) => selectAll('queue', ids)}
+                onClearQueueSelection={() => clearSelection('queue')}
+                onSelectRun={(trackId, runId) => openTrackRun(trackId, runId)}
+                onCancelRun={handleCancelRun}
+                onRetryRun={handleRetryRun}
+                onDismissRun={handleDismissRun}
+                cancellingRunId={cancellingRunId}
+                retryingRunId={retryingRunId}
+                onAddSongs={() => {
+                  setImportOpen(true)
+                  setCompactPane('library')
+                }}
+                onOpenSettings={() => openSettings('maintenance')}
+                onOpenFilter={focusLibraryFilter}
+                onUpdateStagedImport={handleUpdateDraft}
+                onDiscardStagedImport={handleDiscardDraft}
+                onConfirmStagedImports={async (payload) => {
+                  await handleConfirmDrafts(payload)
+                  setCompactPane('library')
+                  if (payload.queue) {
+                    setWorkspaceView('inbox')
+                    return
+                  }
+                  focusLibraryFilter('ready-to-render')
+                }}
+              />
+            ) : (
+              <TrackList
+                tracks={visibleTracks}
+                totalCount={tracks.length}
+                selectedTrackId={selectedTrackId}
+                hasFirstSync={hasFirstSync}
+                view={libraryView}
+                onViewChange={setLibraryView}
+                onSelect={(trackId) => openTrackRun(trackId, null)}
+                selectionMode={librarySelectionMode || librarySelectionList.length > 0}
+                onSelectionModeChange={setLibrarySelectionMode}
+                selectedIds={selectedLibraryIds}
+                onToggleSelect={toggleLibrarySelected}
+                onSelectAll={(ids) => selectAll('library', ids)}
+                onClearSelection={() => {
+                  clearSelection('library')
+                  setLibrarySelectionMode(false)
+                }}
+              />
+            )}
           </section>
 
-          <section className="column column-right">
+          <section className="column column-detail">
             <TrackDetailPanel
               track={selectedTrack}
               selectedRunId={selectedRunId}
@@ -320,31 +605,13 @@ function App() {
               onUpdateTrack={handleUpdateTrack}
               onDeleteTrack={handleDeleteTrack}
               onToggleCompare={handleToggleCompare}
-              onOpenExport={() => {
-                if (selectedTrack) setExportTargetIds([selectedTrack.id])
+              onOpenExport={(request) => {
+                if (selectedTrack) openExportForTrack(selectedTrack.id, selectedRunId, request)
               }}
               onReveal={handleRevealFolder}
             />
           </section>
         </main>
-
-        <QueueDock
-          entries={queueRuns}
-          selectedIds={selectedQueueRunIds}
-          onToggleSelect={toggleQueueRunSelected}
-          onSelectAll={(ids) => selectAll('queue', ids)}
-          onClearSelection={() => clearSelection('queue')}
-          onSelectTrack={(trackId) => {
-            startTransition(() => {
-              handleSelectTrack(trackId)
-            })
-          }}
-          onCancelRun={handleCancelRun}
-          onRetryRun={handleRetryRun}
-          onDismissRun={handleDismissRun}
-          cancellingRunId={cancellingRunId}
-          retryingRunId={retryingRunId}
-        />
 
         {librarySelectionList.length > 0 ? (
           <BatchActionBar
@@ -367,9 +634,10 @@ function App() {
             <button
               type="button"
               className="button-secondary"
-              onClick={() => setExportTargetIds(librarySelectionList)}
+              disabled={selectedFinalCount === 0}
+              onClick={() => openBatchExport(librarySelectionList)}
             >
-              Export files
+              Export final versions ({selectedFinalCount}/{librarySelectionList.length})
             </button>
             <ConfirmInline
               label="Delete"
@@ -380,7 +648,7 @@ function App() {
               pending={batching}
               onConfirm={() => handleBatchDeleteTracks(librarySelectionList)}
             />
-            <OverflowMenu>
+            <OverflowMenu label="Library tools">
               <ApplyArtistPrompt
                 disabled={batching}
                 buttonLabel="Set artist"
@@ -400,7 +668,7 @@ function App() {
                 disabled={batching}
                 onClick={() => void handleBatchPurgeNonKeepers(librarySelectionList)}
               >
-                Purge non-final renders
+                Clean up non-final renders
               </button>
             </OverflowMenu>
           </BatchActionBar>
@@ -426,6 +694,7 @@ function App() {
 
         <SettingsDrawer
           open={settingsOpen}
+          initialView={settingsView}
           diagnostics={diagnostics}
           settings={settings}
           storageOverview={storageOverview}
@@ -445,33 +714,32 @@ function App() {
         <ImportFlowDialog
           open={importOpen}
           stagedImports={drafts}
-          profiles={settings?.profiles ?? []}
-          cachedModels={cachedModels}
-          defaultProfileKey={defaultProcessing.profile_key}
           onClose={() => setImportOpen(false)}
+          onSourcesStaged={() => {
+            setWorkspaceView('inbox')
+            setCompactPane('library')
+          }}
           resolvingYoutubeImport={resolvingYoutubeImport}
           resolvingLocalImport={resolvingLocalImport}
-          confirming={confirmingDrafts}
           onResolveYouTube={async (sourceUrl) => {
             await handleResolveYouTube(sourceUrl)
           }}
           onResolveLocalImport={async (files) => {
             await handleResolveLocalImport(files)
           }}
-          onUpdateStagedImport={handleUpdateDraft}
-          onDiscardStagedImport={handleDiscardDraft}
-          onConfirmStagedImports={async (payload) => {
-            await handleConfirmDrafts(payload)
-          }}
         />
 
         <ExportModal
-          open={exportTargetIds !== null}
-          onClose={() => setExportTargetIds(null)}
+          open={exportSelection !== null}
+          onClose={() => setExportSelection(null)}
           tracks={tracks}
-          selectedTrackIds={exportTargetIds ?? []}
+          selectedTrackIds={exportSelection?.trackIds ?? []}
           defaultBitrate={defaultBitrate}
-          selectedRunIdByTrack={selectedRunId && selectedTrack ? { [selectedTrack.id]: selectedRunId } : {}}
+          selectedRunIdByTrack={exportSelection?.runIds}
+          initialPreset={exportSelection?.initialPreset}
+          lockPreset={exportSelection?.lockPreset}
+          contextTitle={exportSelection?.contextTitle}
+          contextDescription={exportSelection?.contextDescription}
           onError={(message) => pushToast('error', message)}
           onReveal={handleRevealFolder}
         />

@@ -10,7 +10,9 @@
     "dev:worker": "./scripts/run-python.sh -m backend.workers.runner",
     "dev:frontend": "npm run dev --workspace frontend -- --host 127.0.0.1 --port 5173",
     "build": "npm run build --workspace frontend",
+    "lint": "npm run lint:frontend",
     "lint:frontend": "npm run lint --workspace frontend",
+    "typecheck": "npm run typecheck:frontend",
     "typecheck:frontend": "npm run typecheck --workspace frontend"
   },
   "devDependencies": {

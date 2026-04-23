@@ -1,3 +1,5 @@
+import { useRef, useState } from 'react'
+
 import { useDialogFocus } from '../hooks/useDialogFocus'
 import type { Diagnostics, Settings, StorageOverview } from '../types'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
@@ -5,6 +7,7 @@ import { SettingsPanel } from './SettingsPanel'
 
 type SettingsDrawerProps = {
   open: boolean
+  initialView: 'preferences' | 'maintenance' | 'storage'
   diagnostics: Diagnostics | null
   settings: Settings | null
   storageOverview: StorageOverview | null
@@ -21,17 +24,19 @@ type SettingsDrawerProps = {
   onBackfillMetrics: () => Promise<void>
 }
 
-const SHORTCUTS: Array<{ keys: string; label: string }> = [
-  { keys: 'j  ·  ↓', label: 'Next track' },
-  { keys: 'k  ·  ↑', label: 'Previous track' },
-  { keys: 'r', label: 'Render current track again' },
-  { keys: 'c', label: 'Toggle compare' },
-  { keys: '1 – 9', label: 'Switch to render N' },
-  { keys: '⌘ ,', label: 'Toggle settings' },
-  { keys: 'Esc', label: 'Close overlay' },
-]
-
 export function SettingsDrawer({
+  open,
+  ...props
+}: SettingsDrawerProps) {
+  if (!open) return null
+  return <SettingsDrawerContent {...props} open={open} initialView={props.initialView} />
+}
+
+type SettingsDrawerContentProps = SettingsDrawerProps & {
+  initialView: 'preferences' | 'maintenance' | 'storage'
+}
+
+function SettingsDrawerContent({
   open,
   diagnostics,
   settings,
@@ -47,26 +52,69 @@ export function SettingsDrawer({
   onCleanupExportBundles,
   onCleanupLibraryRuns,
   onBackfillMetrics,
-}: SettingsDrawerProps) {
-  useDialogFocus(open)
-  if (!open) return null
+  initialView,
+}: SettingsDrawerContentProps) {
+  const panelRef = useRef<HTMLElement | null>(null)
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+  useDialogFocus(open, { containerRef: panelRef, initialFocusRef: closeButtonRef })
+  const [view, setView] = useState<'preferences' | 'maintenance' | 'storage'>(initialView)
 
   return (
     <div className="drawer" role="dialog" aria-modal="true" aria-label="Settings">
-      <button type="button" className="drawer-backdrop" aria-label="Close" onClick={onClose} />
-      <aside className="drawer-panel">
+      <div className="drawer-backdrop" aria-hidden="true" onClick={onClose} />
+      <aside className="drawer-panel" ref={panelRef} tabIndex={-1}>
         <header className="drawer-head">
-          <h2>Settings</h2>
-          <button type="button" className="button-secondary" onClick={onClose}>
+          <div className="drawer-head-copy">
+            <h2>Settings</h2>
+            <p>
+              {view === 'preferences'
+                ? 'Set the defaults used when you start new work.'
+                : view === 'maintenance'
+                  ? 'Check readiness, review workspace usage, and clean up local files.'
+                  : 'Edit storage paths and retention only when the workspace layout needs to change.'}
+            </p>
+          </div>
+          <button ref={closeButtonRef} type="button" className="button-secondary" onClick={onClose}>
             Close
           </button>
         </header>
         <div className="drawer-body">
-          <DiagnosticsPanel
-            diagnostics={diagnostics}
-            backfillingMetrics={backfillingMetrics}
-            onBackfillMetrics={onBackfillMetrics}
-          />
+          <div className="drawer-tabs" role="tablist" aria-label="Settings sections">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'preferences'}
+              className={`drawer-tab ${view === 'preferences' ? 'drawer-tab-active' : ''}`}
+              onClick={() => setView('preferences')}
+            >
+              Everyday defaults
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'maintenance'}
+              className={`drawer-tab ${view === 'maintenance' ? 'drawer-tab-active' : ''}`}
+              onClick={() => setView('maintenance')}
+            >
+              Workspace cleanup
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'storage'}
+              className={`drawer-tab ${view === 'storage' ? 'drawer-tab-active' : ''}`}
+              onClick={() => setView('storage')}
+            >
+              Storage paths
+            </button>
+          </div>
+          {view === 'maintenance' ? (
+            <DiagnosticsPanel
+              diagnostics={diagnostics}
+              backfillingMetrics={backfillingMetrics}
+              onBackfillMetrics={onBackfillMetrics}
+            />
+          ) : null}
           <SettingsPanel
             settings={settings}
             storageOverview={storageOverview}
@@ -74,24 +122,12 @@ export function SettingsDrawer({
             cleaningTempStorage={cleaningTempStorage}
             cleaningExportBundles={cleaningExportBundles}
             cleaningLibraryRuns={cleaningLibraryRuns}
+            view={view}
             onSave={onSaveSettings}
             onCleanupTempStorage={onCleanupTempStorage}
             onCleanupExportBundles={onCleanupExportBundles}
             onCleanupLibraryRuns={onCleanupLibraryRuns}
           />
-          <section className="section">
-            <div className="section-head">
-              <h2>Keyboard shortcuts</h2>
-            </div>
-            <dl className="shortcut-list">
-              {SHORTCUTS.map((entry) => (
-                <div key={entry.keys} className="shortcut-row">
-                  <dt>{entry.keys}</dt>
-                  <dd>{entry.label}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
         </div>
       </aside>
     </div>

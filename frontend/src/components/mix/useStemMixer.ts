@@ -51,18 +51,21 @@ async function loadBuffer(ctx: AudioContext, url: string): Promise<AudioBuffer> 
 }
 
 export function useStemMixer(stems: MixerStemInput[]) {
-  const [loadState, setLoadState] = useState<LoadState>('idle')
+  const [, setLoadRevision] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [error, setError] = useState<string | null>(null)
 
   const ctxRef = useRef<AudioContext | null>(null)
   const buffersRef = useRef<Map<string, AudioBuffer>>(new Map())
   const runtimeRef = useRef<Map<string, StemRuntime>>(new Map())
+  const loadStateRef = useRef<LoadState>('idle')
+  const loadKeyRef = useRef('')
+  const durationRef = useRef(0)
+  const errorRef = useRef<string | null>(null)
   const startCtxTimeRef = useRef(0)
   const startOffsetRef = useRef(0)
   const rafRef = useRef<number | null>(null)
+  const loadableStemsRef = useRef<Array<{ artifact_id: string; url: string }>>([])
 
   const stemKeys = useMemo(
     () => stems.map((stem) => `${stem.artifact_id}|${stem.url}`).join(','),
@@ -70,17 +73,21 @@ export function useStemMixer(stems: MixerStemInput[]) {
   )
 
   useEffect(() => {
-    let cancelled = false
-    if (!stems.length) {
-      setLoadState('idle')
-      setDuration(0)
-      return () => {
-        cancelled = true
-      }
+    loadableStemsRef.current = stems.map((stem) => ({ artifact_id: stem.artifact_id, url: stem.url }))
+  }, [stems])
+
+  useEffect(() => {
+    const loadableStems = loadableStemsRef.current
+    if (!loadableStems.length) {
+      buffersRef.current = new Map()
+      loadKeyRef.current = ''
+      loadStateRef.current = 'idle'
+      durationRef.current = 0
+      errorRef.current = null
+      return
     }
 
-    setLoadState('loading')
-    setError(null)
+    let cancelled = false
 
     const ctx = ctxRef.current ?? new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
     ctxRef.current = ctx
@@ -88,7 +95,7 @@ export function useStemMixer(stems: MixerStemInput[]) {
     async function loadAll() {
       try {
         const results = await Promise.all(
-          stems.map(async (stem) => {
+          loadableStems.map(async (stem) => {
             const buffer = await loadBuffer(ctx, stem.url)
             return { stem, buffer }
           }),
@@ -101,12 +108,22 @@ export function useStemMixer(stems: MixerStemInput[]) {
           if (buffer.duration > maxDuration) maxDuration = buffer.duration
         }
         buffersRef.current = nextBuffers
-        setDuration(maxDuration)
-        setLoadState('ready')
+        loadKeyRef.current = stemKeys
+        loadStateRef.current = 'ready'
+        durationRef.current = maxDuration
+        errorRef.current = null
+        setCurrentTime(0)
+        setIsPlaying(false)
+        setLoadRevision((value) => value + 1)
       } catch (caught) {
         if (cancelled) return
-        setLoadState('error')
-        setError(caught instanceof Error ? caught.message : 'Could not load stems for preview.')
+        loadKeyRef.current = stemKeys
+        loadStateRef.current = 'error'
+        durationRef.current = 0
+        errorRef.current = caught instanceof Error ? caught.message : 'Could not load stems for preview.'
+        setCurrentTime(0)
+        setIsPlaying(false)
+        setLoadRevision((value) => value + 1)
       }
     }
 
@@ -114,8 +131,6 @@ export function useStemMixer(stems: MixerStemInput[]) {
     return () => {
       cancelled = true
     }
-    // stemKeys folds in stems identity
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stemKeys])
 
   const stopSources = useCallback(() => {
@@ -133,26 +148,6 @@ export function useStemMixer(stems: MixerStemInput[]) {
     })
   }, [])
 
-  // Drop runtime entries whose stems are no longer present so orphan
-  // GainNodes don't linger connected to the destination.
-  useEffect(() => {
-    const runtime = runtimeRef.current
-    const activeIds = new Set(stems.map((stem) => stem.artifact_id))
-    runtime.forEach((entry, id) => {
-      if (activeIds.has(id)) return
-      if (entry.source) {
-        try {
-          entry.source.stop()
-        } catch {
-          // already stopped
-        }
-        entry.source.disconnect()
-      }
-      entry.gain.disconnect()
-      runtime.delete(id)
-    })
-  }, [stemKeys])
-
   const teardown = useCallback(() => {
     stopSources()
     const runtime = runtimeRef.current
@@ -163,6 +158,10 @@ export function useStemMixer(stems: MixerStemInput[]) {
       rafRef.current = null
     }
   }, [stopSources])
+
+  useEffect(() => {
+    teardown()
+  }, [stemKeys, teardown])
 
   useEffect(() => {
     return () => {
@@ -194,67 +193,78 @@ export function useStemMixer(stems: MixerStemInput[]) {
     updateGains(stems)
   }, [stems, updateGains])
 
-  const tick = useCallback(() => {
-    const ctx = ctxRef.current
-    if (!ctx) return
-    const elapsed = ctx.currentTime - startCtxTimeRef.current + startOffsetRef.current
-    if (elapsed >= duration) {
-      stopSources()
-      setIsPlaying(false)
-      setCurrentTime(duration)
-      rafRef.current = null
-      return
-    }
-    setCurrentTime(elapsed)
-    rafRef.current = requestAnimationFrame(tick)
-  }, [duration, stopSources])
+  const resolvedLoadState: LoadState =
+    stems.length === 0
+      ? 'idle'
+      : loadKeyRef.current === stemKeys
+        ? loadStateRef.current
+        : 'loading'
+  const resolvedDuration = resolvedLoadState === 'ready' ? durationRef.current : 0
+  const resolvedError = resolvedLoadState === 'error' ? errorRef.current : null
 
-  const play = useCallback(
-    (fromSeconds?: number) => {
+  function scheduleNextFrame() {
+    rafRef.current = requestAnimationFrame(() => {
       const ctx = ctxRef.current
-      if (!ctx || loadState !== 'ready') return
-      if (ctx.state === 'suspended') void ctx.resume().catch(() => undefined)
-
-      stopSources()
-      const offset = Math.max(0, Math.min(duration, fromSeconds ?? currentTime))
-      startOffsetRef.current = offset
-      startCtxTimeRef.current = ctx.currentTime
-
-      const runtime = runtimeRef.current
-      for (const stem of stems) {
-        const buffer = buffersRef.current.get(stem.artifact_id)
-        if (!buffer) continue
-        let entry = runtime.get(stem.artifact_id)
-        if (!entry) {
-          const gain = ctx.createGain()
-          gain.connect(ctx.destination)
-          gain.gain.value = effectiveGain(stems, stem)
-          entry = { source: null, gain }
-          runtime.set(stem.artifact_id, entry)
-        } else {
-          entry.gain.gain.setValueAtTime(effectiveGain(stems, stem), ctx.currentTime)
-        }
-        const source = ctx.createBufferSource()
-        source.buffer = buffer
-        source.connect(entry.gain)
-        if (offset < buffer.duration) {
-          source.start(ctx.currentTime, offset)
-        }
-        entry.source = source
+      if (!ctx) {
+        rafRef.current = null
+        return
       }
+      const elapsed = ctx.currentTime - startCtxTimeRef.current + startOffsetRef.current
+      if (elapsed >= resolvedDuration) {
+        stopSources()
+        setIsPlaying(false)
+        setCurrentTime(resolvedDuration)
+        rafRef.current = null
+        return
+      }
+      setCurrentTime(elapsed)
+      scheduleNextFrame()
+    })
+  }
 
-      setIsPlaying(true)
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-      rafRef.current = requestAnimationFrame(tick)
-    },
-    [currentTime, duration, loadState, stems, stopSources, tick],
-  )
+  function play(fromSeconds?: number) {
+    const ctx = ctxRef.current
+    if (!ctx || resolvedLoadState !== 'ready') return
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => undefined)
 
-  const pause = useCallback(() => {
+    stopSources()
+    const offset = Math.max(0, Math.min(resolvedDuration, fromSeconds ?? currentTime))
+    startOffsetRef.current = offset
+    startCtxTimeRef.current = ctx.currentTime
+
+    const runtime = runtimeRef.current
+    for (const stem of stems) {
+      const buffer = buffersRef.current.get(stem.artifact_id)
+      if (!buffer) continue
+      let entry = runtime.get(stem.artifact_id)
+      if (!entry) {
+        const gain = ctx.createGain()
+        gain.connect(ctx.destination)
+        gain.gain.value = effectiveGain(stems, stem)
+        entry = { source: null, gain }
+        runtime.set(stem.artifact_id, entry)
+      } else {
+        entry.gain.gain.setValueAtTime(effectiveGain(stems, stem), ctx.currentTime)
+      }
+      const source = ctx.createBufferSource()
+      source.buffer = buffer
+      source.connect(entry.gain)
+      if (offset < buffer.duration) {
+        source.start(ctx.currentTime, offset)
+      }
+      entry.source = source
+    }
+
+    setIsPlaying(true)
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    scheduleNextFrame()
+  }
+
+  function pause() {
     const ctx = ctxRef.current
     if (!ctx) return
     const elapsed = Math.min(
-      duration,
+      resolvedDuration,
       ctx.currentTime - startCtxTimeRef.current + startOffsetRef.current,
     )
     stopSources()
@@ -264,25 +274,22 @@ export function useStemMixer(stems: MixerStemInput[]) {
     }
     setCurrentTime(elapsed)
     setIsPlaying(false)
-  }, [duration, stopSources])
+  }
 
-  const seek = useCallback(
-    (seconds: number) => {
-      const bounded = Math.max(0, Math.min(duration, seconds))
-      setCurrentTime(bounded)
-      if (isPlaying) {
-        play(bounded)
-      }
-    },
-    [duration, isPlaying, play],
-  )
+  function seek(seconds: number) {
+    const bounded = Math.max(0, Math.min(resolvedDuration, seconds))
+    setCurrentTime(bounded)
+    if (isPlaying) {
+      play(bounded)
+    }
+  }
 
   return {
-    loadState,
-    isPlaying,
-    currentTime,
-    duration,
-    error,
+    loadState: resolvedLoadState,
+    isPlaying: stems.length && resolvedLoadState === 'ready' ? isPlaying : false,
+    currentTime: stems.length && resolvedLoadState === 'ready' ? currentTime : 0,
+    duration: resolvedDuration,
+    error: resolvedError,
     play,
     pause,
     seek,

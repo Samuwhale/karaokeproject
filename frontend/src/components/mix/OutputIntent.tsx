@@ -1,110 +1,10 @@
-import type { ProcessingProfile, RunArtifact, RunDetail, RunMixStemEntry } from '../../types'
-import { isStemKind, stemNameFromKind } from '../../stems'
-
-export type OutputIntent = 'karaoke' | 'instrumental-with-backing' | 'acapella'
-
-type IntentSpec = {
-  value: OutputIntent
-  label: string
-  description: string
-  // Stems to mute for this intent (by canonical name). All others play at unity.
-  mutes: readonly string[]
-  // Run must contain at least one of these stems for the intent to be
-  // usable. If none are present, the button offers to rerun with
-  // `requiresProfile` instead.
-  requires: readonly string[]
-  requiresProfile?: string
-}
-
-const INTENTS: readonly IntentSpec[] = [
-  {
-    value: 'karaoke',
-    label: 'Karaoke',
-    description: 'Instrumental only — every vocal stem muted.',
-    mutes: ['vocals', 'lead_vocals', 'backing_vocals'],
-    requires: ['vocals', 'lead_vocals', 'backing_vocals'],
-  },
-  {
-    value: 'instrumental-with-backing',
-    label: 'Instrumental + backing',
-    description: 'Karaoke with the backing vocals kept in.',
-    mutes: ['lead_vocals'],
-    requires: ['lead_vocals'],
-    // The only shipping profile that emits a lead/backing split.
-    requiresProfile: 'karaoke-stems',
-  },
-  {
-    value: 'acapella',
-    label: 'Acapella',
-    description: 'Vocals only — everything non-vocal muted.',
-    mutes: ['instrumental', 'drums', 'bass', 'other', 'piano', 'guitar'],
-    requires: ['vocals', 'lead_vocals'],
-  },
-] as const
-
-function stemArtifacts(run: RunDetail): RunArtifact[] {
-  return run.artifacts.filter((artifact) => isStemKind(artifact.kind))
-}
-
-function stemNamesFor(run: RunDetail): Set<string> {
-  const names = new Set<string>()
-  for (const artifact of stemArtifacts(run)) {
-    const name = stemNameFromKind(artifact.kind)
-    if (name) names.add(name)
-  }
-  return names
-}
-
-function isSupported(spec: IntentSpec, run: RunDetail): boolean {
-  const available = stemNamesFor(run)
-  return spec.requires.some((name) => available.has(name))
-}
-
-function matchesTemplate(spec: IntentSpec, run: RunDetail): boolean {
-  const muteSet = new Set(spec.mutes)
-  const mixByArtifact = new Map(run.mix.stems.map((entry) => [entry.artifact_id, entry]))
-  const artifacts = stemArtifacts(run)
-  if (!artifacts.length) return false
-  for (const artifact of artifacts) {
-    const name = stemNameFromKind(artifact.kind) ?? ''
-    const expectedMuted = muteSet.has(name)
-    const entry = mixByArtifact.get(artifact.id)
-    const actualMuted = entry?.muted ?? false
-    const actualGain = entry?.gain_db ?? 0
-    if (expectedMuted !== actualMuted) return false
-    if (Math.abs(actualGain) > 0.05) return false
-  }
-  return true
-}
-
-// Reading the active intent from the mix state (rather than storing it) is
-// what keeps the picker and MixPanel in sync — any stem edit that breaks a
-// template naturally de-selects the intent button.
-export function inferIntent(run: RunDetail): OutputIntent | null {
-  for (const spec of INTENTS) {
-    if (!isSupported(spec, run)) continue
-    if (matchesTemplate(spec, run)) return spec.value
-  }
-  return null
-}
-
-export function resolveIntentTemplate(
-  intent: OutputIntent,
-  artifacts: RunArtifact[],
-): RunMixStemEntry[] | null {
-  const spec = INTENTS.find((candidate) => candidate.value === intent)
-  if (!spec) return null
-  return artifacts
-    .filter((artifact) => isStemKind(artifact.kind))
-    .map((artifact) => {
-      const name = stemNameFromKind(artifact.kind) ?? ''
-      return {
-        artifact_id: artifact.id,
-        gain_db: 0,
-        muted: spec.mutes.includes(name),
-      }
-    })
-}
+import type { ProcessingProfile, RunDetail, RunMixStemEntry } from '../../types'
+import {
+  INTENTS,
+  inferIntent,
+  isIntentSupported,
+  resolveIntentTemplate,
+} from './outputIntentTemplates'
 
 type OutputIntentPickerProps = {
   run: RunDetail
@@ -123,26 +23,23 @@ export function OutputIntentPicker({
   onExport,
   onReveal,
 }: OutputIntentPickerProps) {
-  const active = inferIntent(run)
+  const inferredIntent = inferIntent(run)
+  const activeIntent = inferredIntent
 
   return (
     <section className="output-intent">
-      <header className="output-intent-head">
-        <h3 className="subsection-head">Result</h3>
-        <div className="output-intent-actions">
-          <button type="button" className="button-primary" onClick={onExport}>
-            Export files
-          </button>
-          <button type="button" className="button-secondary" onClick={onReveal}>
-            Open folder
-          </button>
-        </div>
-      </header>
+      <div className="output-intent-head">
+        <h3 className="subsection-head">Choose the result</h3>
+        <p className="output-intent-summary">
+          Start with the listening outcome you want. Manual balancing stays below if the preset is
+          close but not exact.
+        </p>
+      </div>
       <div className="output-intent-options" role="group" aria-label="Quick mix presets">
         {INTENTS.map((spec) => {
-          const supported = isSupported(spec, run)
+          const supported = isIntentSupported(spec, run)
           if (supported) {
-            const isActive = spec.value === active
+            const isActive = spec.value === activeIntent
             return (
               <button
                 key={spec.value}
@@ -169,7 +66,9 @@ export function OutputIntentPicker({
               type="button"
               disabled={disabled}
               className="output-intent-option output-intent-option-unsupported"
-              onClick={() => fallback && onRerunWithProfile(fallback.key)}
+              onClick={() => {
+                if (fallback) onRerunWithProfile(fallback.key)
+              }}
             >
               <span className="output-intent-option-label">{spec.label}</span>
               <span className="output-intent-option-desc">
@@ -180,6 +79,14 @@ export function OutputIntentPicker({
             </button>
           )
         })}
+      </div>
+      <div className="output-intent-footer">
+        <button type="button" className="button-primary" onClick={onExport}>
+          Export this result
+        </button>
+        <button type="button" className="button-secondary" onClick={onReveal}>
+          Open render folder
+        </button>
       </div>
     </section>
   )

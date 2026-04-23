@@ -3,12 +3,10 @@ import type {
   BatchApplyResponse,
   BatchCancelResponse,
   BatchDeleteResponse,
-  BatchDiscardImportDraftInput,
   BatchPurgeNonKeepersResponse,
   BatchQueueRunsInput,
   BatchQueueRunsResponse,
   BatchTrackIdsInput,
-  BatchUpdateImportDraftInput,
   CachedModelsResponse,
   ConfirmImportDraftsInput,
   ConfirmImportDraftsResponse,
@@ -61,6 +59,25 @@ async function parseErrorBody(response: Response): Promise<string | null> {
   }
 }
 
+export class ApiError extends Error {
+  status: number
+  statusText: string
+  detail: string | null
+
+  constructor(response: Response, detail: string | null) {
+    const status = `${response.status} ${response.statusText}`.trim()
+    super(detail ? `${status} — ${detail}` : `Request failed (${status}).`)
+    this.name = 'ApiError'
+    this.status = response.status
+    this.statusText = response.statusText
+    this.detail = detail
+  }
+}
+
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError
+}
+
 async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   let response: Response
   try {
@@ -72,8 +89,7 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
 
   if (!response.ok) {
     const detail = await parseErrorBody(response)
-    const status = `${response.status} ${response.statusText}`.trim()
-    throw new Error(detail ? `${status} — ${detail}` : `Request failed (${status}).`)
+    throw new ApiError(response, detail)
   }
 
   return (await response.json()) as T
@@ -95,6 +111,26 @@ function patchJson<T>(url: string, body: unknown): Promise<T> {
   })
 }
 
+function putJson<T>(url: string, body: unknown): Promise<T> {
+  return fetchJson<T>(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+function postKeepalive(url: string, body?: unknown) {
+  const init: RequestInit = {
+    method: 'POST',
+    keepalive: true,
+  }
+  if (body !== undefined) {
+    init.headers = { 'Content-Type': 'application/json' }
+    init.body = JSON.stringify(body)
+  }
+  void fetch(url, init).catch(() => undefined)
+}
+
 export function getDiagnostics() {
   return fetchJson<Diagnostics>('/api/diagnostics')
 }
@@ -104,11 +140,7 @@ export function getSettings() {
 }
 
 export function updateSettings(settings: Omit<Settings, 'profiles'>) {
-  return fetchJson<Settings>('/api/settings', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(settings),
-  })
+  return putJson<Settings>('/api/settings', settings)
 }
 
 export function getStorageOverview() {
@@ -137,6 +169,10 @@ export function cleanupNonKeeperRunsLibrary() {
   })
 }
 
+export function flushPendingLibraryCleanup() {
+  postKeepalive('/api/storage/cleanup/non-keeper-runs')
+}
+
 // --- Tracks ---
 
 export function getTracks() {
@@ -148,15 +184,7 @@ export function getTrack(trackId: string) {
 }
 
 export function updateTrack(trackId: string, payload: { title?: string; artist?: string | null }) {
-  return fetchJson<TrackDetail>(`/api/tracks/${trackId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-}
-
-export async function deleteTrack(trackId: string) {
-  await fetchJson(`/api/tracks/${trackId}`, { method: 'DELETE' })
+  return putJson<TrackDetail>(`/api/tracks/${trackId}`, payload)
 }
 
 // --- Runs ---
@@ -177,24 +205,12 @@ export function dismissRun(runId: string) {
   return fetchJson<{ run: RunSummary }>(`/api/runs/${runId}/dismiss`, { method: 'POST' })
 }
 
-export function measureRun(runId: string) {
-  return fetchJson<RunDetail>(`/api/runs/${runId}/measure`, { method: 'POST' })
-}
-
 export function updateRunMix(trackId: string, runId: string, stems: RunMixStemEntry[]) {
-  return fetchJson<RunDetail>(`/api/tracks/${trackId}/runs/${runId}/mix`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stems }),
-  })
+  return putJson<RunDetail>(`/api/tracks/${trackId}/runs/${runId}/mix`, { stems })
 }
 
 export function setRunNote(runId: string, note: string) {
-  return fetchJson<RunDetail>(`/api/runs/${runId}/note`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ note }),
-  })
+  return putJson<RunDetail>(`/api/runs/${runId}/note`, { note })
 }
 
 export function getActiveRuns() {
@@ -204,11 +220,7 @@ export function getActiveRuns() {
 // --- Keeper / cleanup ---
 
 export function setKeeperRun(trackId: string, runId: string | null) {
-  return fetchJson<TrackDetail>(`/api/tracks/${trackId}/keeper`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ run_id: runId }),
-  })
+  return putJson<TrackDetail>(`/api/tracks/${trackId}/keeper`, { run_id: runId })
 }
 
 export function purgeNonKeeperRuns(trackId: string) {
@@ -216,6 +228,10 @@ export function purgeNonKeeperRuns(trackId: string) {
     `/api/tracks/${trackId}/purge-non-keepers`,
     { method: 'POST' },
   )
+}
+
+export function flushPendingTrackPurge(trackId: string) {
+  postKeepalive(`/api/tracks/${trackId}/purge-non-keepers`)
 }
 
 // --- Batch track operations ---
@@ -230,6 +246,11 @@ export function batchApplyTrackFields(payload: BatchApplyInput) {
 
 export function batchDeleteTracks(payload: BatchTrackIdsInput) {
   return postJson<BatchDeleteResponse>('/api/tracks/batch/delete', payload)
+}
+
+export function flushPendingTrackDeletes(trackIds: string[]) {
+  if (!trackIds.length) return
+  postKeepalive('/api/tracks/batch/delete', { track_ids: trackIds })
 }
 
 export function batchCancelTrackRuns(payload: BatchTrackIdsInput) {
@@ -267,14 +288,6 @@ export function updateImportDraft(draftId: string, payload: UpdateImportDraftInp
 
 export async function discardImportDraft(draftId: string) {
   await fetchJson(`/api/imports/drafts/${draftId}`, { method: 'DELETE' })
-}
-
-export function batchUpdateImportDrafts(payload: BatchUpdateImportDraftInput) {
-  return postJson<ImportDraft[]>('/api/imports/drafts/batch', payload)
-}
-
-export async function batchDiscardImportDrafts(payload: BatchDiscardImportDraftInput) {
-  await postJson('/api/imports/drafts/batch/discard', payload)
 }
 
 export function confirmImportDrafts(payload: ConfirmImportDraftsInput) {

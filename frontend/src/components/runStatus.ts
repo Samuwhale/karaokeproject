@@ -1,8 +1,14 @@
 import type { RunSummary } from '../types'
 
+export const ACTIVE_RUN_STATUSES = new Set(['queued', 'preparing', 'separating', 'exporting'])
+
+export function isActiveRunStatus(status: string): boolean {
+  return ACTIVE_RUN_STATUSES.has(status)
+}
+
 // Detailed labels used where the user benefits from knowing the exact pipeline
-// stage (Queue dock / list / stepper). Kept fine-grained so a 90-second job
-// still feels alive.
+// stage (activity list / stepper). Kept fine-grained so a 90-second job still
+// feels alive.
 export const RUN_STATUS_LABELS: Record<string, string> = {
   queued: 'Queued',
   preparing: 'Preparing audio',

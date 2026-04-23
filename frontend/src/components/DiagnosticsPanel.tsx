@@ -29,7 +29,7 @@ export function DiagnosticsPanel({
     return (
       <section className="section">
         <div className="section-head">
-          <h2>System</h2>
+          <h2>System readiness</h2>
         </div>
         <div className="skeleton-stack">
           <Skeleton height={24} />
@@ -40,10 +40,21 @@ export function DiagnosticsPanel({
     )
   }
 
+  const blockingIssue = diagnostics.issues[0] ?? null
+  const readinessSummary = diagnostics.issues.length
+    ? 'Resolve the blocking issue first. The rest of the technical details can wait.'
+    : 'System checks look good. Processing should be ready to run.'
+
   return (
     <section className="section">
       <div className="section-head">
-        <h2>System</h2>
+        <h2>System readiness</h2>
+      </div>
+
+      <div className="diagnostics-callout">
+        <strong>{diagnostics.issues.length ? 'Processing is blocked' : 'Processing is ready'}</strong>
+        <p>{readinessSummary}</p>
+        {blockingIssue ? <span>{blockingIssue}</span> : null}
       </div>
 
       {diagnostics.issues.length ? (
@@ -72,7 +83,7 @@ export function DiagnosticsPanel({
           <strong>{diagnostics.acceleration}</strong>
         </div>
         <div>
-          <span>Free disk</span>
+          <span>Free disk now</span>
           <strong>{diagnostics.free_disk_gb} GB</strong>
         </div>
         <div>
@@ -81,31 +92,34 @@ export function DiagnosticsPanel({
         </div>
       </div>
 
-      <div className="row-list">
-        {diagnostics.binaries.map((binary) => {
-          const tone = binary.available
-            ? 'status-ok'
-            : binary.required
-              ? 'status-err'
-              : 'status-warn'
-          const label = binary.available
-            ? 'found'
-            : binary.required
-              ? 'missing — required'
-              : 'missing — optional'
-          return (
-            <article key={binary.name} className="row-line">
-              <div>
-                <strong>{binary.name}</strong>
-                <p>{binary.path ?? 'not on PATH'}</p>
-              </div>
-              <span className={`status-word ${tone}`}>{label}</span>
-            </article>
-          )
-        })}
-      </div>
       <details className="advanced-actions">
-        <summary>Advanced</summary>
+        <summary>Tool paths</summary>
+        <div className="row-list">
+          {diagnostics.binaries.map((binary) => {
+            const tone = binary.available
+              ? 'status-ok'
+              : binary.required
+                ? 'status-err'
+                : 'status-warn'
+            const label = binary.available
+              ? 'found'
+              : binary.required
+                ? 'missing — required'
+                : 'missing — optional'
+            return (
+              <article key={binary.name} className="row-line">
+                <div>
+                  <strong>{binary.name}</strong>
+                  <p>{binary.path ?? 'not on PATH'}</p>
+                </div>
+                <span className={`status-word ${tone}`}>{label}</span>
+              </article>
+            )
+          })}
+        </div>
+      </details>
+      <details className="advanced-actions">
+        <summary>Library repair</summary>
         <button
           type="button"
           className="button-secondary"

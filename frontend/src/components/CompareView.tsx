@@ -125,9 +125,9 @@ export function CompareView({
         className={`button-secondary compare-keeper-action ${isKeeper ? 'compare-keeper-active' : ''}`}
         disabled={settingKeeper}
         onClick={() => void onSetKeeper(run.id)}
-        title={isKeeper ? 'Already marked as final' : 'Mark as final render'}
+        title={isKeeper ? 'Already marked as final version' : 'Mark as final version'}
       >
-        {isKeeper ? 'Final Render' : 'Mark Final'}
+        {isKeeper ? 'Final Version' : 'Set Final'}
       </button>
     )
   }

@@ -242,17 +242,6 @@ export type UpdateImportDraftInput = {
   existing_track_id?: string | null
 }
 
-export type BatchUpdateImportDraftInput = {
-  draft_ids: string[]
-  title?: string
-  artist?: string | null
-  duplicate_action?: DraftDuplicateAction
-}
-
-export type BatchDiscardImportDraftInput = {
-  draft_ids: string[]
-}
-
 export type ConfirmImportDraftsInput = {
   draft_ids: string[]
   queue: boolean

@@ -93,16 +93,7 @@ function formatTime(seconds: number) {
 
 export function MixPanel({ run, onSave, saving }: MixPanelProps) {
   const [stems, setStems] = useState<StemRow[]>(() => initialStems(run))
-  const runIdRef = useRef(run.id)
   const saveTimerRef = useRef<number | null>(null)
-
-  // Sync on run change only; in-flight edits should not be clobbered by polling.
-  useEffect(() => {
-    if (runIdRef.current === run.id) return
-    runIdRef.current = run.id
-    setStems(initialStems(run))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [run.id])
 
   useEffect(() => {
     return () => {
@@ -171,19 +162,24 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
   return (
     <section className="mix-panel">
       <header className="mix-panel-head">
-        <h3 className="subsection-head">Mix</h3>
+        <div className="mix-panel-head-copy">
+          <h3 className="subsection-head">Mix</h3>
+          <p className="mix-panel-copy">
+            Adjust stem balance for the selected render. Changes save automatically.
+          </p>
+        </div>
         <div className="mix-panel-head-actions">
           <span className="mix-panel-status">
             {saving ? (
               <>
-                <Spinner /> saving
+                <Spinner /> Saving changes…
               </>
             ) : dirty ? (
-              'unsaved'
+              'Changes pending'
             ) : showsDefault ? (
-              'unity'
+              'Default balance'
             ) : (
-              'saved'
+              'Saved'
             )}
           </span>
           <button
@@ -226,6 +222,9 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
       </div>
 
       {mixer.error ? <p className="mix-error">{mixer.error}</p> : null}
+      <p className="mix-panel-hint">
+        Use Mute and Solo to audition stems. Double-click any slider to reset it to 0 dB.
+      </p>
 
       <ul className="mix-stems">
         {stems.map((stem, index) => {
@@ -259,7 +258,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                   aria-pressed={stem.muted}
                   title={stem.muted ? 'Unmute' : 'Mute'}
                 >
-                  M
+                  Mute
                 </button>
                 <button
                   type="button"
@@ -268,7 +267,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                   aria-pressed={stem.soloed}
                   title={stem.soloed ? 'Unsolo' : 'Solo'}
                 >
-                  S
+                  Solo
                 </button>
               </div>
             </li>

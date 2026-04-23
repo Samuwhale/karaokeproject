@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 
 import type { Settings, StorageBucket, StorageOverview } from '../types'
-import { formatSize } from './metrics'
-import { Skeleton } from './feedback/Skeleton'
 import { Spinner } from './feedback/Spinner'
+import { Skeleton } from './feedback/Skeleton'
+import { formatSize } from './metrics'
 import { ModelPicker } from './ModelPicker'
 
 type SettingsPanelProps = {
@@ -13,6 +13,7 @@ type SettingsPanelProps = {
   cleaningTempStorage: boolean
   cleaningExportBundles: boolean
   cleaningLibraryRuns: boolean
+  view: 'preferences' | 'maintenance' | 'storage'
   onSave: (settings: Omit<Settings, 'profiles'>) => Promise<void>
   onCleanupTempStorage: () => Promise<void>
   onCleanupExportBundles: () => Promise<void>
@@ -55,6 +56,25 @@ function bucketFor(storageOverview: StorageOverview | null, key: StorageBucket['
   return storageOverview?.items.find((item) => item.key === key) ?? null
 }
 
+function panelCopy(view: SettingsPanelProps['view']) {
+  if (view === 'preferences') {
+    return {
+      title: 'Preferences',
+      description: 'Keep these defaults simple so imports, reruns, and exports stay fast.',
+    }
+  }
+  if (view === 'maintenance') {
+    return {
+      title: 'Workspace cleanup',
+      description: 'Review workspace usage first, then run cleanup only where it actually helps.',
+    }
+  }
+  return {
+    title: 'Storage paths',
+    description: 'Change paths and retention only when the workspace layout needs to move.',
+  }
+}
+
 export function SettingsPanel({
   settings,
   storageOverview,
@@ -62,6 +82,7 @@ export function SettingsPanel({
   cleaningTempStorage,
   cleaningExportBundles,
   cleaningLibraryRuns,
+  view,
   onSave,
   onCleanupTempStorage,
   onCleanupExportBundles,
@@ -93,11 +114,16 @@ export function SettingsPanel({
     return () => window.clearTimeout(id)
   }, [savedAt])
 
+  const copy = panelCopy(view)
+
   if (!settings) {
     return (
       <section className="section">
         <div className="section-head">
-          <h2>Preferences</h2>
+          <div className="section-head-copy">
+            <h2>{copy.title}</h2>
+            <p>{copy.description}</p>
+          </div>
         </div>
         <div className="skeleton-stack">
           <Skeleton height={32} />
@@ -144,226 +170,256 @@ export function SettingsPanel({
   return (
     <section className="section">
       <div className="section-head">
-        <h2>Preferences</h2>
+        <div className="section-head-copy">
+          <h2>{copy.title}</h2>
+          <p>{copy.description}</p>
+        </div>
       </div>
 
-      <form className="import-form" onSubmit={handleSubmit}>
-        <div className="processing-grid">
-          <div className="field">
-            <ModelPicker
-              profileKey={draft.default_profile}
-              profiles={settings.profiles}
-              allowCustom={false}
-              labelId="default-model"
-              onProfileChange={(nextKey) => updateDraft({ ...draft, default_profile: nextKey })}
-            />
-            <span className="field-hint">Used for new renders unless you change it per track.</span>
-          </div>
-
-          <label className="field">
-            <span>Default MP3 bitrate</span>
-            <input
-              type="text"
-              value={draft.export_mp3_bitrate}
-              aria-invalid={!bitrateValid}
-              onChange={(event) => updateDraft({ ...draft, export_mp3_bitrate: event.target.value })}
-            />
-            {!bitrateValid ? (
-              <span className="field-error">{BITRATE_HINT}</span>
-            ) : (
-              <span className="field-hint">Used when exporting MP3 artifacts. Overridable per export.</span>
-            )}
-          </label>
-        </div>
-
-        <section className="storage-panel-block">
-          <div className="subsection-head">Storage usage</div>
-          <div className="storage-usage-list">
-            {(storageOverview?.items ?? []).map((item) => (
-              <article key={item.key} className="storage-usage-row">
-                <div className="storage-usage-copy">
-                  <strong>{item.label}</strong>
-                  <p>{item.path}</p>
-                </div>
-                <div className="storage-usage-metrics">
-                  <span>{formatBytes(item.total_bytes)}</span>
-                  <span>{item.reclaimable_bytes > 0 ? `${formatBytes(item.reclaimable_bytes)} reclaimable` : 'No cleanup action'}</span>
-                </div>
-              </article>
-            ))}
-          </div>
-          {!storageOverview ? (
-            <div className="skeleton-stack">
-              <Skeleton height={36} />
-              <Skeleton height={36} />
-              <Skeleton height={36} />
-            </div>
-          ) : null}
-        </section>
-
-        <section className="storage-panel-block">
-          <div className="subsection-head">Storage paths</div>
-          <div className="storage-path-grid">
-            <label className="field">
-              <span>Database path</span>
-              <input type="text" value={draft.storage.database_path} readOnly />
-            </label>
-
-            <label className="field">
-              <span>Uploads directory</span>
-              <input
-                type="text"
-                value={draft.storage.uploads_directory}
-                onChange={(event) =>
-                  updateDraft({
-                    ...draft,
-                    storage: { ...draft.storage, uploads_directory: event.target.value },
-                  })
-                }
-              />
-            </label>
-
-            <label className="field">
-              <span>Outputs directory</span>
-              <input
-                type="text"
-                value={draft.storage.outputs_directory}
-                onChange={(event) =>
-                  updateDraft({
-                    ...draft,
-                    storage: { ...draft.storage, outputs_directory: event.target.value },
-                  })
-                }
-              />
-            </label>
-
-            <label className="field">
-              <span>Exports directory</span>
-              <input
-                type="text"
-                value={draft.storage.exports_directory}
-                onChange={(event) =>
-                  updateDraft({
-                    ...draft,
-                    storage: { ...draft.storage, exports_directory: event.target.value },
-                  })
-                }
-              />
-            </label>
-
-            <label className="field">
-              <span>Temp directory</span>
-              <input
-                type="text"
-                value={draft.storage.temp_directory}
-                onChange={(event) =>
-                  updateDraft({
-                    ...draft,
-                    storage: { ...draft.storage, temp_directory: event.target.value },
-                  })
-                }
-              />
-            </label>
-
-            <label className="field">
-              <span>Model cache directory</span>
-              <input
-                type="text"
-                value={draft.storage.model_cache_directory}
-                onChange={(event) =>
-                  updateDraft({
-                    ...draft,
-                    storage: { ...draft.storage, model_cache_directory: event.target.value },
-                  })
-                }
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className="storage-panel-block">
-          <div className="subsection-head">Retention</div>
+      {view === 'preferences' ? (
+        <form className="import-form" onSubmit={handleSubmit}>
           <div className="processing-grid">
-            <label className="field">
-              <span>Temp max age (hours)</span>
-              <input
-                type="number"
-                min={1}
-                value={draft.retention.temp_max_age_hours}
-                onChange={(event) =>
-                  updateDraft({
-                    ...draft,
-                    retention: {
-                      ...draft.retention,
-                      temp_max_age_hours: Math.max(1, Number(event.target.value) || 1),
-                    },
-                  })
-                }
+            <div className="field">
+              <ModelPicker
+                profileKey={draft.default_profile}
+                profiles={settings.profiles}
+                allowCustom={false}
+                labelId="default-model"
+                onProfileChange={(nextKey) => updateDraft({ ...draft, default_profile: nextKey })}
               />
-            </label>
+              <span className="field-hint">Used for new renders unless you change it per track.</span>
+            </div>
 
             <label className="field">
-              <span>Export bundle max age (days)</span>
+              <span>Default MP3 bitrate</span>
               <input
-                type="number"
-                min={1}
-                value={draft.retention.export_bundle_max_age_days}
-                onChange={(event) =>
-                  updateDraft({
-                    ...draft,
-                    retention: {
-                      ...draft.retention,
-                      export_bundle_max_age_days: Math.max(1, Number(event.target.value) || 1),
-                    },
-                  })
-                }
+                type="text"
+                value={draft.export_mp3_bitrate}
+                aria-invalid={!bitrateValid}
+                onChange={(event) => updateDraft({ ...draft, export_mp3_bitrate: event.target.value })}
               />
+              {!bitrateValid ? (
+                <span className="field-error">{BITRATE_HINT}</span>
+              ) : (
+                <span className="field-hint">Used when exporting MP3 artifacts. Overridable per export.</span>
+              )}
             </label>
           </div>
-        </section>
 
-        <section className="storage-panel-block">
-          <div className="subsection-head">Cleanup</div>
-          <div className="storage-action-list">
-            <button
-              type="button"
-              className="button-secondary storage-action-row"
-              disabled={cleaningTempStorage || (temp?.reclaimable_bytes ?? 0) === 0}
-              onClick={() => void onCleanupTempStorage()}
-            >
-              <span>Clear temp workspace</span>
-              <span>{cleaningTempStorage ? <><Spinner /> Working</> : formatBytes(temp?.reclaimable_bytes ?? 0)}</span>
-            </button>
-
-            <button
-              type="button"
-              className="button-secondary storage-action-row"
-              disabled={cleaningExportBundles || (exportBundles?.reclaimable_bytes ?? 0) === 0}
-              onClick={() => void onCleanupExportBundles()}
-            >
-              <span>Delete export bundles</span>
-              <span>{cleaningExportBundles ? <><Spinner /> Working</> : formatBytes(exportBundles?.reclaimable_bytes ?? 0)}</span>
-            </button>
-
-            <button
-              type="button"
-              className="button-secondary storage-action-row"
-              disabled={cleaningLibraryRuns || (outputs?.reclaimable_bytes ?? 0) === 0}
-              onClick={() => void onCleanupLibraryRuns()}
-            >
-              <span>Purge non-final renders</span>
-              <span>{cleaningLibraryRuns ? <><Spinner /> Working</> : formatBytes(outputs?.reclaimable_bytes ?? 0)}</span>
+          <div className="import-footer">
+            <span>{savedAt ? <span className="field-saved">Saved.</span> : null}</span>
+            <button type="submit" className="button-primary" disabled={saving || !bitrateValid}>
+              {saving ? <><Spinner /> Saving…</> : 'Save Preferences'}
             </button>
           </div>
-        </section>
+        </form>
+      ) : null}
 
-        <div className="import-footer">
-          <span>{savedAt ? <span className="field-saved">Saved.</span> : null}</span>
-          <button type="submit" className="button-primary" disabled={saving || !bitrateValid}>
-            {saving ? <><Spinner /> Saving</> : 'Save'}
-          </button>
-        </div>
-      </form>
+      {view === 'maintenance' ? (
+        <>
+          <section className="storage-panel-block">
+            <div className="subsection-head">Workspace usage</div>
+            <div className="storage-usage-list">
+              {(storageOverview?.items ?? []).map((item) => (
+                <article key={item.key} className="storage-usage-row">
+                  <div className="storage-usage-copy">
+                    <strong>{item.label}</strong>
+                    <p>{item.path}</p>
+                  </div>
+                  <div className="storage-usage-metrics">
+                    <span>{formatBytes(item.total_bytes)}</span>
+                    <span>
+                      {item.reclaimable_bytes > 0
+                        ? `${formatBytes(item.reclaimable_bytes)} reclaimable`
+                        : 'No cleanup action'}
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
+            {!storageOverview ? (
+              <div className="skeleton-stack">
+                <Skeleton height={36} />
+                <Skeleton height={36} />
+                <Skeleton height={36} />
+              </div>
+            ) : null}
+          </section>
+
+          <section className="storage-panel-block settings-cleanup-block">
+            <div className="subsection-head">Cleanup now</div>
+            <div className="storage-action-list">
+              <button
+                type="button"
+                className="button-secondary storage-action-row"
+                disabled={cleaningTempStorage || (temp?.reclaimable_bytes ?? 0) === 0}
+                onClick={() => void onCleanupTempStorage()}
+              >
+                <span>Clear temp workspace</span>
+                <span>
+                  {cleaningTempStorage ? <><Spinner /> Working</> : formatBytes(temp?.reclaimable_bytes ?? 0)}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className="button-secondary storage-action-row"
+                disabled={cleaningExportBundles || (exportBundles?.reclaimable_bytes ?? 0) === 0}
+                onClick={() => void onCleanupExportBundles()}
+              >
+                <span>Delete export bundles</span>
+                <span>
+                  {cleaningExportBundles ? <><Spinner /> Working</> : formatBytes(exportBundles?.reclaimable_bytes ?? 0)}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className="button-secondary storage-action-row"
+                disabled={cleaningLibraryRuns || (outputs?.reclaimable_bytes ?? 0) === 0}
+                onClick={() => void onCleanupLibraryRuns()}
+              >
+                <span>Purge non-final renders</span>
+                <span>
+                  {cleaningLibraryRuns ? <><Spinner /> Working</> : formatBytes(outputs?.reclaimable_bytes ?? 0)}
+                </span>
+              </button>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {view === 'storage' ? (
+        <form className="import-form" onSubmit={handleSubmit}>
+          <section className="storage-panel-block">
+            <div className="subsection-head">Storage paths</div>
+            <div className="storage-path-grid">
+              <label className="field">
+                <span>Database path</span>
+                <input type="text" value={draft.storage.database_path} readOnly />
+              </label>
+
+              <label className="field">
+                <span>Uploads directory</span>
+                <input
+                  type="text"
+                  value={draft.storage.uploads_directory}
+                  onChange={(event) =>
+                    updateDraft({
+                      ...draft,
+                      storage: { ...draft.storage, uploads_directory: event.target.value },
+                    })
+                  }
+                />
+              </label>
+
+              <label className="field">
+                <span>Outputs directory</span>
+                <input
+                  type="text"
+                  value={draft.storage.outputs_directory}
+                  onChange={(event) =>
+                    updateDraft({
+                      ...draft,
+                      storage: { ...draft.storage, outputs_directory: event.target.value },
+                    })
+                  }
+                />
+              </label>
+
+              <label className="field">
+                <span>Exports directory</span>
+                <input
+                  type="text"
+                  value={draft.storage.exports_directory}
+                  onChange={(event) =>
+                    updateDraft({
+                      ...draft,
+                      storage: { ...draft.storage, exports_directory: event.target.value },
+                    })
+                  }
+                />
+              </label>
+
+              <label className="field">
+                <span>Temp directory</span>
+                <input
+                  type="text"
+                  value={draft.storage.temp_directory}
+                  onChange={(event) =>
+                    updateDraft({
+                      ...draft,
+                      storage: { ...draft.storage, temp_directory: event.target.value },
+                    })
+                  }
+                />
+              </label>
+
+              <label className="field">
+                <span>Model cache directory</span>
+                <input
+                  type="text"
+                  value={draft.storage.model_cache_directory}
+                  onChange={(event) =>
+                    updateDraft({
+                      ...draft,
+                      storage: { ...draft.storage, model_cache_directory: event.target.value },
+                    })
+                  }
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="storage-panel-block">
+            <div className="subsection-head">Retention</div>
+            <div className="processing-grid">
+              <label className="field">
+                <span>Temp max age (hours)</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={draft.retention.temp_max_age_hours}
+                  onChange={(event) =>
+                    updateDraft({
+                      ...draft,
+                      retention: {
+                        ...draft.retention,
+                        temp_max_age_hours: Math.max(1, Number(event.target.value) || 1),
+                      },
+                    })
+                  }
+                />
+              </label>
+
+              <label className="field">
+                <span>Export bundle max age (days)</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={draft.retention.export_bundle_max_age_days}
+                  onChange={(event) =>
+                    updateDraft({
+                      ...draft,
+                      retention: {
+                        ...draft.retention,
+                        export_bundle_max_age_days: Math.max(1, Number(event.target.value) || 1),
+                      },
+                    })
+                  }
+                />
+              </label>
+            </div>
+          </section>
+
+          <div className="import-footer">
+            <span>{savedAt ? <span className="field-saved">Saved.</span> : null}</span>
+            <button type="submit" className="button-primary" disabled={saving || !bitrateValid}>
+              {saving ? <><Spinner /> Saving…</> : 'Save Storage Settings'}
+            </button>
+          </div>
+        </form>
+      ) : null}
     </section>
   )
 }

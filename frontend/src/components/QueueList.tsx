@@ -1,4 +1,4 @@
-import { RUN_STATUS_LABELS, describeRun } from './runStatus'
+import { RUN_STATUS_LABELS, describeRun, isActiveRunStatus } from './runStatus'
 import type { QueueRunEntry } from '../types'
 import { ProgressBar } from './feedback/ProgressBar'
 import { Spinner } from './feedback/Spinner'
@@ -9,12 +9,14 @@ type QueueListProps = {
   onToggleSelect: (runId: string) => void
   onSelectAll: (ids: string[]) => void
   onClearSelection: () => void
-  onSelectTrack: (trackId: string) => void
+  onSelectRun: (trackId: string, runId: string) => void
   onCancelRun: (runId: string) => Promise<void>
   onRetryRun: (runId: string) => Promise<void>
   onDismissRun: (runId: string) => Promise<void>
   cancellingRunId: string | null
   retryingRunId: string | null
+  embedded?: boolean
+  showHeader?: boolean
 }
 
 function formatElapsed(createdAt: string) {
@@ -32,16 +34,20 @@ export function QueueList({
   onToggleSelect,
   onSelectAll,
   onClearSelection,
-  onSelectTrack,
+  onSelectRun,
   onCancelRun,
   onRetryRun,
   onDismissRun,
   cancellingRunId,
   retryingRunId,
+  embedded = false,
+  showHeader = true,
 }: QueueListProps) {
   const selectableIds = entries
-    .filter((entry) => entry.run.status !== 'failed' && entry.run.status !== 'cancelled')
+    .filter((entry) => isActiveRunStatus(entry.run.status))
     .map((entry) => entry.run.id)
+  const activeCount = entries.filter((entry) => isActiveRunStatus(entry.run.status)).length
+  const attentionCount = entries.length - activeCount
   const allSelected =
     selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id))
 
@@ -52,10 +58,15 @@ export function QueueList({
 
   if (entries.length === 0) {
     return (
-      <div className="track-list-wrap">
-        <div className="section-head">
-          <h2>Activity</h2>
-        </div>
+      <div className={embedded ? 'queue-list-panel' : 'track-list-wrap'}>
+        {showHeader ? (
+          <div className="section-head">
+          <div className="section-head-copy">
+            <h2>Active queue</h2>
+            <p>Watch renders in progress and jump straight back into the exact run that needs attention.</p>
+          </div>
+          </div>
+        ) : null}
         <p className="empty-state">
           Nothing active. Queue a render from staged imports or from a track to see progress here.
         </p>
@@ -64,10 +75,15 @@ export function QueueList({
   }
 
   return (
-    <div className="track-list-wrap">
-      <div className="section-head">
-        <h2>Activity</h2>
-      </div>
+    <div className={embedded ? 'queue-list-panel' : 'track-list-wrap'}>
+      {showHeader ? (
+        <div className="section-head">
+          <div className="section-head-copy">
+            <h2>Active queue</h2>
+            <p>Keep active runs visible and reopen the exact run behind each status row.</p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="list-controls">
         <label className="checkbox-row">
@@ -79,7 +95,10 @@ export function QueueList({
           />
           <span>{allSelected ? 'Clear all' : 'Select all'}</span>
         </label>
-        <span className="library-count">{entries.length} active</span>
+        <span className="library-count">
+          {activeCount} running
+          {attentionCount > 0 ? ` · ${attentionCount} attention` : ''}
+        </span>
       </div>
 
       <div className="queue-list">
@@ -112,7 +131,7 @@ export function QueueList({
               <button
                 type="button"
                 className="queue-row-main"
-                onClick={() => onSelectTrack(entry.track_id)}
+                onClick={() => onSelectRun(entry.track_id, run.id)}
               >
                 <div className="queue-row-title">
                   <strong>{entry.track_title}</strong>
@@ -139,7 +158,13 @@ export function QueueList({
                       disabled={retrying}
                       onClick={() => void onRetryRun(run.id)}
                     >
-                      {retrying ? <><Spinner /> Retrying</> : 'Retry'}
+                      {retrying ? (
+                        <>
+                          <Spinner /> Retrying
+                        </>
+                      ) : (
+                        'Retry'
+                      )}
                     </button>
                     <button
                       type="button"
