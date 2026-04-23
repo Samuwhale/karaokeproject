@@ -29,7 +29,14 @@ export function SettingsDrawer({
   ...props
 }: SettingsDrawerProps) {
   if (!open) return null
-  return <SettingsDrawerContent {...props} open={open} initialView={props.initialView} />
+  return (
+    <SettingsDrawerContent
+      key={props.initialView}
+      {...props}
+      open={open}
+      initialView={props.initialView}
+    />
+  )
 }
 
 type SettingsDrawerContentProps = SettingsDrawerProps & {
@@ -58,6 +65,18 @@ function SettingsDrawerContent({
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
   useDialogFocus(open, { containerRef: panelRef, initialFocusRef: closeButtonRef })
   const [view, setView] = useState<'preferences' | 'maintenance' | 'storage'>(initialView)
+  const readinessBlocked = (diagnostics?.issues.length ?? 0) > 0
+
+  const drawerTitle =
+    view === 'maintenance' && readinessBlocked ? 'Finish setup' : 'Settings'
+  const drawerDescription =
+    view === 'preferences'
+      ? 'Set the defaults used when you start new splits or exports.'
+      : view === 'maintenance'
+        ? readinessBlocked
+          ? 'Processing is blocked. Fix the setup issue first, then return to the workspace.'
+          : 'Check readiness, then repair anything blocking the workspace.'
+        : 'Review disk usage, cleanup targets, and storage paths when the workspace layout needs to change.'
 
   return (
     <div className="drawer" role="dialog" aria-modal="true" aria-label="Settings">
@@ -65,14 +84,8 @@ function SettingsDrawerContent({
       <aside className="drawer-panel" ref={panelRef} tabIndex={-1}>
         <header className="drawer-head">
           <div className="drawer-head-copy">
-            <h2>Settings</h2>
-            <p>
-              {view === 'preferences'
-                ? 'Set the defaults used when you start new splits or exports.'
-                : view === 'maintenance'
-                  ? 'Check readiness first, then repair anything blocking the workspace.'
-                  : 'Review disk usage, cleanup targets, and storage paths when the workspace layout needs to change.'}
-            </p>
+            <h2>{drawerTitle}</h2>
+            <p>{drawerDescription}</p>
           </div>
           <button ref={closeButtonRef} type="button" className="button-secondary" onClick={onClose}>
             Close
@@ -96,7 +109,7 @@ function SettingsDrawerContent({
               className={`drawer-tab ${view === 'maintenance' ? 'drawer-tab-active' : ''}`}
               onClick={() => setView('maintenance')}
             >
-              Readiness
+              Setup
             </button>
             <button
               type="button"

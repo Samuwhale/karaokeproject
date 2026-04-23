@@ -14,8 +14,6 @@ type OutputIntentPickerProps = {
   profiles: ProcessingProfile[]
   onApplyTemplate: (stems: RunMixStemEntry[]) => void | Promise<void>
   onRerunWithProfile: (profileKey: string) => void
-  onExport: () => void
-  onReveal: () => void
   saving: boolean
 }
 
@@ -29,8 +27,6 @@ export function OutputIntentPicker({
   profiles,
   onApplyTemplate,
   onRerunWithProfile,
-  onExport,
-  onReveal,
   saving,
 }: OutputIntentPickerProps) {
   const inferredIntent = inferIntent(run)
@@ -59,9 +55,9 @@ export function OutputIntentPicker({
   return (
     <section className="output-intent">
       <div className="output-intent-head">
-        <h3 className="subsection-head">Choose target mix</h3>
+        <h3 className="subsection-head">Starting Balance</h3>
         <p className="output-intent-summary">
-          Start with the closest outcome first. Open the stem mixer only if it still needs work.
+          Pick the closest outcome first, then adjust the stem rows below.
         </p>
         <span className="output-intent-state" aria-live="polite">
           {saving
@@ -69,7 +65,7 @@ export function OutputIntentPicker({
               ? `Saving ${activeIntentSpec.label.toLowerCase()}…`
               : 'Saving changes…'
             : activeIntentSpec
-              ? `${activeIntentSpec.label} applied.`
+              ? `${activeIntentSpec.label} loaded.`
               : 'No preset fully matches the current balance.'}
         </span>
       </div>
@@ -89,7 +85,7 @@ export function OutputIntentPicker({
                 }}
               >
                 <span className="output-intent-option-label">{spec.label}</span>
-                <span className="output-intent-option-desc">{spec.description}</span>
+                {isActive ? <span className="output-intent-option-desc">{spec.description}</span> : null}
               </button>
             )
           }
@@ -110,20 +106,12 @@ export function OutputIntentPicker({
               <span className="output-intent-option-label">{spec.label}</span>
               <span className="output-intent-option-desc">
                 {fallback
-                  ? `Rerun with ${fallback.label} to enable.`
+                  ? `Prepare another split with ${fallback.label} to unlock this target.`
                   : 'Not available for the stems this run produced.'}
               </span>
             </button>
           )
         })}
-      </div>
-      <div className="output-intent-footer">
-        <button type="button" className="button-primary" onClick={onExport}>
-          Export this result
-        </button>
-        <button type="button" className="button-secondary" onClick={onReveal}>
-          Open result folder
-        </button>
       </div>
     </section>
   )

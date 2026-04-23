@@ -3,6 +3,13 @@ import type { QueueRunEntry } from '../types'
 import { ProgressBar } from './feedback/ProgressBar'
 import { Spinner } from './feedback/Spinner'
 
+const REMEDIATION: { pattern: RegExp; hint: string }[] = [
+  { pattern: /yt-dlp/i, hint: 'Install yt-dlp, then retry this split.' },
+  { pattern: /ffmpeg|ffprobe/i, hint: 'Install ffmpeg before retrying.' },
+  { pattern: /audio-separator/i, hint: 'Install the processing extras in the worker venv, then retry.' },
+  { pattern: /disk/i, hint: 'Free space in outputs or temp storage before retrying.' },
+]
+
 type QueueListProps = {
   entries: QueueRunEntry[]
   selectedIds: Set<string>
@@ -19,13 +26,18 @@ type QueueListProps = {
   showHeader?: boolean
 }
 
-function formatElapsed(createdAt: string) {
-  const started = new Date(createdAt).getTime()
+function formatElapsed(since: string) {
+  const started = new Date(since).getTime()
   const diffSec = Math.max(0, Math.round((Date.now() - started) / 1000))
   if (diffSec < 60) return `${diffSec}s`
   const m = Math.floor(diffSec / 60)
   const s = diffSec % 60
   return `${m}m ${s.toString().padStart(2, '0')}s`
+}
+
+function remediationFor(message: string | null) {
+  if (!message) return null
+  return REMEDIATION.find((entry) => entry.pattern.test(message))?.hint ?? null
 }
 
 export function QueueList({
@@ -45,7 +57,7 @@ export function QueueList({
 }: QueueListProps) {
   const activeEntries = entries.filter((entry) => isActiveRunStatus(entry.run.status))
   const attentionEntries = entries.filter((entry) => !isActiveRunStatus(entry.run.status))
-  const selectableIds = activeEntries.map((entry) => entry.run.id)
+  const selectableIds = entries.map((entry) => entry.run.id)
   const activeCount = activeEntries.length
   const attentionCount = attentionEntries.length
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id))
@@ -55,14 +67,20 @@ export function QueueList({
     else onSelectAll(selectableIds)
   }
 
-  function renderRows(items: QueueRunEntry[], selectable: boolean) {
+  function renderRows(items: QueueRunEntry[], group: 'active' | 'followup') {
     return items.map((entry) => {
       const { run } = entry
       const failed = run.status === 'failed' || run.status === 'cancelled'
-      const selected = selectable && selectedIds.has(run.id)
+      const selected = selectedIds.has(run.id)
       const cancelling = cancellingRunId === run.id
       const retrying = retryingRunId === run.id
       const description = describeRun(run)
+      const remediation = remediationFor(run.error_message)
+      const timingLabel = isActiveRunStatus(run.status)
+        ? run.status === 'queued'
+          ? `Queued for ${formatElapsed(run.created_at)}`
+          : `Processing for ${formatElapsed(run.created_at)}`
+        : `Finished ${formatElapsed(run.updated_at)} ago`
 
       const rowClassName = [
         'queue-row',
@@ -74,17 +92,13 @@ export function QueueList({
 
       return (
         <article key={run.id} className={rowClassName}>
-          {selectable ? (
-            <label className="list-row-check">
-              <input
-                type="checkbox"
-                checked={selected}
-                onChange={() => onToggleSelect(run.id)}
-              />
-            </label>
-          ) : (
-            <div className="list-row-check queue-row-spacer" aria-hidden="true" />
-          )}
+          <label className="list-row-check">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect(run.id)}
+            />
+          </label>
           <button
             type="button"
             className="queue-row-main"
@@ -95,17 +109,21 @@ export function QueueList({
               {entry.track_artist ? <span> · {entry.track_artist}</span> : null}
             </div>
             <div className="queue-row-meta">
-              {RUN_STATUS_LABELS[run.status] ?? run.status} · {run.processing.profile_label} ·{' '}
-              {formatElapsed(run.created_at)}
+              {RUN_STATUS_LABELS[run.status] ?? run.status} · {run.processing.profile_label} · {timingLabel}
             </div>
-            {selectable ? <ProgressBar value={run.progress} /> : null}
-            {description && selectable ? <div className="queue-row-message">{description}</div> : null}
-            {!selectable && run.error_message ? (
-              <div className="queue-row-error">{run.error_message}</div>
+            {group === 'active' ? (
+              <ProgressBar value={run.progress} label={description || RUN_STATUS_LABELS[run.status]} />
+            ) : null}
+            {description ? <div className="queue-row-message">{description}</div> : null}
+            {group === 'followup' && run.error_message ? (
+              <div className="queue-row-error">
+                <div>{run.error_message}</div>
+                {remediation ? <div className="queue-row-hint">{remediation}</div> : null}
+              </div>
             ) : null}
           </button>
           <div className="queue-row-actions">
-            {!selectable ? (
+            {group === 'followup' ? (
               <>
                 <button
                   type="button"
@@ -174,31 +192,30 @@ export function QueueList({
         </div>
       ) : null}
 
+      <div className="list-controls">
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            disabled={selectableIds.length === 0}
+            onChange={handleToggleAll}
+          />
+          <span>{allSelected ? 'Clear all' : 'Select all'}</span>
+        </label>
+        <span className="library-count">
+          {activeCount} running
+          {attentionCount > 0 ? ` · ${attentionCount} need follow-up` : ''}
+        </span>
+      </div>
+
       {activeEntries.length > 0 ? (
-        <>
-          <div className="list-controls">
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                disabled={selectableIds.length === 0}
-                onChange={handleToggleAll}
-              />
-              <span>{allSelected ? 'Clear all' : 'Select all'}</span>
-            </label>
-            <span className="library-count">
-              {activeCount} running
-              {attentionCount > 0 ? ` · ${attentionCount} need follow-up` : ''}
-            </span>
+        <section className="queue-group">
+          <div className="queue-group-head">
+            <strong>Splitting now</strong>
+            <span>{activeCount}</span>
           </div>
-          <section className="queue-group">
-            <div className="queue-group-head">
-              <strong>Splitting now</strong>
-              <span>{activeCount}</span>
-            </div>
-            <div className="queue-list">{renderRows(activeEntries, true)}</div>
-          </section>
-        </>
+          <div className="queue-list">{renderRows(activeEntries, 'active')}</div>
+        </section>
       ) : null}
 
       {attentionEntries.length > 0 ? (
@@ -207,7 +224,7 @@ export function QueueList({
             <strong>Needs follow-up</strong>
             <span>{attentionCount}</span>
           </div>
-          <div className="queue-list">{renderRows(attentionEntries, false)}</div>
+          <div className="queue-list">{renderRows(attentionEntries, 'followup')}</div>
         </section>
       ) : null}
     </div>

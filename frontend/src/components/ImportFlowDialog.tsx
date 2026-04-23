@@ -129,7 +129,7 @@ function ImportFlowDialogContent({
         <header className="import-modal-head">
           <div className="import-flow-head-copy">
             <h2>Add songs</h2>
-            <p>Add YouTube links or local files here. Title cleanup, duplicate decisions, and queue choices happen next in Review imports.</p>
+            <p>Add sources here, then review them in Work Queue before you start splitting.</p>
           </div>
           <div className="import-flow-head-actions">
             <button ref={closeButtonRef} type="button" className="button-secondary" onClick={handleClose}>
@@ -145,11 +145,17 @@ function ImportFlowDialogContent({
             </div>
           ) : null}
 
+          {stagedImports.length > 0 ? (
+            <p className="import-flow-note">
+              {stagedImports.length} staged source{stagedImports.length === 1 ? '' : 's'} already waiting in Work Queue.
+            </p>
+          ) : null}
+
           <div className="import-flow-add">
             <section className="import-flow-section">
               <div className="import-flow-section-head">
                 <h3>YouTube link</h3>
-                <p>Add the link first, then review the imported song in Review imports.</p>
+                <p>Paste one link now. You can rename or de-duplicate it in Work Queue.</p>
               </div>
               <label className="field">
                 <span>YouTube URL</span>
@@ -189,7 +195,7 @@ function ImportFlowDialogContent({
             <section className="import-flow-section">
               <div className="import-flow-section-head">
                 <h3>Local files</h3>
-                <p>Drop audio or video files here, then finish the batch in Review imports.</p>
+                <p>Drop files here now, then finish the batch in Work Queue.</p>
               </div>
               <div
                 className={`drop-zone ${dragActive ? 'drop-zone-active' : ''}`}
@@ -272,27 +278,6 @@ function ImportFlowDialogContent({
                 </button>
               </div>
             </section>
-
-            {stagedImports.length > 0 ? (
-              <section className="import-flow-section import-flow-section-compact">
-                <div className="import-flow-section-head">
-                  <h3>{stagedImports.length} staged source{stagedImports.length === 1 ? '' : 's'}</h3>
-                  <p>Close this dialog and finish the batch from the workspace.</p>
-                </div>
-                <div className="import-flow-section-actions">
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    onClick={() => {
-                      onSourcesStaged()
-                      handleClose()
-                    }}
-                  >
-                    Back to workspace
-                  </button>
-                </div>
-              </section>
-            ) : null}
           </div>
         </div>
       </div>

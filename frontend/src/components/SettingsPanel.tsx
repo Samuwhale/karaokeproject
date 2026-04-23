@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import type { Settings, StorageBucket, StorageOverview } from '../types'
 import { Spinner } from './feedback/Spinner'
 import { Skeleton } from './feedback/Skeleton'
+import { ConfirmInline } from './feedback/ConfirmInline'
 import { formatSize } from './metrics'
 import { ModelPicker } from './ModelPicker'
 
@@ -253,41 +254,56 @@ export function SettingsPanel({
           <section className="storage-panel-block settings-cleanup-block">
             <div className="subsection-head">Cleanup now</div>
             <div className="storage-action-list">
-              <button
-                type="button"
-                className="button-secondary storage-action-row"
-                disabled={cleaningTempStorage || (temp?.reclaimable_bytes ?? 0) === 0}
-                onClick={() => void onCleanupTempStorage()}
-              >
-                <span>Clear temp workspace</span>
-                <span>
-                  {cleaningTempStorage ? <><Spinner /> Working</> : formatBytes(temp?.reclaimable_bytes ?? 0)}
-                </span>
-              </button>
+              <div className="storage-action-row">
+                <div className="storage-action-copy">
+                  <strong>Clear temp workspace</strong>
+                  <p>Removes temporary processing files. Safe when you want to reclaim scratch space.</p>
+                </div>
+                <ConfirmInline
+                  label={cleaningTempStorage ? 'Working…' : formatBytes(temp?.reclaimable_bytes ?? 0)}
+                  pendingLabel="Working…"
+                  confirmLabel="Clear temp workspace"
+                  cancelLabel="Keep temp files"
+                  prompt="Delete temporary processing files now?"
+                  pending={cleaningTempStorage}
+                  disabled={(temp?.reclaimable_bytes ?? 0) === 0}
+                  onConfirm={onCleanupTempStorage}
+                />
+              </div>
 
-              <button
-                type="button"
-                className="button-secondary storage-action-row"
-                disabled={cleaningExportBundles || (exportBundles?.reclaimable_bytes ?? 0) === 0}
-                onClick={() => void onCleanupExportBundles()}
-              >
-                <span>Delete export bundles</span>
-                <span>
-                  {cleaningExportBundles ? <><Spinner /> Working</> : formatBytes(exportBundles?.reclaimable_bytes ?? 0)}
-                </span>
-              </button>
+              <div className="storage-action-row">
+                <div className="storage-action-copy">
+                  <strong>Delete export bundles</strong>
+                  <p>Removes built zip bundles only. Your saved songs, splits, and source files stay intact.</p>
+                </div>
+                <ConfirmInline
+                  label={cleaningExportBundles ? 'Working…' : formatBytes(exportBundles?.reclaimable_bytes ?? 0)}
+                  pendingLabel="Working…"
+                  confirmLabel="Delete export bundles"
+                  cancelLabel="Keep bundles"
+                  prompt="Delete built export bundles now?"
+                  pending={cleaningExportBundles}
+                  disabled={(exportBundles?.reclaimable_bytes ?? 0) === 0}
+                  onConfirm={onCleanupExportBundles}
+                />
+              </div>
 
-              <button
-                type="button"
-                className="button-secondary storage-action-row"
-                disabled={cleaningLibraryRuns || (outputs?.reclaimable_bytes ?? 0) === 0}
-                onClick={() => void onCleanupLibraryRuns()}
-              >
-                <span>Purge non-final splits</span>
-                <span>
-                  {cleaningLibraryRuns ? <><Spinner /> Working</> : formatBytes(outputs?.reclaimable_bytes ?? 0)}
-                </span>
-              </button>
+              <div className="storage-action-row">
+                <div className="storage-action-copy">
+                  <strong>Purge non-final splits</strong>
+                  <p>Deletes split outputs that are not marked as final. Use this only after you have chosen winners.</p>
+                </div>
+                <ConfirmInline
+                  label={cleaningLibraryRuns ? 'Working…' : formatBytes(outputs?.reclaimable_bytes ?? 0)}
+                  pendingLabel="Working…"
+                  confirmLabel="Purge non-final splits"
+                  cancelLabel="Keep all splits"
+                  prompt="Delete non-final split outputs across the library?"
+                  pending={cleaningLibraryRuns}
+                  disabled={(outputs?.reclaimable_bytes ?? 0) === 0}
+                  onConfirm={async () => onCleanupLibraryRuns()}
+                />
+              </div>
             </div>
           </section>
 
@@ -413,7 +429,7 @@ export function SettingsPanel({
           </section>
 
           <div className="import-footer">
-            <span>{savedAt ? <span className="field-saved">Saved.</span> : null}</span>
+            <span>{savedAt ? <span className="field-saved">Storage settings saved.</span> : null}</span>
             <button type="submit" className="button-primary" disabled={saving || !bitrateValid}>
               {saving ? <><Spinner /> Saving…</> : 'Save Storage Settings'}
             </button>

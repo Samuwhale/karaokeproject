@@ -4,20 +4,28 @@ import { Spinner } from './feedback/Spinner'
 
 type BatchActionBarProps = {
   selectedCount: number
+  selectionLabel: string
   onClear: () => void
   busy: boolean
   children: React.ReactNode
   inert?: boolean
 }
 
-export function BatchActionBar({ selectedCount, onClear, busy, children, inert }: BatchActionBarProps) {
+export function BatchActionBar({
+  selectedCount,
+  selectionLabel,
+  onClear,
+  busy,
+  children,
+  inert,
+}: BatchActionBarProps) {
   if (selectedCount === 0) return null
   return (
     <div className="batch-bar" role="region" aria-label="Selection actions" inert={inert || undefined}>
       <div className="batch-bar-inner">
         <div className="batch-bar-count">
           {busy ? <Spinner /> : null}
-          {selectedCount} selected
+          {selectedCount} {selectionLabel} selected
           <button type="button" className="button-link" onClick={onClear}>
             Clear
           </button>
@@ -30,6 +38,7 @@ export function BatchActionBar({ selectedCount, onClear, busy, children, inert }
 
 type ApplyArtistPromptProps = {
   onApply: (artist: string | null) => void
+  onClear?: () => void
   disabled?: boolean
   buttonLabel?: string
 }
@@ -79,7 +88,12 @@ export function OverflowMenu({ label = 'More…', children }: OverflowMenuProps)
   )
 }
 
-export function ApplyArtistPrompt({ onApply, disabled, buttonLabel = 'Set artist' }: ApplyArtistPromptProps) {
+export function ApplyArtistPrompt({
+  onApply,
+  onClear,
+  disabled,
+  buttonLabel = 'Set artist',
+}: ApplyArtistPromptProps) {
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState('')
 
@@ -110,13 +124,26 @@ export function ApplyArtistPrompt({ onApply, disabled, buttonLabel = 'Set artist
       <input
         type="text"
         autoFocus
-        placeholder="Artist name (blank clears)"
+        placeholder="Artist name"
         value={value}
         onChange={(event) => setValue(event.target.value)}
       />
       <button type="submit" className="button-primary" disabled={disabled}>
         Apply
       </button>
+      {onClear ? (
+        <button
+          type="button"
+          className="button-secondary"
+          onClick={() => {
+            onClear()
+            setValue('')
+            setOpen(false)
+          }}
+        >
+          Clear artist
+        </button>
+      ) : null}
       <button
         type="button"
         className="button-secondary"
@@ -130,4 +157,3 @@ export function ApplyArtistPrompt({ onApply, disabled, buttonLabel = 'Set artist
     </form>
   )
 }
-

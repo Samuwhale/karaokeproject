@@ -108,6 +108,10 @@ function needsDuplicateDecision(item: StagedImport) {
   )
 }
 
+function countByAction(items: StagedImport[], action: DraftDuplicateAction) {
+  return items.filter((item) => item.duplicate_action === action).length
+}
+
 function EditableField({
   label,
   value,
@@ -191,6 +195,9 @@ export function StagedImportsPanel({
     return a.title.localeCompare(b.title)
   })
   const canConfirm = stagedImports.length > 0 && unresolvedCount === 0 && !confirming
+  const createNewCount = countByAction(stagedImports, 'create-new')
+  const reuseCount = countByAction(stagedImports, 'reuse-existing')
+  const skipCount = countByAction(stagedImports, 'skip')
 
   async function confirm(queue: boolean) {
     if (stagedImports.length === 0) return
@@ -203,6 +210,27 @@ export function StagedImportsPanel({
 
   return (
     <div className="staged-imports-panel">
+      {stagedImports.length > 0 ? (
+        <section className="staged-import-summary-strip" aria-label="Import batch summary">
+          <div className="staged-import-summary-copy">
+            <strong>
+              {stagedImports.length} source{stagedImports.length === 1 ? '' : 's'} staged
+            </strong>
+            <span>
+              {unresolvedCount > 0
+                ? `${unresolvedCount} still ${unresolvedCount === 1 ? 'needs' : 'need'} a duplicate decision.`
+                : 'Everything is ready to continue.'}
+            </span>
+          </div>
+          <div className="staged-import-summary-copy">
+            <strong>{defaultProfileLabel}</strong>
+            <span>
+              Queue now with {createNewCount} new, {reuseCount} attached, and {skipCount} skipped.
+            </span>
+          </div>
+        </section>
+      ) : null}
+
       {stagedImports.length === 0 ? (
         <div className="empty-state import-flow-empty">
           No songs added yet. Bring in files or a YouTube URL first.
@@ -337,7 +365,7 @@ export function StagedImportsPanel({
           ) : unresolvedCount > 0 ? (
             <span>Resolve every duplicate decision before continuing.</span>
           ) : (
-            <span>Choose whether this batch should enter the library quietly or queue its first split right away.</span>
+            <span>Choose whether this batch should only enter the library or start its first split immediately.</span>
           )}
         </div>
         <div className="import-flow-footer-actions import-flow-footer-actions-stacked">

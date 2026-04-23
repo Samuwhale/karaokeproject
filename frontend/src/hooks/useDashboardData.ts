@@ -96,18 +96,6 @@ function getErrorMessage(error: unknown) {
   return 'Unexpected application error.'
 }
 
-function resolveSelectedTrackId(tracks: TrackSummary[], currentSelection: string | null) {
-  if (!tracks.length) return null
-  if (currentSelection && tracks.some((track) => track.id === currentSelection)) return currentSelection
-  return tracks[0].id
-}
-
-function resolveSelectedRunId(track: TrackDetail | null, currentSelection: string | null) {
-  if (!track?.runs.length) return null
-  if (currentSelection && track.runs.some((run) => run.id === currentSelection)) return currentSelection
-  return track.runs[0].id
-}
-
 function hasActiveWork(track: TrackDetail | null, queueSize: number) {
   if (queueSize > 0) return true
   return !!track?.runs.some((run) => isActiveRunStatus(run.status))
@@ -130,28 +118,20 @@ function clearTimer(timerRef: MutableRefObject<number | null>) {
   timerRef.current = null
 }
 
-async function loadTrackDetail(trackIds: string[], selectedRunId: string | null) {
-  for (const trackId of trackIds) {
-    try {
-      const track = await getTrack(trackId)
-      return {
-        trackId,
-        track,
-        runId: resolveSelectedRunId(track, selectedRunId),
-      }
-    } catch (error) {
-      if (isApiError(error) && error.status === 404) continue
-      throw error
-    }
+async function loadTrackDetail(trackId: string) {
+  try {
+    return await getTrack(trackId)
+  } catch (error) {
+    if (isApiError(error) && error.status === 404) return null
+    throw error
   }
-  return null
 }
 
 function resolveRefreshInterval(track: TrackDetail | null, queueSize: number) {
   return hasActiveWork(track, queueSize) ? ACTIVE_REFRESH_MS : IDLE_REFRESH_MS
 }
 
-export function useDashboardData() {
+export function useDashboardData(selection: { trackId: string | null }) {
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [storageOverview, setStorageOverview] = useState<StorageOverview | null>(null)
@@ -160,8 +140,6 @@ export function useDashboardData() {
   const [queueRuns, setQueueRuns] = useState<QueueRunEntry[]>([])
   const [cachedModels, setCachedModels] = useState<CachedModel[]>([])
 
-  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [selectedTrack, setSelectedTrack] = useState<TrackDetail | null>(null)
 
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<Set<string>>(new Set())
@@ -179,7 +157,6 @@ export function useDashboardData() {
   const [cleaningExportBundles, setCleaningExportBundles] = useState(false)
   const [cleaningLibraryRuns, setCleaningLibraryRuns] = useState(false)
   const [connection, setConnection] = useState<Connection>(INITIAL_CONNECTION)
-  const [compareRunId, setCompareRunId] = useState<string | null>(null)
   const [settingKeeper, setSettingKeeper] = useState(false)
   const [backfillingMetrics, setBackfillingMetrics] = useState(false)
   const [savingNoteRunId, setSavingNoteRunId] = useState<string | null>(null)
@@ -189,8 +166,8 @@ export function useDashboardData() {
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set())
   const [pendingPurge, setPendingPurge] = useState<PendingPurge | null>(null)
 
-  const selectedTrackIdRef = useRef<string | null>(selectedTrackId)
-  const selectedRunIdRef = useRef<string | null>(selectedRunId)
+  const selectedTrackRef = useRef<TrackDetail | null>(selectedTrack)
+  const routeTrackIdRef = useRef<string | null>(selection.trackId)
   const refreshIntervalMsRef = useRef<number>(IDLE_REFRESH_MS)
   const lastPollAtRef = useRef<number>(0)
   const inFlightRef = useRef<boolean>(false)
@@ -203,11 +180,11 @@ export function useDashboardData() {
   const queueSizeRef = useRef(queueRuns.length)
 
   useEffect(() => {
-    selectedTrackIdRef.current = selectedTrackId
-  }, [selectedTrackId])
+    selectedTrackRef.current = selectedTrack
+  }, [selectedTrack])
   useEffect(() => {
-    selectedRunIdRef.current = selectedRunId
-  }, [selectedRunId])
+    routeTrackIdRef.current = selection.trackId
+  }, [selection.trackId])
   useEffect(() => {
     queueSizeRef.current = queueRuns.length
   }, [queueRuns.length])
@@ -236,43 +213,57 @@ export function useDashboardData() {
     setToasts((current) => current.filter((toast) => toast.id !== id))
   }, [])
 
+  function formatTrackLabel(track: { title: string; artist: string | null }) {
+    return track.artist ? `${track.title} · ${track.artist}` : track.title
+  }
+
+  function findTrackLabel(trackId: string) {
+    const track = tracks.find((item) => item.id === trackId)
+    return track ? formatTrackLabel(track) : 'this song'
+  }
+
+  function findRunTrackLabel(runId: string) {
+    const queueEntry = queueRuns.find((entry) => entry.run.id === runId)
+    if (queueEntry) {
+      return queueEntry.track_artist
+        ? `${queueEntry.track_title} · ${queueEntry.track_artist}`
+        : queueEntry.track_title
+    }
+
+    if (selectedTrack?.runs.some((run) => run.id === runId)) return formatTrackLabel(selectedTrack)
+
+    return 'this song'
+  }
+
   const syncSelectedTrackDetail = useCallback(async (
     trackId: string | null,
-    options?: {
-      preferredRunId?: string | null
-      candidateTrackIds?: string[]
-      queueSize?: number
-    },
+    queueSize?: number,
   ) => {
     const requestId = ++selectedTrackRequestIdRef.current
-    const queueSize = options?.queueSize ?? queueSizeRef.current
+    const nextQueueSize = queueSize ?? queueSizeRef.current
 
     if (!trackId) {
-      setSelectedTrackId(null)
       setSelectedTrack(null)
-      setSelectedRunId(null)
-      refreshIntervalMsRef.current = resolveRefreshInterval(null, queueSize)
+      refreshIntervalMsRef.current = resolveRefreshInterval(null, nextQueueSize)
       return
     }
 
-    const candidateTrackIds = options?.candidateTrackIds?.length ? options.candidateTrackIds : [trackId]
-    const preferredRunId = options?.preferredRunId ?? null
-    const resolvedTrack = await loadTrackDetail(candidateTrackIds, preferredRunId)
+    if (selectedTrackRef.current?.id !== trackId) {
+      setSelectedTrack(null)
+    }
+
+    const resolvedTrack = await loadTrackDetail(trackId)
 
     if (requestId !== selectedTrackRequestIdRef.current) return
 
     if (!resolvedTrack) {
-      setSelectedTrackId(null)
       setSelectedTrack(null)
-      setSelectedRunId(null)
-      refreshIntervalMsRef.current = resolveRefreshInterval(null, queueSize)
+      refreshIntervalMsRef.current = resolveRefreshInterval(null, nextQueueSize)
       return
     }
 
-    setSelectedTrackId(resolvedTrack.trackId)
-    setSelectedTrack(resolvedTrack.track)
-    setSelectedRunId(resolvedTrack.runId)
-    refreshIntervalMsRef.current = resolveRefreshInterval(resolvedTrack.track, queueSize)
+    setSelectedTrack(resolvedTrack)
+    refreshIntervalMsRef.current = resolveRefreshInterval(resolvedTrack, nextQueueSize)
   }, [])
 
   const refreshDashboard = useCallback(async () => {
@@ -289,12 +280,6 @@ export function useDashboardData() {
         listImportDrafts(),
         getActiveRuns(),
       ])
-      const pending = pendingDeleteIdsRef.current
-      const visibleNextTracks = pending.size
-        ? nextTracks.filter((track) => !pending.has(track.id))
-        : nextTracks
-      const nextSelectedTrackId = resolveSelectedTrackId(visibleNextTracks, selectedTrackIdRef.current)
-
       setDiagnostics(nextDiagnostics)
       setSettings(nextSettings)
       setStorageOverview(nextStorageOverview)
@@ -310,25 +295,13 @@ export function useDashboardData() {
         return next.size === current.size ? current : next
       })
       setSelectedQueueRunIds((current) => {
-        const valid = new Set(
-          nextQueue.filter((entry) => isActiveRunStatus(entry.run.status)).map((entry) => entry.run.id),
-        )
+        const valid = new Set(nextQueue.map((entry) => entry.run.id))
         const next = new Set<string>()
         for (const id of current) if (valid.has(id)) next.add(id)
         return next.size === current.size ? current : next
       })
 
-      const candidateTrackIds = nextSelectedTrackId
-        ? [
-            nextSelectedTrackId,
-            ...visibleNextTracks.filter((track) => track.id !== nextSelectedTrackId).map((track) => track.id),
-          ]
-        : []
-      await syncSelectedTrackDetail(nextSelectedTrackId, {
-        preferredRunId: selectedRunIdRef.current,
-        candidateTrackIds,
-        queueSize: nextQueue.length,
-      })
+      await syncSelectedTrackDetail(routeTrackIdRef.current, nextQueue.length)
 
       setConnection({
         state: 'ready',
@@ -412,6 +385,13 @@ export function useDashboardData() {
     }
   }, [refreshCachedModels, refreshDashboard])
 
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      void syncSelectedTrackDetail(selection.trackId)
+    }, 0)
+    return () => window.clearTimeout(id)
+  }, [selection.trackId, syncSelectedTrackDetail])
+
   // ----- Selection helpers -----
 
   function toggleLibrarySelected(trackId: string) {
@@ -438,7 +418,7 @@ export function useDashboardData() {
       const count = result.drafts.length
       pushToast(
         'success',
-        `Staged ${count} source${count === 1 ? '' : 's'}. Review settings before queueing.`,
+        `Staged ${count} source${count === 1 ? '' : 's'}. Review imports is the next step.`,
       )
       await refreshDashboard()
       return result
@@ -457,7 +437,7 @@ export function useDashboardData() {
       const count = result.drafts.length
       pushToast(
         'success',
-        `Staged ${count} source${count === 1 ? '' : 's'}. Review settings before queueing.`,
+        `Staged ${count} source${count === 1 ? '' : 's'}. Review imports is the next step.`,
       )
       await refreshDashboard()
       return result
@@ -503,7 +483,7 @@ export function useDashboardData() {
         ? `${result.reused_track_count} reused`
         : ''
       const queuedMsg = result.queued_run_count
-        ? `${result.queued_run_count} render${result.queued_run_count === 1 ? '' : 's'} queued`
+        ? `${result.queued_run_count} split${result.queued_run_count === 1 ? '' : 's'} queued`
         : 'imported without queueing'
       const parts = [createdMsg, reusedMsg, queuedMsg].filter(Boolean)
       pushToast('success', `Imported: ${parts.join(' · ')}.`)
@@ -522,9 +502,10 @@ export function useDashboardData() {
   async function handleCreateRun(trackId: string, processing: RunProcessingConfigInput) {
     setCreatingRun(true)
     try {
-      await createRun(trackId, processing)
-      pushToast('success', 'Render queued.')
+      const result = await createRun(trackId, processing)
+      pushToast('success', `Queued a split for ${findTrackLabel(trackId)}.`)
       await refreshDashboard()
+      return result
     } catch (error) {
       pushToast('error', getErrorMessage(error))
       throw error
@@ -537,7 +518,7 @@ export function useDashboardData() {
     setCancellingRunId(runId)
     try {
       await cancelRun(runId)
-      pushToast('success', 'Cancellation requested.')
+      pushToast('success', `Cancellation requested for ${findRunTrackLabel(runId)}.`)
       await refreshDashboard()
     } catch (error) {
       pushToast('error', getErrorMessage(error))
@@ -556,6 +537,7 @@ export function useDashboardData() {
         next.delete(runId)
         return next
       })
+      pushToast('success', `Cleared ${findRunTrackLabel(runId)} from queue follow-up.`)
       await refreshDashboard()
     } catch (error) {
       pushToast('error', getErrorMessage(error))
@@ -575,9 +557,9 @@ export function useDashboardData() {
     setRetryingRunId(runId)
     try {
       const result = await retryRun(runId)
-      pushToast('success', 'Retry queued with the same config.')
+      pushToast('success', `Queued another split for ${findRunTrackLabel(runId)} with the same setup.`)
       await refreshDashboard()
-      setSelectedRunId(result.run.id)
+      return result
     } catch (error) {
       pushToast('error', getErrorMessage(error))
       throw error
@@ -590,7 +572,6 @@ export function useDashboardData() {
     setSettingKeeper(true)
     try {
       await setKeeperRun(trackId, runId)
-      if (runId) setCompareRunId(null)
       pushToast('success', runId ? 'Set final version.' : 'Cleared final version.')
       await refreshDashboard()
     } catch (error) {
@@ -665,11 +646,6 @@ export function useDashboardData() {
     }
 
     setPendingPurgeImmediate({ trackId, runIds: new Set(targetRunIds) })
-    if (compareRunId && targetRunIds.includes(compareRunId)) setCompareRunId(null)
-    if (selectedRunIdRef.current && targetRunIds.includes(selectedRunIdRef.current)) {
-      setSelectedRunId(null)
-    }
-
     pushToast(
       'info',
       targetRunIds.length
@@ -830,12 +806,6 @@ export function useDashboardData() {
     const scheduled = [...trackIds]
     setPendingDeleteIdsImmediate(new Set(scheduled))
     setSelectedLibraryIds(new Set())
-    if (selectedTrackIdRef.current && scheduled.includes(selectedTrackIdRef.current)) {
-      setSelectedTrackId(null)
-      setSelectedTrack(null)
-      setSelectedRunId(null)
-      setCompareRunId(null)
-    }
     pushToast(
       'info',
       `Scheduled ${scheduled.length} track${scheduled.length === 1 ? '' : 's'} for deletion.`,
@@ -926,26 +896,80 @@ export function useDashboardData() {
     }
   }
 
-  function handleToggleCompare(runId: string) {
-    setCompareRunId((current) => (current === runId ? null : runId))
+  async function handleBatchRetryQueueRuns(runIds: string[]) {
+    if (!runIds.length) return
+    setBatching(true)
+    try {
+      const results = await Promise.allSettled(runIds.map((id) => retryRun(id)))
+      const failedRunIds = runIds.filter((_, index) => results[index]?.status === 'rejected')
+      const succeededCount = results.filter((result) => result.status === 'fulfilled').length
+      const failedCount = runIds.length - succeededCount
+
+      if (succeededCount === 0) {
+        throw new Error(
+          runIds.length === 1
+            ? 'Could not retry the selected split.'
+            : 'Could not retry any of the selected splits.',
+        )
+      }
+
+      setSelectedQueueRunIds(new Set(failedRunIds))
+      pushToast(
+        failedCount === 0 ? 'success' : 'info',
+        failedCount === 0
+          ? `Queued ${succeededCount} ${succeededCount === 1 ? 'retry' : 'retries'}.`
+          : `Queued ${succeededCount} ${succeededCount === 1 ? 'retry' : 'retries'}; ${failedCount} still need attention.`,
+      )
+      await refreshDashboard()
+    } catch (error) {
+      pushToast('error', getErrorMessage(error))
+      throw error
+    } finally {
+      setBatching(false)
+    }
   }
 
-  function handleSelectTrack(trackId: string | null, preferredRunId: string | null = null) {
-    setSelectedTrackId(trackId)
-    setSelectedTrack((current) => (current?.id === trackId ? current : null))
-    setSelectedRunId(preferredRunId)
-    setCompareRunId(null)
-    void syncSelectedTrackDetail(trackId, {
-      preferredRunId,
-      candidateTrackIds: trackId ? [trackId] : [],
-    })
+  async function handleBatchDismissQueueRuns(runIds: string[]) {
+    if (!runIds.length) return
+    setBatching(true)
+    try {
+      const results = await Promise.allSettled(runIds.map((id) => dismissRun(id)))
+      const dismissedCount = results.filter((result) => result.status === 'fulfilled').length
+      const failedCount = runIds.length - dismissedCount
+
+      if (dismissedCount === 0) {
+        throw new Error(
+          runIds.length === 1
+            ? 'Could not dismiss the selected split.'
+            : 'Could not dismiss any of the selected splits.',
+        )
+      }
+
+      setSelectedQueueRunIds((current) => {
+        const next = new Set(current)
+        for (const id of runIds) next.delete(id)
+        return next
+      })
+      pushToast(
+        failedCount === 0 ? 'success' : 'info',
+        failedCount === 0
+          ? `Dismissed ${dismissedCount} follow-up item${dismissedCount === 1 ? '' : 's'}.`
+          : `Dismissed ${dismissedCount} follow-up item${dismissedCount === 1 ? '' : 's'}; ${failedCount} could not be dismissed.`,
+      )
+      await refreshDashboard()
+    } catch (error) {
+      pushToast('error', getErrorMessage(error))
+      throw error
+    } finally {
+      setBatching(false)
+    }
   }
 
   async function handleSaveSettings(payload: Omit<Settings, 'profiles'>) {
     setSavingSettings(true)
     try {
       await updateSettings(payload)
-      pushToast('success', 'Preferences saved.')
+      pushToast('success', 'Settings saved.')
       await refreshDashboard()
     } catch (error) {
       pushToast('error', getErrorMessage(error))
@@ -1065,8 +1089,6 @@ export function useDashboardData() {
     queueRuns,
     cachedModels,
     selectedTrack: visibleSelectedTrack,
-    selectedTrackId,
-    selectedRunId,
     selectedLibraryIds,
     selectedQueueRunIds,
     toggleLibrarySelected,
@@ -1087,14 +1109,12 @@ export function useDashboardData() {
     cleaningTempStorage,
     cleaningExportBundles,
     cleaningLibraryRuns,
-    compareRunId,
     settingKeeper,
     backfillingMetrics,
     savingNoteRunId,
     savingMixRunId,
     updatingTrack,
     batching,
-    setSelectedRunId,
     handleResolveYouTube,
     handleResolveLocalImport,
     handleUpdateDraft,
@@ -1116,14 +1136,14 @@ export function useDashboardData() {
     handleSaveMix,
     handleUpdateTrack,
     handleDeleteTrack,
-    handleToggleCompare,
-    handleSelectTrack,
     handleBatchQueueRuns,
     handleBatchApplyArtist,
     handleBatchDeleteTracks,
     handleBatchCancelTrackRuns,
     handleBatchPurgeNonKeepers,
     handleBatchCancelQueueRuns,
+    handleBatchRetryQueueRuns,
+    handleBatchDismissQueueRuns,
   }
 }
 

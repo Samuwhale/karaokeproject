@@ -43,23 +43,23 @@ export const LIBRARY_FILTERS: LibraryFilterMeta[] = [
   },
   {
     value: 'needs-attention',
-    label: 'Needs retry',
-    description: 'Splits that failed or were cancelled and need a retry or a different setup.',
+    label: 'Retry split',
+    description: 'The latest split failed or was cancelled and needs another attempt.',
   },
   {
     value: 'ready-to-render',
-    label: 'Ready to split',
-    description: 'Imported songs that have not been split yet.',
+    label: 'Needs split',
+    description: 'Imported songs with no split yet.',
   },
   {
     value: 'ready',
-    label: 'Review result',
-    description: 'Completed splits that still need a final choice.',
+    label: 'Needs final choice',
+    description: 'Completed splits that are ready to compare, mix, and choose from.',
   },
   {
     value: 'final',
-    label: 'Final version',
-    description: 'Songs with a chosen result ready to export again any time.',
+    label: 'Final saved',
+    description: 'Songs with a chosen version ready to export again any time.',
   },
 ]
 
@@ -73,7 +73,7 @@ export function trackStageSummary(track: TrackSummary): LibraryStageSummary {
   if (track.keeper_run_id) {
     return {
       key: 'final',
-      label: 'Final version',
+      label: 'Final saved',
       detail: track.has_custom_mix
         ? 'A final version is chosen and a custom mix is saved.'
         : 'A final version is chosen and ready to export again any time.',
@@ -84,8 +84,8 @@ export function trackStageSummary(track: TrackSummary): LibraryStageSummary {
   if (latestStatus === 'failed' || latestStatus === 'cancelled') {
     return {
       key: 'needs-attention',
-      label: 'Needs retry',
-      detail: 'The latest split needs a retry or a different setup before this song is usable.',
+      label: 'Retry split',
+      detail: 'The latest split failed. Retry it or choose a different setup.',
       toneClassName: 'track-card-stage-attention',
     }
   }
@@ -102,18 +102,18 @@ export function trackStageSummary(track: TrackSummary): LibraryStageSummary {
   if (latestStatus === 'completed') {
     return {
       key: 'ready',
-      label: 'Review result',
+      label: 'Needs final choice',
       detail: track.has_custom_mix
-        ? 'Custom mix saved. Choose the final version or export it.'
-        : 'The split is usable. Review it, compare it, then choose the final version.',
+        ? 'A custom mix is saved. Decide whether this split is the final version.'
+        : 'The split is usable. Review it, compare it, and choose the final version.',
       toneClassName: 'track-card-stage-ready',
     }
   }
 
   return {
     key: 'ready-to-render',
-    label: 'Ready to split',
-    detail: 'Import is done. Start the first split when you are ready.',
+    label: 'Needs split',
+    detail: 'Import is done. Queue the first split when you are ready.',
     toneClassName: 'track-card-stage-pending',
   }
 }

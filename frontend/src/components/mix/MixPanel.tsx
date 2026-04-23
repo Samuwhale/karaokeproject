@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { RunArtifact, RunDetail, RunMixStemEntry } from '../../types'
 import { MIX_GAIN_DB_MAX, MIX_GAIN_DB_MIN } from '../../types'
-import { compareStemKinds, isStemKind, stemNameFromKind } from '../../stems'
+import { compareStemKinds, isStemKind } from '../../stems'
 import { Spinner } from '../feedback/Spinner'
 import { MixScrubber } from './MixScrubber'
 import { useStemMixer } from './useStemMixer'
@@ -22,10 +22,9 @@ type StemRow = {
   soloed: boolean
 }
 
+type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'failed'
+
 const SAVE_DEBOUNCE_MS = 400
-// Instrumental first so the default scrubber peaks match what a two-stem run
-// used to show; then vocals, then every other canonical stem by display order.
-const SCRUBBER_REFERENCE_STEMS = ['instrumental', 'vocals', 'drums', 'bass', 'other']
 
 function mixableArtifacts(run: RunDetail): RunArtifact[] {
   return run.artifacts
@@ -35,15 +34,6 @@ function mixableArtifacts(run: RunDetail): RunArtifact[] {
       if (kindOrder !== 0) return kindOrder
       return a.label.localeCompare(b.label)
     })
-}
-
-function referenceArtifact(run: RunDetail): RunArtifact | null {
-  const mixable = mixableArtifacts(run)
-  for (const stemName of SCRUBBER_REFERENCE_STEMS) {
-    const found = mixable.find((artifact) => stemNameFromKind(artifact.kind) === stemName)
-    if (found) return found
-  }
-  return mixable[0] ?? null
 }
 
 function initialStems(run: RunDetail): StemRow[] {
@@ -94,6 +84,10 @@ function formatTime(seconds: number) {
 export function MixPanel({ run, onSave, saving }: MixPanelProps) {
   const [stems, setStems] = useState<StemRow[]>(() => initialStems(run))
   const saveTimerRef = useRef<number | null>(null)
+  const latestSaveIdRef = useRef(0)
+  const [retryPayload, setRetryPayload] = useState<RunMixStemEntry[] | null>(null)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     return () => {
@@ -116,31 +110,51 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
     [stems],
   )
   const mixer = useStemMixer(mixerStems)
+  const overviewPeaks = useMemo(
+    () =>
+      mixableArtifacts(run).find((artifact) => (artifact.metrics?.peaks?.length ?? 0) > 0)?.metrics?.peaks ?? [],
+    [run],
+  )
 
-  const referencePeaks = useMemo(() => {
-    const ref = referenceArtifact(run)
-    return ref?.metrics?.peaks ?? []
-  }, [run])
+  async function persistMix(payload: RunMixStemEntry[]) {
+    const saveId = ++latestSaveIdRef.current
+    setRetryPayload(payload)
+    setSaveState('saving')
+    setSaveError(null)
+
+    try {
+      await onSave(payload)
+      if (latestSaveIdRef.current !== saveId) return
+      setRetryPayload(null)
+      setSaveState('saved')
+    } catch (error) {
+      if (latestSaveIdRef.current !== saveId) return
+      setRetryPayload(payload)
+      setSaveState('failed')
+      setSaveError(error instanceof Error ? error.message : 'Could not save mix changes.')
+    }
+  }
 
   function scheduleSave(next: StemRow[]) {
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
+    const payload: RunMixStemEntry[] = next.map((stem) => ({
+      artifact_id: stem.artifact_id,
+      gain_db: Math.round(stem.gain_db * 10) / 10,
+      muted: stem.muted,
+    }))
+    setRetryPayload(payload)
+    setSaveState('pending')
+    setSaveError(null)
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null
-      const payload: RunMixStemEntry[] = next.map((stem) => ({
-        artifact_id: stem.artifact_id,
-        gain_db: Math.round(stem.gain_db * 10) / 10,
-        muted: stem.muted,
-      }))
-      void onSave(payload).catch(() => undefined)
+      void persistMix(payload)
     }, SAVE_DEBOUNCE_MS)
   }
 
   function updateStem(index: number, patch: Partial<StemRow>) {
     setStems((current) => {
       const next = current.map((stem, i) => (i === index ? { ...stem, ...patch } : stem))
-      // Save when gain or muted change; soloing is UI-only
-      const persistedChanged =
-        patch.gain_db !== undefined || patch.muted !== undefined
+      const persistedChanged = patch.gain_db !== undefined || patch.muted !== undefined
       if (persistedChanged) scheduleSave(next)
       return next
     })
@@ -158,29 +172,62 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
   }
 
   const playDisabled = mixer.loadState !== 'ready'
+  const anySoloed = stems.some((stem) => stem.soloed)
 
   return (
     <section className="mix-panel">
       <header className="mix-panel-head">
         <div className="mix-panel-head-copy">
-          <h3 className="subsection-head">Stem mixer</h3>
+          <h3 className="subsection-head">Stem Mixer</h3>
           <p className="mix-panel-copy">
-            Fine-tune individual stems for the selected split. Changes save automatically.
+            Keep the first pass simple: solo to inspect, mute to remove, and move gain only when the balance needs it.
           </p>
         </div>
         <div className="mix-panel-head-actions">
           <span className="mix-panel-status">
-            {saving ? (
+            {saving || saveState === 'saving' ? (
               <>
                 <Spinner /> Saving changes…
               </>
-            ) : dirty ? (
+            ) : saveState === 'failed' ? (
+              'Save failed'
+            ) : saveState === 'pending' || dirty ? (
               'Changes pending'
             ) : showsDefault ? (
               'Default balance'
             ) : (
-              'Saved'
+              'Saved balance'
             )}
+          </span>
+          {saveState === 'failed' && retryPayload ? (
+            <button type="button" className="button-secondary" onClick={() => void persistMix(retryPayload)}>
+              Retry save
+            </button>
+          ) : null}
+        </div>
+      </header>
+
+      <div className="mix-transport">
+        <div className="mix-transport-controls">
+          <button
+            type="button"
+            className="button-primary mix-transport-play"
+            onClick={handleTogglePlay}
+            disabled={playDisabled}
+            aria-label={mixer.isPlaying ? 'Pause preview' : 'Play preview'}
+          >
+            {mixer.loadState === 'loading' ? (
+              <>
+                <Spinner /> Loading
+              </>
+            ) : mixer.isPlaying ? (
+              'Pause'
+            ) : (
+              'Play'
+            )}
+          </button>
+          <span className="mix-transport-time">
+            {formatTime(mixer.currentTime)} / {formatTime(mixer.duration)}
           </span>
           <button
             type="button"
@@ -191,90 +238,79 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
             Reset
           </button>
         </div>
-      </header>
-
-      <div className="mix-transport">
-        <button
-          type="button"
-          className="button-primary mix-transport-play"
-          onClick={handleTogglePlay}
-          disabled={playDisabled}
-          aria-label={mixer.isPlaying ? 'Pause preview' : 'Play preview'}
-        >
-          {mixer.loadState === 'loading' ? (
-            <><Spinner /> Loading</>
-          ) : mixer.isPlaying ? (
-            'Pause'
-          ) : (
-            'Play'
-          )}
-        </button>
         <MixScrubber
-          peaks={referencePeaks}
+          peaks={overviewPeaks}
           currentTime={mixer.currentTime}
           duration={mixer.duration}
           onSeek={mixer.seek}
           disabled={playDisabled || mixer.duration === 0}
         />
-        <span className="mix-transport-time">
-          {formatTime(mixer.currentTime)} / {formatTime(mixer.duration)}
-        </span>
       </div>
 
+      {saveError ? <p className="mix-error">{saveError}</p> : null}
       {mixer.error ? <p className="mix-error">{mixer.error}</p> : null}
       <p className="mix-panel-hint">
-        Use Mute and Solo to audition stems. Double-click any slider to reset it.
+        Double-click a gain slider to return that stem to unity. Solo affects preview only and is never saved.
       </p>
 
-      <ul className="mix-stems">
+      <div className="mix-track-list" role="group" aria-label="Stem mixer">
         {stems.map((stem, index) => {
-          const anySoloed = stems.some((other) => other.soloed)
           const silenced = stem.muted || (anySoloed && !stem.soloed)
+
           return (
-            <li
+            <section
               key={stem.artifact_id}
-              className={`mix-stem-row ${silenced ? 'mix-stem-silenced' : ''}`}
+              className={`mix-track-row ${silenced ? 'mix-track-row-silenced' : ''}`}
             >
-              <div className="mix-stem-label">
-                <strong>{stem.label}</strong>
-                <span>{formatGain(stem.gain_db)}</span>
+              <div className="mix-track-row-head">
+                <div className="mix-track-row-label">
+                  <strong>{stem.label}</strong>
+                  <span>{stem.muted ? 'Muted' : stem.soloed ? 'Soloed' : 'Live'}</span>
+                </div>
+                <div className="mix-track-row-actions">
+                  <button
+                    type="button"
+                    className={`mix-stem-toggle ${stem.muted ? 'active' : ''}`}
+                    onClick={() => updateStem(index, { muted: !stem.muted })}
+                    aria-pressed={stem.muted}
+                    title={stem.muted ? 'Unmute' : 'Mute'}
+                  >
+                    M
+                  </button>
+                  <button
+                    type="button"
+                    className={`mix-stem-toggle ${stem.soloed ? 'active' : ''}`}
+                    onClick={() => updateStem(index, { soloed: !stem.soloed })}
+                    aria-pressed={stem.soloed}
+                    title={stem.soloed ? 'Unsolo' : 'Solo'}
+                  >
+                    S
+                  </button>
+                </div>
               </div>
-              <input
-                type="range"
-                min={MIX_GAIN_DB_MIN}
-                max={MIX_GAIN_DB_MAX}
-                step={0.5}
-                value={stem.gain_db}
-                onChange={(event) => updateStem(index, { gain_db: Number(event.target.value) })}
-                onDoubleClick={() => updateStem(index, { gain_db: 0 })}
-                className="mix-stem-gain"
-                aria-label={`${stem.label} gain`}
-              />
-              <div className="mix-stem-toggles">
-                <button
-                  type="button"
-                  className={`mix-stem-toggle ${stem.muted ? 'active' : ''}`}
-                  onClick={() => updateStem(index, { muted: !stem.muted })}
-                  aria-pressed={stem.muted}
-                  title={stem.muted ? 'Unmute' : 'Mute'}
-                >
-                  Mute
-                </button>
-                <button
-                  type="button"
-                  className={`mix-stem-toggle ${stem.soloed ? 'active' : ''}`}
-                  onClick={() => updateStem(index, { soloed: !stem.soloed })}
-                  aria-pressed={stem.soloed}
-                  title={stem.soloed ? 'Unsolo' : 'Solo'}
-                >
-                  Solo
-                </button>
+
+              <div className="mix-track-row-body">
+                <span className="mix-track-row-scale">{MIX_GAIN_DB_MIN} dB</span>
+                <label className="mix-track-row-slider">
+                  <input
+                    type="range"
+                    min={MIX_GAIN_DB_MIN}
+                    max={MIX_GAIN_DB_MAX}
+                    step={0.5}
+                    value={stem.gain_db}
+                    onChange={(event) => updateStem(index, { gain_db: Number(event.target.value) })}
+                    onDoubleClick={() => updateStem(index, { gain_db: 0 })}
+                    className="mix-track-row-gain"
+                    aria-label={`${stem.label} gain`}
+                  />
+                </label>
+                <span className="mix-track-row-scale">{MIX_GAIN_DB_MAX} dB</span>
+                <strong className="mix-track-row-value">{formatGain(stem.gain_db)}</strong>
               </div>
-            </li>
+            </section>
           )
         })}
-      </ul>
-
+      </div>
     </section>
   )
 }

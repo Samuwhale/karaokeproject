@@ -14,6 +14,10 @@ type CompareViewProps = {
   runA: RunDetail
   runB: RunDetail
   metricsReady: boolean
+  currentIsFinal?: boolean
+  comparedIsFinal?: boolean
+  onUseCurrent?: () => void
+  onUseCompared?: () => void
 }
 
 // Prefer the canonical whole-run mix render, then stems shared between both
@@ -106,6 +110,10 @@ export function CompareView({
   runA,
   runB,
   metricsReady,
+  currentIsFinal = false,
+  comparedIsFinal = false,
+  onUseCurrent,
+  onUseCompared,
 }: CompareViewProps) {
   const matched = matchedMetrics(runA, runB)
   const metricsA = matched?.metricsA ?? null
@@ -126,10 +134,36 @@ export function CompareView({
 
       <div className="compare-pick">
         <div className="compare-pick-cell">
-          <span>Current · {runA.processing.profile_label}</span>
+          <span>
+            Current · {runA.processing.profile_label}
+            {currentIsFinal ? ' · Final saved' : ''}
+          </span>
+          {onUseCurrent ? (
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={currentIsFinal}
+              onClick={onUseCurrent}
+            >
+              {currentIsFinal ? 'Final version selected' : 'Use current as final'}
+            </button>
+          ) : null}
         </div>
         <div className="compare-pick-cell">
-          <span>Compare with · {runB.processing.profile_label}</span>
+          <span>
+            Compare with · {runB.processing.profile_label}
+            {comparedIsFinal ? ' · Final saved' : ''}
+          </span>
+          {onUseCompared ? (
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={comparedIsFinal}
+              onClick={onUseCompared}
+            >
+              {comparedIsFinal ? 'Final version selected' : 'Use compared split as final'}
+            </button>
+          ) : null}
         </div>
       </div>
 
