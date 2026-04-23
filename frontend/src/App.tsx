@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation, useMatch, useNavigate } from 'react-router-dom'
 
 import './App.css'
+import './redesign.css'
 import { ApplyArtistPrompt, BatchActionBar, OverflowMenu } from './components/BatchActionBar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ExportModal, type ExportPreset } from './components/ExportModal'
@@ -61,7 +62,6 @@ function App() {
     toggleLibrarySelected,
     toggleQueueRunSelected,
     clearSelection,
-    selectAll,
     toasts,
     dismissToast,
     pushToast,
@@ -166,9 +166,14 @@ function App() {
     if (options?.runStatus) {
       if (isActiveRunStatus(options.runStatus)) return 'versions' as const
       if (options.runStatus === 'failed' || options.runStatus === 'cancelled') return 'versions' as const
+      if (options.runStatus === 'completed') return 'mix' as const
     }
 
     if (track.keeper_run_id && (!options?.runId || track.keeper_run_id === options.runId)) {
+      return 'mix' as const
+    }
+
+    if (track.latest_run?.status === 'completed') {
       return 'mix' as const
     }
 
@@ -461,14 +466,29 @@ function App() {
         },
       )
     : null
-  const suiteMainClassName = `suite-main ${studioActive && studioTab === 'mix' ? 'suite-main-fixed-workspace' : ''}`
+  const mixWorkspaceActive = studioActive && studioTab === 'mix'
+  const shellTitle = libraryActive
+    ? 'Songs'
+    : queueActive
+      ? 'Queue'
+      : selectedTrack?.title ?? 'Studio'
+  const shellMeta = libraryActive
+    ? `${tracks.length} song${tracks.length === 1 ? '' : 's'} ready to revisit, split, or mix`
+    : queueActive
+      ? `${drafts.length} staged · ${queueRuns.length} job${queueRuns.length === 1 ? '' : 's'} in flight or review`
+      : studioActive
+        ? studioTab === 'mix'
+          ? 'Focused mix workspace'
+          : 'Version review and split planning'
+        : 'Stem splitter'
+  const suiteMainClassName = `suite-main ${mixWorkspaceActive ? 'suite-main-fixed-workspace' : ''}`
   return (
     <ErrorBoundary>
       <div className="app-shell">
         <aside className="shell-rail" inert={anyDialogOpen || undefined}>
           <div className="shell-rail-brand">
             <strong>Studio</strong>
-            <span>Stem Splitter</span>
+            <span>Karaoke project</span>
           </div>
 
           <nav className="shell-rail-nav" aria-label="Primary navigation">
@@ -478,7 +498,7 @@ function App() {
             </NavLink>
             <NavLink to="/queue" className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}>
               <QueueIcon />
-              <span>Queue</span>
+              <span>Processing</span>
             </NavLink>
             {studioLandingPath ? (
               <NavLink
@@ -511,57 +531,60 @@ function App() {
           </div>
         </aside>
 
-        <div className="shell-canvas">
-          <header className="shell-topbar" inert={anyDialogOpen || undefined}>
-            <div className="shell-topbar-main">
-              <div className="shell-topbar-copy">
-                <strong>Studio</strong>
-              </div>
-              <nav className="shell-topbar-nav" aria-label="Workspace sections">
-                <NavLink
-                  to="/library"
-                  className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}
-                >
-                  Library
-                </NavLink>
-                <NavLink
-                  to="/queue"
-                  className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}
-                >
-                  Queue
-                </NavLink>
-                {studioLandingPath ? (
+        <div className={`shell-canvas ${mixWorkspaceActive ? 'shell-canvas-focus-mode' : ''}`}>
+          {!mixWorkspaceActive ? (
+            <header className="shell-topbar" inert={anyDialogOpen || undefined}>
+              <div className="shell-topbar-main">
+                <div className="shell-topbar-copy">
+                  <strong>{shellTitle}</strong>
+                  <span>{shellMeta}</span>
+                </div>
+                <nav className="shell-topbar-nav" aria-label="Workspace sections">
                   <NavLink
-                    to={studioActive ? location.pathname + location.search : studioLandingPath}
+                    to="/library"
                     className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}
                   >
-                    Studio
+                    Songs
                   </NavLink>
-                ) : (
-                  <span className="topbar-nav-link topbar-nav-link-disabled">Studio</span>
-                )}
-              </nav>
-            </div>
-            <div className="shell-topbar-meta">
-              <StatusChip
-                connection={connection}
-                setupRequired={setupRequired}
-                onOpenSettings={() => openSettings('maintenance')}
-              />
-              <button
-                type="button"
-                className="topbar-gear"
-                onClick={() => openSettings('preferences')}
-                aria-label="Open settings"
-                title="Settings (⌘,)"
-              >
-                <GearIcon />
-              </button>
-              <span className="shell-avatar" aria-hidden>
-                S
-              </span>
-            </div>
-          </header>
+                  <NavLink
+                    to="/queue"
+                    className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}
+                  >
+                    Queue
+                  </NavLink>
+                  {studioLandingPath ? (
+                    <NavLink
+                      to={studioActive ? location.pathname + location.search : studioLandingPath}
+                      className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}
+                    >
+                      Studio
+                    </NavLink>
+                  ) : (
+                    <span className="topbar-nav-link topbar-nav-link-disabled">Studio</span>
+                  )}
+                </nav>
+              </div>
+              <div className="shell-topbar-meta">
+                <StatusChip
+                  connection={connection}
+                  setupRequired={setupRequired}
+                  onOpenSettings={() => openSettings('maintenance')}
+                />
+                <button
+                  type="button"
+                  className="topbar-gear"
+                  onClick={() => openSettings('preferences')}
+                  aria-label="Open settings"
+                  title="Settings (⌘,)"
+                >
+                  <GearIcon />
+                </button>
+                <span className="shell-avatar" aria-hidden>
+                  S
+                </span>
+              </div>
+            </header>
+          ) : null}
 
           <main className={suiteMainClassName} inert={anyDialogOpen || undefined}>
             <Routes>
@@ -588,13 +611,6 @@ function App() {
                       if (selectedQueueRunIds.size > 0) clearSelection('queue')
                       toggleLibrarySelected(trackId)
                     }}
-                    onSelectAll={(ids) => {
-                      if (selectedQueueRunIds.size > 0) clearSelection('queue')
-                      selectAll('library', ids)
-                    }}
-                    onClearSelection={() => {
-                      clearSelection('library')
-                    }}
                     onOpenTrack={(track) => openTrackWorkspace(track)}
                     onAddSongs={() => setImportOpen(true)}
                   />
@@ -619,13 +635,6 @@ function App() {
                       }
                       toggleQueueRunSelected(runId)
                     }}
-                    onSelectAllQueue={(ids) => {
-                      if (selectedLibraryIds.size > 0) {
-                        clearSelection('library')
-                      }
-                      selectAll('queue', ids)
-                    }}
-                    onClearQueueSelection={() => clearSelection('queue')}
                     onSelectRun={(trackId, runId) => {
                       const track = tracks.find((entry) => entry.id === trackId)
                       if (!track) {

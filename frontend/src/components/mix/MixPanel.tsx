@@ -76,9 +76,24 @@ function formatGain(db: number) {
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds <= 0) return '0:00'
   const total = Math.round(seconds)
-  const m = Math.floor(total / 60)
-  const s = (total % 60).toString().padStart(2, '0')
-  return `${m}:${s}`
+  const minutes = Math.floor(total / 60)
+  const remaining = (total % 60).toString().padStart(2, '0')
+  return `${minutes}:${remaining}`
+}
+
+function stripTone(label: string) {
+  switch (label.toLowerCase()) {
+    case 'vocals':
+      return 'Lead'
+    case 'drums':
+      return 'Rhythm'
+    case 'bass':
+      return 'Low end'
+    case 'other':
+      return 'Texture'
+    default:
+      return 'Stem'
+  }
 }
 
 export function MixPanel({ run, onSave, saving }: MixPanelProps) {
@@ -173,46 +188,64 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
 
   const playDisabled = mixer.loadState !== 'ready'
   const anySoloed = stems.some((stem) => stem.soloed)
+  const statusLabel =
+    saving || saveState === 'saving'
+      ? 'Saving changes…'
+      : saveState === 'failed'
+        ? 'Save failed'
+        : saveState === 'pending' || dirty
+          ? 'Changes pending'
+          : showsDefault
+            ? 'Default balance'
+            : 'Custom balance saved'
 
   return (
-    <section className="mix-panel">
-      <header className="mix-panel-topbar">
-          <div className="mix-panel-session">
-            <div className="mix-panel-head-copy">
-              <h3 className="subsection-head">Mixer</h3>
-              <p className="mix-panel-copy">
-                Preview the current version, then shape each stem. Double-click any fader to reset it to unity.
-              </p>
-            </div>
-          <div className="mix-panel-head-actions">
-            <span className="mix-panel-status">
-              {saving || saveState === 'saving' ? (
-                <>
-                  <Spinner /> Saving changes…
-                </>
-              ) : saveState === 'failed' ? (
-                'Save failed'
-              ) : saveState === 'pending' || dirty ? (
-                'Changes pending'
-              ) : showsDefault ? (
-                'Default balance'
-              ) : (
-                'Custom balance saved'
-              )}
-            </span>
-            {saveState === 'failed' && retryPayload ? (
-              <button type="button" className="button-secondary" onClick={() => void persistMix(retryPayload)}>
-                Retry save
-              </button>
-            ) : null}
-          </div>
+    <section className="kp-mix-panel">
+      <header className="kp-mix-header">
+        <div className="kp-mix-header-copy">
+          <h2>Mix workspace</h2>
+          <p>Balance stems live, keep the arrangement intact, and save the result automatically as you work.</p>
         </div>
+        <div className="kp-mix-header-actions">
+          <span className="kp-mix-status">
+            {saving || saveState === 'saving' ? (
+              <>
+                <Spinner /> {statusLabel}
+              </>
+            ) : (
+              statusLabel
+            )}
+          </span>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={handleReset}
+            disabled={showsDefault && stems.every((stem) => !stem.soloed)}
+          >
+            Reset balance
+          </button>
+          {saveState === 'failed' && retryPayload ? (
+            <button type="button" className="button-secondary" onClick={() => void persistMix(retryPayload)}>
+              Retry save
+            </button>
+          ) : null}
+        </div>
+      </header>
 
-        <div className="mix-transport">
-          <div className="mix-transport-controls">
+      <section className="kp-mix-transport">
+        <div className="kp-mix-transport-main">
+          <div className="kp-mix-transport-controls">
             <button
               type="button"
-              className="button-primary mix-transport-play"
+              className="button-secondary"
+              onClick={handleReset}
+              disabled={showsDefault && stems.every((stem) => !stem.soloed)}
+            >
+              Recenter
+            </button>
+            <button
+              type="button"
+              className="button-primary kp-mix-play"
               onClick={handleTogglePlay}
               disabled={playDisabled}
               aria-label={mixer.isPlaying ? 'Pause preview' : 'Play preview'}
@@ -227,50 +260,43 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                 'Play'
               )}
             </button>
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={handleReset}
-              disabled={showsDefault && stems.every((stem) => !stem.soloed)}
-            >
-              Reset
-            </button>
-            <span className="mix-transport-time">
-              {formatTime(mixer.currentTime)} / {formatTime(mixer.duration)}
-            </span>
           </div>
-          <MixScrubber
-            peaks={overviewPeaks}
-            currentTime={mixer.currentTime}
-            duration={mixer.duration}
-            onSeek={mixer.seek}
-            disabled={playDisabled || mixer.duration === 0}
-          />
+
+          <div className="kp-mix-clock">
+            <strong>{formatTime(mixer.currentTime)}</strong>
+            <span>{formatTime(mixer.duration)}</span>
+          </div>
         </div>
-      </header>
 
-      {saveError ? <p className="mix-error">{saveError}</p> : null}
-      {mixer.error ? <p className="mix-error">{mixer.error}</p> : null}
+        <MixScrubber
+          peaks={overviewPeaks}
+          currentTime={mixer.currentTime}
+          duration={mixer.duration}
+          onSeek={mixer.seek}
+          disabled={playDisabled || mixer.duration === 0}
+        />
+      </section>
 
-      <div className="mix-strip-bank" role="group" aria-label="Stem mixer">
+      {saveError ? <p className="kp-inline-error">{saveError}</p> : null}
+      {mixer.error ? <p className="kp-inline-error">{mixer.error}</p> : null}
+
+      <div className="kp-strip-bank" role="group" aria-label="Stem mixer">
         {stems.map((stem, index) => {
           const silenced = stem.muted || (anySoloed && !stem.soloed)
 
           return (
             <section
               key={stem.artifact_id}
-              className={`mix-strip ${silenced ? 'mix-strip-silenced' : ''}`}
+              className={`kp-strip ${silenced ? 'kp-strip-muted' : ''}`}
             >
-              <div className="mix-strip-head">
-                <div className="mix-strip-label">
-                  <strong>{stem.label}</strong>
-                  <span>{stem.muted ? 'Muted' : stem.soloed ? 'Listening' : 'In mix'}</span>
-                </div>
-              </div>
+              <header className="kp-strip-head">
+                <strong>{stem.label}</strong>
+                <span>{stripTone(stem.label)}</span>
+              </header>
 
-              <div className="mix-strip-body">
-                <span className="mix-strip-scale">{MIX_GAIN_DB_MAX} dB</span>
-                <label className="mix-strip-fader">
+              <div className="kp-strip-body">
+                <span>{MIX_GAIN_DB_MAX} dB</span>
+                <label className="kp-strip-fader">
                   <input
                     type="range"
                     min={MIX_GAIN_DB_MIN}
@@ -279,36 +305,34 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                     value={stem.gain_db}
                     onChange={(event) => updateStem(index, { gain_db: Number(event.target.value) })}
                     onDoubleClick={() => updateStem(index, { gain_db: 0 })}
-                    className="mix-strip-gain"
+                    className="kp-strip-slider"
                     aria-label={`${stem.label} gain`}
                   />
                 </label>
-                <span className="mix-strip-scale">{MIX_GAIN_DB_MIN} dB</span>
-                <strong className="mix-strip-state">{formatGain(stem.gain_db)}</strong>
+                <span>{MIX_GAIN_DB_MIN} dB</span>
               </div>
 
-              <div className="mix-strip-actions">
-                <div className="mix-track-row-actions">
+              <footer className="kp-strip-footer">
+                <strong>{formatGain(stem.gain_db)}</strong>
+                <div className="kp-strip-actions">
                   <button
                     type="button"
-                    className={`mix-stem-toggle ${stem.muted ? 'active' : ''}`}
+                    className={stem.muted ? 'kp-strip-toggle kp-strip-toggle-active' : 'kp-strip-toggle'}
                     onClick={() => updateStem(index, { muted: !stem.muted })}
                     aria-pressed={stem.muted}
-                    title={stem.muted ? 'Unmute' : 'Mute'}
                   >
                     Mute
                   </button>
                   <button
                     type="button"
-                    className={`mix-stem-toggle ${stem.soloed ? 'active' : ''}`}
+                    className={stem.soloed ? 'kp-strip-toggle kp-strip-toggle-active' : 'kp-strip-toggle'}
                     onClick={() => updateStem(index, { soloed: !stem.soloed })}
                     aria-pressed={stem.soloed}
-                    title={stem.soloed ? 'Stop soloing' : 'Solo this stem'}
                   >
                     Solo
                   </button>
                 </div>
-              </div>
+              </footer>
             </section>
           )
         })}

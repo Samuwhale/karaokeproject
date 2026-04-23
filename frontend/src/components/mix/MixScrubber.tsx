@@ -81,7 +81,7 @@ export function MixScrubber({
   return (
     <svg
       ref={svgRef}
-      className={`mix-scrubber ${disabled ? 'mix-scrubber-disabled' : ''}`}
+      className={`kp-scrubber ${disabled ? 'kp-scrubber-disabled' : ''}`}
       viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
       preserveAspectRatio="none"
       role="slider"
@@ -98,13 +98,13 @@ export function MixScrubber({
       onKeyDown={handleKeyDown}
     >
       {barCount === 0 ? (
-        <rect
-          x={0}
-          y={MID - 1}
-          width={VIEW_WIDTH}
-          height={2}
-          className="mix-scrubber-baseline"
-        />
+          <rect
+            x={0}
+            y={MID - 1}
+            width={VIEW_WIDTH}
+            height={2}
+            className="kp-scrubber-baseline"
+          />
       ) : (
         peaks.map((peak, index) => {
           const x = index * barWidth
@@ -118,7 +118,7 @@ export function MixScrubber({
               y={MID - half}
               width={Math.max(1, barWidth - 1)}
               height={half * 2}
-              className={past ? 'mix-scrubber-bar mix-scrubber-bar-past' : 'mix-scrubber-bar'}
+              className={past ? 'kp-scrubber-bar kp-scrubber-bar-past' : 'kp-scrubber-bar'}
             />
           )
         })
@@ -128,7 +128,7 @@ export function MixScrubber({
         x2={progress * VIEW_WIDTH}
         y1={0}
         y2={VIEW_HEIGHT}
-        className="mix-scrubber-cursor"
+        className="kp-scrubber-cursor"
       />
     </svg>
   )

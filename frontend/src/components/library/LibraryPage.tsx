@@ -1,6 +1,4 @@
-import { ProgressBar } from '../feedback/ProgressBar'
 import { Skeleton } from '../feedback/Skeleton'
-import { isActiveRunStatus } from '../runStatus'
 import {
   LIBRARY_FILTERS,
   type LibraryFilter,
@@ -14,7 +12,7 @@ const SORT_OPTIONS: { value: LibrarySort; label: string }[] = [
   { value: 'recent', label: 'Recently updated' },
   { value: 'created', label: 'Recently imported' },
   { value: 'title', label: 'Title A-Z' },
-  { value: 'runs', label: 'Most runs' },
+  { value: 'runs', label: 'Most versions' },
 ]
 
 type LibraryPageProps = {
@@ -33,8 +31,6 @@ type LibraryPageProps = {
   onViewChange: (view: LibraryView) => void
   onOpenQueue: () => void
   onToggleSelect: (trackId: string) => void
-  onSelectAll: (ids: string[]) => void
-  onClearSelection: () => void
   onOpenTrack: (track: TrackSummary) => void
   onAddSongs: () => void
 }
@@ -49,12 +45,11 @@ function formatDuration(seconds: number | null) {
 
 function artistLine(track: TrackSummary) {
   if (track.artist) return track.artist
-  return `(from ${track.source_filename})`
+  return 'Unknown artist'
 }
 
 function sourceLabel(track: TrackSummary) {
-  if (track.source_type === 'youtube') return 'YouTube link'
-  return 'Local file'
+  return track.source_type === 'youtube' ? 'YouTube' : 'Local file'
 }
 
 function emptyMessage(filter: LibraryFilter) {
@@ -62,25 +57,33 @@ function emptyMessage(filter: LibraryFilter) {
     case 'processing':
       return 'Nothing is waiting on import or split work right now.'
     case 'ready':
-      return 'Nothing is ready for version review or mixing right now.'
+      return 'Nothing is ready for the mixer right now.'
     default:
       return 'No songs match this search.'
   }
 }
 
-function trackActionLabel(track: TrackSummary) {
-  switch (trackStageSummary(track).key) {
+function nextActionLabel(track: TrackSummary) {
+  const stage = trackStageSummary(track)
+
+  switch (stage.key) {
     case 'rendering':
-      return 'Open queue'
+      return 'Watch queue'
     case 'needs-attention':
-      return 'Review version'
+      return 'Fix split'
     case 'ready':
-      return 'Choose version'
-    case 'final':
       return 'Open mix'
+    case 'final':
+      return 'Resume mix'
     default:
-      return 'Queue split'
+      return 'Start split'
   }
+}
+
+function libraryHeadline(totalCount: number, readyCount: number) {
+  if (totalCount === 0) return 'Build a clean library first, then move straight into the mixer.'
+  if (readyCount === 0) return 'Everything here still needs import review or a split.'
+  return `${readyCount} song${readyCount === 1 ? '' : 's'} can go straight into version review or mix.`
 }
 
 export function LibraryPage({
@@ -95,15 +98,12 @@ export function LibraryPage({
   onViewChange,
   onOpenQueue,
   onToggleSelect,
-  onSelectAll,
-  onClearSelection,
   onOpenTrack,
   onAddSongs,
 }: LibraryPageProps) {
   const loading = !hasFirstSync && totalCount === 0
   const libraryEmpty = hasFirstSync && totalCount === 0
   const noMatches = hasFirstSync && totalCount > 0 && tracks.length === 0
-  const allSelected = tracks.length > 0 && tracks.every((track) => selectedIds.has(track.id))
   const selectedCount = selectedIds.size
   const queueSummary = [
     workQueue.stagedCount > 0
@@ -119,30 +119,23 @@ export function LibraryPage({
     .filter(Boolean)
     .join(' · ')
 
-  function handleToggleAll() {
-    if (allSelected) onClearSelection()
-    else onSelectAll(tracks.map((track) => track.id))
-  }
-
   return (
-    <section className="suite-page library-page">
-      <header className="suite-page-head">
+    <section className="kp-page kp-library-page">
+      <header className="kp-page-header">
         <div>
           <h1>Songs</h1>
-          <p>Manage your studio stems and splitting progress.</p>
+          <p>{libraryHeadline(totalCount, countsByFilter.ready)}</p>
         </div>
-        <div className="suite-page-head-actions">
-          <button type="button" className="button-primary" onClick={onAddSongs}>
-            Add songs
-          </button>
-        </div>
+        <button type="button" className="button-primary" onClick={onAddSongs}>
+          Add songs
+        </button>
       </header>
 
       {queueSummary ? (
-        <section className="work-queue-summary">
+        <section className="kp-inline-banner">
           <div>
-            <h2>{queueSummary}.</h2>
-            <p>Open queue to review imports, active processing, and finished runs in one place.</p>
+            <strong>Queue moving</strong>
+            <p>{queueSummary}. Open the queue when you want to resolve imports or jump into the next ready result.</p>
           </div>
           <button type="button" className="button-secondary" onClick={onOpenQueue}>
             Open queue
@@ -150,33 +143,32 @@ export function LibraryPage({
         </section>
       ) : null}
 
-      <section className="songs-library">
-        <div className="library-filter-bar" role="tablist" aria-label="Song workflow filters">
-          {LIBRARY_FILTERS.map((filter) => (
-            <button
-              key={filter.value}
-              type="button"
-              role="tab"
-              aria-selected={view.filter === filter.value}
-              className={`library-filter-pill ${view.filter === filter.value ? 'library-filter-pill-active' : ''}`}
-              onClick={() => onViewChange({ ...view, filter: filter.value })}
-            >
-              <strong>{filter.label}</strong>
-              <span>{countsByFilter[filter.value]}</span>
-            </button>
-          ))}
-        </div>
+      <section className="kp-library-shell">
+        <div className="kp-library-toolbar">
+          <div className="kp-segmented-control" role="tablist" aria-label="Song workflow filters">
+            {LIBRARY_FILTERS.map((filter) => (
+              <button
+                key={filter.value}
+                type="button"
+                role="tab"
+                aria-selected={view.filter === filter.value}
+                className={view.filter === filter.value ? 'kp-segmented-active' : ''}
+                onClick={() => onViewChange({ ...view, filter: filter.value })}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
 
-        <div className="library-toolbar">
-          <input
-            type="search"
-            className="library-search"
-            placeholder="Search title or artist"
-            aria-label="Search songs by title or artist"
-            value={view.search}
-            onChange={(event) => onViewChange({ ...view, search: event.target.value })}
-          />
-          <div className="library-toolbar-actions">
+          <div className="kp-library-controls">
+            <input
+              type="search"
+              className="kp-search-field"
+              placeholder="Search title or artist"
+              aria-label="Search songs by title or artist"
+              value={view.search}
+              onChange={(event) => onViewChange({ ...view, search: event.target.value })}
+            />
             <select
               aria-label="Sort songs"
               value={view.sort}
@@ -188,122 +180,83 @@ export function LibraryPage({
                 </option>
               ))}
             </select>
-            {tracks.length > 0 ? (
-              <label className="checkbox-row library-select-all">
-                <input type="checkbox" checked={allSelected} onChange={handleToggleAll} />
-                <span>{allSelected ? 'Clear all' : 'Select all'}</span>
-              </label>
-            ) : null}
-            {selectedCount > 0 ? <span className="library-selection-count">{selectedCount} selected</span> : null}
+            <span className="kp-toolbar-meta">
+              {tracks.length} shown
+              {countsByFilter[view.filter] !== tracks.length && view.filter !== 'all'
+                ? ` · ${countsByFilter[view.filter]} total`
+                : ''}
+            </span>
+            {selectedCount > 0 ? <span className="kp-toolbar-meta">{selectedCount} selected</span> : null}
           </div>
         </div>
 
         {loading ? (
-          <div className="track-list">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="skeleton-track-row">
-                <Skeleton width="62%" height={14} />
-                <Skeleton width="40%" height={11} />
+          <div className="kp-library-list">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="kp-library-row kp-library-row-skeleton">
+                <Skeleton width="58%" height={16} />
+                <Skeleton width="24%" height={14} />
+                <Skeleton width="18%" height={14} />
               </div>
             ))}
           </div>
         ) : libraryEmpty ? (
-          <p className="empty-state track-list-empty">
-            No songs yet. Add files or a YouTube link to stage the first batch.
-          </p>
+          <p className="empty-state">No songs yet. Add files or a YouTube link to stage the first batch.</p>
         ) : noMatches ? (
-          <p className="empty-state track-list-empty">{emptyMessage(view.filter)}</p>
+          <p className="empty-state">{emptyMessage(view.filter)}</p>
         ) : (
-          <div className="library-table">
-            <div className="library-table-head" aria-hidden>
+          <div className="kp-library-list">
+            <div className="kp-library-head" aria-hidden>
               <span />
-              <span>Title &amp; artist</span>
-              <span>Source</span>
-              <span>State</span>
-              <span>Action</span>
+              <span>Song</span>
+              <span>Status</span>
+              <span>Next</span>
             </div>
-            <div className="track-list">
-              {tracks.map((track) => {
-                const latest = track.latest_run
-                const isSelected = selectedIds.has(track.id)
-                const stage = trackStageSummary(track)
-                const actionLabel = trackActionLabel(track)
-                const latestRunActive = latest ? isActiveRunStatus(latest.status) : false
-                const stageSummary = latestRunActive
-                  ? latest?.status_message || 'Split in progress'
-                    : stage.key === 'needs-attention'
-                    ? 'Retry required'
-                    : stage.key === 'ready'
-                      ? 'Ready for review'
-                      : stage.key === 'final'
-                        ? 'Ready to export'
-                        : track.has_custom_mix
-                          ? 'Custom mix saved'
-                          : 'Waiting to split'
-                const metaSummary = [
-                  formatDuration(track.duration_seconds),
-                  track.run_count === 0
-                    ? 'No versions yet'
-                    : `${track.run_count} version${track.run_count === 1 ? '' : 's'}`,
-                ].join(' · ')
-                const initials = track.title.trim().slice(0, 1).toUpperCase() || 'S'
 
-                return (
-                  <div
-                    key={track.id}
-                    className={`${currentTrackId === track.id ? 'track-row-active' : ''} ${isSelected ? 'track-row-checked' : ''}`}
-                  >
-                    <div className="track-row-shell">
-                      <label className="track-row-check" onClick={(event) => event.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => onToggleSelect(track.id)}
-                          aria-label={`Select ${track.title}`}
-                        />
-                      </label>
+            {tracks.map((track) => {
+              const stage = trackStageSummary(track)
+              const isSelected = selectedIds.has(track.id)
+              const initials = track.title.trim().slice(0, 1).toUpperCase() || 'S'
+              const metadata = [
+                artistLine(track),
+                sourceLabel(track),
+                formatDuration(track.duration_seconds),
+                track.run_count === 0
+                  ? 'No versions'
+                  : `${track.run_count} version${track.run_count === 1 ? '' : 's'}`,
+              ].join(' · ')
 
-                      <button type="button" className="track-row" onClick={() => onOpenTrack(track)}>
-                        <div className="track-row-title-cell">
-                          {track.thumbnail_url ? (
-                            <img
-                              className="track-row-art"
-                              src={track.thumbnail_url}
-                              alt=""
-                              loading="lazy"
-                            />
-                          ) : (
-                            <span className="track-row-art track-row-art-fallback" aria-hidden>
-                              {initials}
-                            </span>
-                          )}
-                          <div className="track-row-title">
-                            <strong>{track.title}</strong>
-                            <span>{artistLine(track)}</span>
-                          </div>
-                        </div>
+              return (
+                <div
+                  key={track.id}
+                  className={`kp-library-row ${currentTrackId === track.id ? 'kp-library-row-active' : ''} ${isSelected ? 'kp-library-row-selected' : ''}`}
+                >
+                  <label className="kp-library-check" onClick={(event) => event.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => onToggleSelect(track.id)}
+                      aria-label={`Select ${track.title}`}
+                    />
+                  </label>
 
-                        <div className="track-row-source-cell">
-                          <strong>{sourceLabel(track)}</strong>
-                          <span>{metaSummary}</span>
-                        </div>
-
-                        <div className="track-row-state-cell">
-                          <span className={`track-row-stage ${stage.toneClassName}`}>{stage.label}</span>
-                          <span className="track-row-state-copy">{stageSummary}</span>
-                          {latestRunActive && latest ? <ProgressBar value={latest.progress} /> : null}
-                        </div>
-
-                        <div className="track-row-action-cell">
-                          <span>{actionLabel}</span>
-                          {latestRunActive && latest ? <strong>{Math.round(latest.progress)}%</strong> : null}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                  <button type="button" className="kp-library-row-button" onClick={() => onOpenTrack(track)}>
+                    <span className="kp-library-art" aria-hidden>
+                      {track.thumbnail_url ? <img src={track.thumbnail_url} alt="" loading="lazy" /> : initials}
+                    </span>
+                    <span className="kp-library-copy">
+                      <strong>{track.title}</strong>
+                      <span>{metadata}</span>
+                    </span>
+                    <span className="kp-library-status">
+                      <strong>{stage.label}</strong>
+                      <span>{stage.detail}</span>
+                    </span>
+                    <span className="kp-library-next">{nextActionLabel(track)}</span>
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
       </section>

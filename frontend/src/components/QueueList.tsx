@@ -14,8 +14,6 @@ type QueueListProps = {
   entries: QueueRunEntry[]
   selectedIds: Set<string>
   onToggleSelect: (runId: string) => void
-  onSelectAll: (ids: string[]) => void
-  onClearSelection: () => void
   onSelectRun: (trackId: string, runId: string) => void
   onCancelRun: (runId: string) => Promise<void>
   onRetryRun: (runId: string) => Promise<void>
@@ -44,8 +42,6 @@ export function QueueList({
   entries,
   selectedIds,
   onToggleSelect,
-  onSelectAll,
-  onClearSelection,
   onSelectRun,
   onCancelRun,
   onRetryRun,
@@ -57,15 +53,8 @@ export function QueueList({
 }: QueueListProps) {
   const activeEntries = entries.filter((entry) => isActiveRunStatus(entry.run.status))
   const attentionEntries = entries.filter((entry) => !isActiveRunStatus(entry.run.status))
-  const selectableIds = entries.map((entry) => entry.run.id)
   const activeCount = activeEntries.length
   const attentionCount = attentionEntries.length
-  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id))
-
-  function handleToggleAll() {
-    if (allSelected) onClearSelection()
-    else onSelectAll(selectableIds)
-  }
 
   function renderRows(items: QueueRunEntry[], group: 'active' | 'followup') {
     return items.map((entry) => {
@@ -200,15 +189,6 @@ export function QueueList({
       ) : null}
 
       <div className="list-controls">
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={allSelected}
-            disabled={selectableIds.length === 0}
-            onChange={handleToggleAll}
-          />
-          <span>{allSelected ? 'Clear all' : 'Select all'}</span>
-        </label>
         <span className="library-count">
           {activeCount} running
           {attentionCount > 0 ? ` · ${attentionCount} need follow-up` : ''}
