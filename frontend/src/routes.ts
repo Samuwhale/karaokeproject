@@ -3,14 +3,7 @@ import type { LibraryFilter, LibrarySort, LibraryView } from './components/track
 export type AppPage = 'library' | 'queue' | 'studio'
 export type StudioTab = 'mix' | 'versions'
 
-const LIBRARY_FILTERS = new Set<LibraryFilter>([
-  'all',
-  'rendering',
-  'needs-attention',
-  'ready-to-render',
-  'ready',
-  'final',
-])
+const LIBRARY_FILTERS = new Set<LibraryFilter>(['all', 'processing', 'ready'])
 
 const LIBRARY_SORTS = new Set<LibrarySort>(['recent', 'created', 'title', 'runs'])
 const STUDIO_TABS = new Set<StudioTab>(['mix', 'versions'])

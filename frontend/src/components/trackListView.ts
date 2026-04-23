@@ -2,14 +2,8 @@ import type { TrackSummary } from '../types'
 import { isActiveRunStatus } from './runStatus'
 
 export type LibrarySort = 'recent' | 'created' | 'title' | 'runs'
-export type LibraryFilter =
-  | 'all'
-  | 'rendering'
-  | 'needs-attention'
-  | 'ready-to-render'
-  | 'ready'
-  | 'final'
-export type TrackStage = LibraryFilter | 'rendering'
+export type LibraryFilter = 'all' | 'processing' | 'ready'
+export type TrackStage = 'rendering' | 'needs-attention' | 'ready-to-render' | 'ready' | 'final'
 
 export type LibraryView = {
   search: string
@@ -39,33 +33,18 @@ export const DEFAULT_LIBRARY_VIEW: LibraryView = {
 export const LIBRARY_FILTERS: LibraryFilterMeta[] = [
   {
     value: 'all',
-    label: 'All songs',
-    description: 'Everything in the library, regardless of where it sits in the workflow.',
+    label: 'All',
+    description: 'Every song in the library.',
   },
   {
-    value: 'rendering',
-    label: 'Rendering',
-    description: 'Songs with a split still running in the background.',
-  },
-  {
-    value: 'needs-attention',
-    label: 'Retry split',
-    description: 'The latest split failed or was cancelled and needs another attempt.',
-  },
-  {
-    value: 'ready-to-render',
-    label: 'Needs split',
-    description: 'Imported songs with no split yet.',
+    value: 'processing',
+    label: 'Processing',
+    description: 'Songs still moving through import or split work.',
   },
   {
     value: 'ready',
-    label: 'Needs final choice',
-    description: 'Completed splits that are ready to compare so you can choose the right version before mixing.',
-  },
-  {
-    value: 'final',
-    label: 'Final saved',
-    description: 'Songs with a chosen version ready to export again any time.',
+    label: 'Ready',
+    description: 'Songs ready for version review or mixing.',
   },
 ]
 
@@ -127,16 +106,17 @@ export function trackStageSummary(track: TrackSummary): LibraryStageSummary {
 export function countLibraryFilters(tracks: TrackSummary[]): Record<LibraryFilter, number> {
   const counts: Record<LibraryFilter, number> = {
     all: tracks.length,
-    rendering: 0,
-    'needs-attention': 0,
-    'ready-to-render': 0,
     ready: 0,
-    final: 0,
+    processing: 0,
   }
 
   for (const track of tracks) {
     const stage = trackStageSummary(track)
-    counts[stage.key] += 1
+    if (stage.key === 'ready' || stage.key === 'final') {
+      counts.ready += 1
+    } else {
+      counts.processing += 1
+    }
   }
 
   return counts
@@ -151,16 +131,15 @@ export function applyLibraryView(tracks: TrackSummary[], view: LibraryView): Tra
     }
 
     const stage = trackStageSummary(track)
-    switch (view.filter) {
-      case 'rendering':
-      case 'needs-attention':
-      case 'ready-to-render':
-      case 'ready':
-      case 'final':
-        return stage.key === view.filter
-      default:
-        return true
+    if (view.filter === 'processing') {
+      return stage.key === 'rendering' || stage.key === 'needs-attention' || stage.key === 'ready-to-render'
     }
+
+    if (view.filter === 'ready') {
+      return stage.key === 'ready' || stage.key === 'final'
+    }
+
+    return true
   })
   return [...matches].sort((a, b) => {
     switch (view.sort) {

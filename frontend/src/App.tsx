@@ -78,7 +78,6 @@ function App() {
     cleaningLibraryRuns,
     settingKeeper,
     backfillingMetrics,
-    savingNoteRunId,
     savingMixRunId,
     updatingTrack,
     batching,
@@ -99,7 +98,6 @@ function App() {
     handleSetKeeper,
     handlePurgeNonKeepers,
     handleBackfillMetrics,
-    handleSetRunNote,
     handleSaveMix,
     handleUpdateTrack,
     handleDeleteTrack,
@@ -464,16 +462,6 @@ function App() {
       )
     : null
   const suiteMainClassName = `suite-main ${studioActive && studioTab === 'mix' ? 'suite-main-fixed-workspace' : ''}`
-  const shellTitle = libraryActive
-    ? 'Songs Library'
-    : queueActive
-      ? 'Open Queue'
-      : studioActive
-        ? studioTab === 'mix'
-          ? 'Studio Mix'
-          : 'Studio Versions'
-        : 'Studio'
-
   return (
     <ErrorBoundary>
       <div className="app-shell">
@@ -486,7 +474,7 @@ function App() {
           <nav className="shell-rail-nav" aria-label="Primary navigation">
             <NavLink to="/library" className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}>
               <LibraryIcon />
-              <span>Songs</span>
+              <span>Library</span>
             </NavLink>
             <NavLink to="/queue" className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}>
               <QueueIcon />
@@ -525,9 +513,34 @@ function App() {
 
         <div className="shell-canvas">
           <header className="shell-topbar" inert={anyDialogOpen || undefined}>
-            <div className="shell-topbar-copy">
-              <span>Project Studio</span>
-              <strong>{shellTitle}</strong>
+            <div className="shell-topbar-main">
+              <div className="shell-topbar-copy">
+                <strong>Studio</strong>
+              </div>
+              <nav className="shell-topbar-nav" aria-label="Workspace sections">
+                <NavLink
+                  to="/library"
+                  className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}
+                >
+                  Library
+                </NavLink>
+                <NavLink
+                  to="/queue"
+                  className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}
+                >
+                  Queue
+                </NavLink>
+                {studioLandingPath ? (
+                  <NavLink
+                    to={studioActive ? location.pathname + location.search : studioLandingPath}
+                    className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}
+                  >
+                    Studio
+                  </NavLink>
+                ) : (
+                  <span className="topbar-nav-link topbar-nav-link-disabled">Studio</span>
+                )}
+              </nav>
             </div>
             <div className="shell-topbar-meta">
               <StatusChip
@@ -640,7 +653,7 @@ function App() {
                       navigate(
                         payload.queue
                           ? '/queue'
-                          : buildLibraryPath({ ...DEFAULT_LIBRARY_VIEW, filter: 'ready-to-render' }),
+                          : buildLibraryPath({ ...DEFAULT_LIBRARY_VIEW, filter: 'processing' }),
                       )
                     }}
                   />
@@ -662,7 +675,6 @@ function App() {
                     cancellingRunId={cancellingRunId}
                     retryingRunId={retryingRunId}
                     settingKeeper={settingKeeper}
-                    savingNoteRunId={savingNoteRunId}
                     savingMixRunId={savingMixRunId}
                     updatingTrack={updatingTrack}
                     onBackToLibrary={() => openLibrary()}
@@ -706,7 +718,6 @@ function App() {
                     }}
                     onSetKeeper={handleSetKeeper}
                     onPurgeNonKeepers={handlePurgeNonKeepers}
-                    onSetRunNote={handleSetRunNote}
                     onSaveMix={handleSaveMix}
                     onUpdateTrack={handleUpdateTrack}
                     onDeleteTrack={(trackId) => {

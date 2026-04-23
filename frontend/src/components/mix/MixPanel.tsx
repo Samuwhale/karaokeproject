@@ -177,13 +177,13 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
   return (
     <section className="mix-panel">
       <header className="mix-panel-topbar">
-        <div className="mix-panel-session">
-          <div className="mix-panel-head-copy">
-            <h3 className="subsection-head">Mixer</h3>
-            <p className="mix-panel-copy">
-              Start from a saved balance, then fine-tune levels here. Double-click any fader to reset it to unity.
-            </p>
-          </div>
+          <div className="mix-panel-session">
+            <div className="mix-panel-head-copy">
+              <h3 className="subsection-head">Mixer</h3>
+              <p className="mix-panel-copy">
+                Preview the current version, then shape each stem. Double-click any fader to reset it to unity.
+              </p>
+            </div>
           <div className="mix-panel-head-actions">
             <span className="mix-panel-status">
               {saving || saveState === 'saving' ? (
@@ -303,9 +303,9 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                     className={`mix-stem-toggle ${stem.soloed ? 'active' : ''}`}
                     onClick={() => updateStem(index, { soloed: !stem.soloed })}
                     aria-pressed={stem.soloed}
-                    title={stem.soloed ? 'Stop listening' : 'Listen in isolation'}
+                    title={stem.soloed ? 'Stop soloing' : 'Solo this stem'}
                   >
-                    Listen
+                    Solo
                   </button>
                 </div>
               </div>

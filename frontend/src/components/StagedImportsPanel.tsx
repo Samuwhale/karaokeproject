@@ -380,7 +380,7 @@ export function StagedImportsPanel({
                 <Spinner /> Importing…
               </>
             ) : (
-              `Add ${stagedImports.length} song${stagedImports.length === 1 ? '' : 's'} to Library`
+              'Import Only'
             )}
           </button>
           <div className="import-flow-queue-action">
@@ -414,7 +414,7 @@ export function StagedImportsPanel({
                   <Spinner /> Queueing…
                 </>
               ) : (
-                `Add and Split with ${defaultProfileLabel}`
+                'Start All'
               )}
             </button>
           </div>

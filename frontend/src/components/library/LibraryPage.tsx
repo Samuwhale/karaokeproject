@@ -59,16 +59,10 @@ function sourceLabel(track: TrackSummary) {
 
 function emptyMessage(filter: LibraryFilter) {
   switch (filter) {
-    case 'rendering':
-      return 'No songs are currently splitting.'
-    case 'needs-attention':
-      return 'No songs need another attempt right now.'
-    case 'ready-to-render':
-      return 'Every imported song already has a split queued or finished.'
+    case 'processing':
+      return 'Nothing is waiting on import or split work right now.'
     case 'ready':
-      return 'Nothing is waiting for a final listening pass right now.'
-    case 'final':
-      return 'No final versions have been saved yet.'
+      return 'Nothing is ready for version review or mixing right now.'
     default:
       return 'No songs match this search.'
   }
@@ -113,13 +107,13 @@ export function LibraryPage({
   const selectedCount = selectedIds.size
   const queueSummary = [
     workQueue.stagedCount > 0
-      ? `${workQueue.stagedCount} import review${workQueue.stagedCount === 1 ? '' : 's'}`
+      ? `${workQueue.stagedCount} staged import${workQueue.stagedCount === 1 ? '' : 's'}`
       : null,
     workQueue.activeCount > 0
       ? `${workQueue.activeCount} split${workQueue.activeCount === 1 ? '' : 's'} running`
       : null,
     workQueue.followUpCount > 0
-      ? `${workQueue.followUpCount} need follow-up`
+      ? `${workQueue.followUpCount} ready for review`
       : null,
   ]
     .filter(Boolean)
@@ -147,8 +141,8 @@ export function LibraryPage({
       {queueSummary ? (
         <section className="work-queue-summary">
           <div>
-            <h2>Work queue</h2>
-            <p>{queueSummary}</p>
+            <h2>{queueSummary}.</h2>
+            <p>Open queue to review imports, active processing, and finished runs in one place.</p>
           </div>
           <button type="button" className="button-secondary" onClick={onOpenQueue}>
             Open queue
@@ -168,7 +162,7 @@ export function LibraryPage({
               onClick={() => onViewChange({ ...view, filter: filter.value })}
             >
               <strong>{filter.label}</strong>
-              <span>{countsByFilter[filter.value]} songs</span>
+              <span>{countsByFilter[filter.value]}</span>
             </button>
           ))}
         </div>
@@ -237,7 +231,7 @@ export function LibraryPage({
                 const latestRunActive = latest ? isActiveRunStatus(latest.status) : false
                 const stageSummary = latestRunActive
                   ? latest?.status_message || 'Split in progress'
-                  : stage.key === 'needs-attention'
+                    : stage.key === 'needs-attention'
                     ? 'Retry required'
                     : stage.key === 'ready'
                       ? 'Ready for review'

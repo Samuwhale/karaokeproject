@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { CUSTOM_PROFILE_KEY } from '../../types'
 import type {
+  ArtifactMetrics,
   CachedModel,
   ProcessingProfile,
   RevealFolderInput,
@@ -14,7 +15,6 @@ import type {
 import type { StudioTab } from '../../routes'
 import { resolveSelectedRun } from '../../runSelection'
 import { isStemKind } from '../../stems'
-import { CompareView } from '../CompareView'
 import { ExportBuilder } from '../export/ExportBuilder'
 import { ConfirmInline } from '../feedback/ConfirmInline'
 import { ProgressBar } from '../feedback/ProgressBar'
@@ -22,12 +22,12 @@ import { RunStepper } from '../feedback/RunStepper'
 import { Skeleton } from '../feedback/Skeleton'
 import { Spinner } from '../feedback/Spinner'
 import { MixPanel } from '../mix/MixPanel'
+import { MixScrubber } from '../mix/MixScrubber'
 import { OutputIntentPicker } from '../mix/OutputIntent'
 import { ModelPicker } from '../ModelPicker'
 import { isValidModelFilename } from '../modelPickerShared'
 import { RUN_STATUS_SHORT_LABELS, isActiveRunStatus } from '../runStatus'
 
-const RUN_NOTE_MAX_LENGTH = 280
 const RETRYABLE_RUN_STATUSES = new Set(['failed', 'cancelled'])
 
 type StudioPageProps = {
@@ -43,7 +43,6 @@ type StudioPageProps = {
   cancellingRunId: string | null
   retryingRunId: string | null
   settingKeeper: boolean
-  savingNoteRunId: string | null
   savingMixRunId: string | null
   updatingTrack: boolean
   onBackToLibrary: () => void
@@ -55,7 +54,6 @@ type StudioPageProps = {
   onRetryRun: (runId: string) => Promise<unknown>
   onSetKeeper: (trackId: string, runId: string | null) => Promise<void>
   onPurgeNonKeepers: (trackId: string) => void
-  onSetRunNote: (runId: string, note: string) => Promise<void>
   onSaveMix: (trackId: string, runId: string, stems: RunMixStemEntry[]) => Promise<void>
   onUpdateTrack: (trackId: string, payload: { title?: string; artist?: string | null }) => Promise<void>
   onDeleteTrack: (trackId: string) => void
@@ -106,6 +104,40 @@ function stemCount(run: RunDetail) {
   return run.artifacts.filter((artifact) => isStemKind(artifact.kind)).length
 }
 
+function artifactMetricsSummary(metrics: ArtifactMetrics | null) {
+  if (!metrics) return 'Metrics pending'
+  if (metrics.integrated_lufs !== null) return `${Math.round(Math.abs(metrics.integrated_lufs))} LUFS`
+  if (metrics.true_peak_dbfs !== null) return `${Math.abs(metrics.true_peak_dbfs).toFixed(1)} dB peak`
+  if (metrics.sample_rate !== null) return `${Math.round(metrics.sample_rate / 1000)} kHz`
+  return 'Metrics ready'
+}
+
+function stemDescriptor(label: string) {
+  switch (label.toLowerCase()) {
+    case 'vocals':
+      return 'Clarity'
+    case 'drums':
+      return 'Punch'
+    case 'bass':
+      return 'Depth'
+    case 'other':
+      return 'Texture'
+    default:
+      return 'Focus'
+  }
+}
+
+function previewPeaks(run: RunDetail) {
+  return run.artifacts.find((artifact) => (artifact.metrics?.peaks?.length ?? 0) > 0)?.metrics?.peaks ?? []
+}
+
+function previewDuration(run: RunDetail) {
+  return (
+    run.artifacts.find((artifact) => artifact.metrics?.duration_seconds !== null)?.metrics?.duration_seconds ??
+    1
+  )
+}
+
 function buildTrackSummary(track: TrackDetail, run: RunDetail): TrackSummary {
   return {
     id: track.id,
@@ -142,7 +174,6 @@ export function StudioPage({
   cancellingRunId,
   retryingRunId,
   settingKeeper,
-  savingNoteRunId,
   savingMixRunId,
   updatingTrack,
   onBackToLibrary,
@@ -154,7 +185,6 @@ export function StudioPage({
   onRetryRun,
   onSetKeeper,
   onPurgeNonKeepers,
-  onSetRunNote,
   onSaveMix,
   onUpdateTrack,
   onDeleteTrack,
@@ -221,7 +251,6 @@ export function StudioPage({
             creatingRun={creatingRun}
             cancellingRunId={cancellingRunId}
             retryingRunId={retryingRunId}
-            savingNoteRunId={savingNoteRunId}
             updatingTrack={updatingTrack}
             onSelectRun={onSelectRun}
             onSelectCompare={onSelectCompare}
@@ -230,7 +259,6 @@ export function StudioPage({
             onRetryRun={onRetryRun}
             onChangeTab={onChangeTab}
             onPurgeNonKeepers={onPurgeNonKeepers}
-            onSetRunNote={onSetRunNote}
             onUpdateTrack={onUpdateTrack}
             onDeleteTrack={onDeleteTrack}
           />
@@ -352,8 +380,11 @@ function StudioVersionList({
             className={`studio-version-row ${isSelected ? 'studio-version-row-active' : ''}`}
             onClick={() => onSelectRun(run.id)}
           >
-            <strong>{run.processing.profile_label}</strong>
-            <span>{metadata}</span>
+            <div className="studio-version-row-copy">
+              <strong>{run.processing.profile_label}</strong>
+              <span>{metadata}</span>
+            </div>
+            {isKeeper ? <span className="studio-version-row-mark">Selected</span> : null}
           </button>
         )
       })}
@@ -464,15 +495,6 @@ function StudioMixTab({
     <div className="studio-mix-tab studio-mix-tab-workspace">
       <div className="studio-mix-layout">
         <section className="studio-mix-main">
-          <OutputIntentPicker
-            run={run}
-            profiles={profiles}
-            compact
-            saving={savingMix}
-            onApplyTemplate={(stems) => onSaveMix(track.id, run.id, stems)}
-            onRerunWithProfile={(profileKey) => onCreateRun(track.id, { profile_key: profileKey })}
-          />
-
           <MixPanel
             key={mixPanelStateKey(track.id, run)}
             run={run}
@@ -507,6 +529,18 @@ function StudioMixTab({
                 Change Version
               </button>
             </div>
+          </section>
+
+          <section className="studio-side-section">
+            <span className="studio-side-kicker">Starting Balance</span>
+            <OutputIntentPicker
+              run={run}
+              profiles={profiles}
+              compact
+              saving={savingMix}
+              onApplyTemplate={(stems) => onSaveMix(track.id, run.id, stems)}
+              onRerunWithProfile={(profileKey) => onCreateRun(track.id, { profile_key: profileKey })}
+            />
           </section>
 
           <section className="studio-side-section">
@@ -553,7 +587,6 @@ type StudioVersionsTabProps = {
   creatingRun: boolean
   cancellingRunId: string | null
   retryingRunId: string | null
-  savingNoteRunId: string | null
   updatingTrack: boolean
   onSelectRun: (runId: string) => void
   onSelectCompare: (runId: string | null) => void
@@ -562,7 +595,6 @@ type StudioVersionsTabProps = {
   onRetryRun: (runId: string) => Promise<unknown>
   onChangeTab: (tab: StudioTab) => void
   onPurgeNonKeepers: (trackId: string) => void
-  onSetRunNote: (runId: string, note: string) => Promise<void>
   onUpdateTrack: (trackId: string, payload: { title?: string; artist?: string | null }) => Promise<void>
   onDeleteTrack: (trackId: string) => void
 }
@@ -579,7 +611,6 @@ function StudioVersionsTab({
   creatingRun,
   cancellingRunId,
   retryingRunId,
-  savingNoteRunId,
   updatingTrack,
   onSelectRun,
   onSelectCompare,
@@ -588,7 +619,6 @@ function StudioVersionsTab({
   onRetryRun,
   onChangeTab,
   onPurgeNonKeepers,
-  onSetRunNote,
   onUpdateTrack,
   onDeleteTrack,
 }: StudioVersionsTabProps) {
@@ -663,8 +693,8 @@ function StudioVersionsTab({
           <>
             <div className="studio-section-head">
               <div>
-                <h2>{selectedRun.processing.profile_label}</h2>
-                <p>{selectedRunSummary(selectedRun)}</p>
+                <h2>Preview</h2>
+                <p>Review the selected split, then open the winner in Mix.</p>
               </div>
               <div className="studio-inline-actions">
                 {selectedRunMixable ? (
@@ -691,66 +721,82 @@ function StudioVersionsTab({
               </div>
             </div>
 
-            <div className="studio-version-preview-grid">
-              <div className="studio-version-stat">
-                <span>Stems</span>
-                <strong>{stemCount(selectedRun)}</strong>
+            <div className="studio-preview-hero">
+              <div className="studio-preview-hero-copy">
+                <h3>{selectedRun.processing.profile_label}</h3>
+                <p>{selectedRunSummary(selectedRun)}</p>
+                <div className="studio-preview-meta">
+                  <span>{stemCount(selectedRun)} stems</span>
+                  <span>{selectedRun.mix.is_default ? 'Default balance' : 'Custom balance saved'}</span>
+                  <span>Updated {formatTimestampShort(selectedRun.updated_at)}</span>
+                </div>
               </div>
-              <div className="studio-version-stat">
-                <span>Status</span>
-                <strong>{statusLabel(selectedRun.status)}</strong>
-              </div>
-              <div className="studio-version-stat">
-                <span>Updated</span>
-                <strong>{formatTimestampShort(selectedRun.updated_at)}</strong>
-              </div>
-              <div className="studio-version-stat">
-                <span>Mix</span>
-                <strong>{selectedRun.mix.is_default ? 'Default' : 'Custom'}</strong>
-              </div>
+              {selectedRun.status === 'completed' && completedRuns.length > 1 ? (
+                <label className="field studio-compare-select">
+                  <span>Compare with</span>
+                  <select
+                    value={compareRun?.id ?? ''}
+                    onChange={(event) => onSelectCompare(event.target.value || null)}
+                  >
+                    <option value="">Choose another completed version</option>
+                    {completedRuns
+                      .filter((run) => run.id !== selectedRun.id)
+                      .map((run) => (
+                        <option key={run.id} value={run.id}>
+                          {run.processing.profile_label} · {formatTimestampShort(run.updated_at)}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ) : null}
             </div>
 
-            <RunNoteEditor
-              key={`${selectedRun.id}:${selectedRun.note}`}
-              runId={selectedRun.id}
-              note={selectedRun.note}
-              saving={savingNoteRunId === selectedRun.id}
-              onSave={onSetRunNote}
-            />
-
-            {selectedRun.status === 'completed' && completedRuns.length > 1 ? (
-              <div className="studio-compare-section">
-                <div className="studio-section-head">
-                  <div>
-                    <h2>Compare Versions</h2>
-                    <p>Use overlays and metrics to decide which completed version deserves the master slot.</p>
-                  </div>
-                  <label className="field studio-compare-select">
-                    <span>Compare with</span>
-                    <select
-                      value={compareRun?.id ?? ''}
-                      onChange={(event) => onSelectCompare(event.target.value || null)}
-                    >
-                      <option value="">Choose another completed version</option>
-                      {completedRuns
-                        .filter((run) => run.id !== selectedRun.id)
-                        .map((run) => (
-                          <option key={run.id} value={run.id}>
-                            {run.processing.profile_label} · {formatTimestampShort(run.updated_at)}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
+            <div className="studio-version-preview-grid">
+              {selectedRun.artifacts.filter((artifact) => isStemKind(artifact.kind)).slice(0, 4).map((artifact) => (
+                <div key={artifact.id} className="studio-version-stat">
+                  <span>{artifact.label}</span>
+                  <strong>{stemDescriptor(artifact.label)}</strong>
+                  <small>{artifactMetricsSummary(artifact.metrics)}</small>
                 </div>
-
-                {compareRun ? (
-                  <CompareView runA={selectedRun} runB={compareRun} metricsReady />
-                ) : (
-                  <div className="studio-blocked studio-inline-blocked">
-                    <strong>Choose a second completed version.</strong>
-                    <p>Waveform overlays and metrics appear once both compare targets are selected.</p>
+              ))}
+              {stemCount(selectedRun) === 0 ? (
+                <>
+                  <div className="studio-version-stat">
+                    <span>Status</span>
+                    <strong>{statusLabel(selectedRun.status)}</strong>
+                    <small>Selected version</small>
                   </div>
-                )}
+                  <div className="studio-version-stat">
+                    <span>Updated</span>
+                    <strong>{formatTimestampShort(selectedRun.updated_at)}</strong>
+                    <small>Latest run update</small>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            <div className="studio-preview-wave">
+              <MixScrubber
+                peaks={previewPeaks(selectedRun)}
+                currentTime={previewDuration(selectedRun) * 0.42}
+                duration={previewDuration(selectedRun)}
+                onSeek={() => undefined}
+                disabled
+              />
+              <button
+                type="button"
+                className="button-primary studio-preview-wave-action"
+                onClick={() => onChangeTab('mix')}
+                disabled={!selectedRunMixable}
+              >
+                Preview in Mix
+              </button>
+            </div>
+
+            {selectedRun.note ? (
+              <div className="studio-version-note">
+                <strong>Version note</strong>
+                <p>{selectedRun.note}</p>
               </div>
             ) : null}
           </>
@@ -906,48 +952,6 @@ function StudioVersionsTab({
         )}
       </section>
     </div>
-  )
-}
-
-type RunNoteEditorProps = {
-  runId: string
-  note: string
-  saving: boolean
-  onSave: (runId: string, note: string) => Promise<void>
-}
-
-function RunNoteEditor({ runId, note, saving, onSave }: RunNoteEditorProps) {
-  const [draft, setDraft] = useState(note)
-  const trimmed = draft.trim()
-  const dirty = trimmed !== note.trim()
-
-  function handleBlur() {
-    if (!dirty || saving) return
-    void onSave(runId, trimmed).catch(() => undefined)
-  }
-
-  return (
-    <label className="run-note">
-      <textarea
-        value={draft}
-        placeholder="Add context about why this version is the one to keep."
-        maxLength={RUN_NOTE_MAX_LENGTH}
-        rows={3}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={handleBlur}
-      />
-      <span className="run-note-status">
-        {saving ? (
-          <>
-            <Spinner /> saving
-          </>
-        ) : dirty ? (
-          `${draft.length}/${RUN_NOTE_MAX_LENGTH} · unsaved`
-        ) : (
-          `${draft.length}/${RUN_NOTE_MAX_LENGTH}`
-        )}
-      </span>
-    </label>
   )
 }
 
