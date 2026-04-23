@@ -98,7 +98,7 @@ function mixPanelStateKey(trackId: string, run: TrackDetail['runs'][number]) {
 }
 
 function selectedRunSummary(run: RunDetail | null) {
-  if (!run) return 'No split selected'
+  if (!run) return 'No version selected'
   return `${run.processing.profile_label} · ${statusLabel(run.status)}`
 }
 
@@ -176,8 +176,8 @@ export function StudioPage({
       <StudioHeader
         track={track}
         selectedRun={selectedRun}
+        currentTab={tab}
         onBackToLibrary={onBackToLibrary}
-        onSelectRun={onSelectRun}
       />
 
       <StudioTabs currentTab={tab} onChangeTab={onChangeTab} />
@@ -191,6 +191,7 @@ export function StudioPage({
             defaultBitrate={defaultBitrate}
             savingMix={selectedRun ? savingMixRunId === selectedRun.id : false}
             settingKeeper={settingKeeper}
+            onSelectRun={onSelectRun}
             onCreateRun={onCreateRun}
             onRetryRun={onRetryRun}
             onChangeTab={onChangeTab}
@@ -200,7 +201,7 @@ export function StudioPage({
             onError={onError}
           />
         ) : (
-          <StudioSplitsTab
+          <StudioVersionsTab
             track={track}
             selectedRun={selectedRun}
             compareRun={compareRun}
@@ -235,11 +236,11 @@ export function StudioPage({
 type StudioHeaderProps = {
   track: TrackDetail
   selectedRun: RunDetail | null
+  currentTab: StudioTab
   onBackToLibrary: () => void
-  onSelectRun: (runId: string) => void
 }
 
-function StudioHeader({ track, selectedRun, onBackToLibrary, onSelectRun }: StudioHeaderProps) {
+function StudioHeader({ track, selectedRun, currentTab, onBackToLibrary }: StudioHeaderProps) {
   return (
     <header className="studio-header">
       <div className="studio-header-main">
@@ -254,21 +255,10 @@ function StudioHeader({ track, selectedRun, onBackToLibrary, onSelectRun }: Stud
           </p>
         </div>
       </div>
-      <label className="field studio-run-picker">
-        <span>Current split</span>
-        <select
-          value={selectedRun?.id ?? ''}
-          onChange={(event) => onSelectRun(event.target.value)}
-          disabled={track.runs.length === 0}
-        >
-          {track.runs.length === 0 ? <option value="">No splits yet</option> : null}
-          {track.runs.map((run) => (
-            <option key={run.id} value={run.id}>
-              {run.processing.profile_label} · {statusLabel(run.status)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="studio-header-context">
+        <span>{currentTab === 'mix' ? 'Mix workspace' : 'Versions and retries'}</span>
+        <strong>{selectedRun ? selectedRunSummary(selectedRun) : 'No version selected'}</strong>
+      </div>
     </header>
   )
 }
@@ -281,7 +271,7 @@ type StudioTabsProps = {
 function StudioTabs({ currentTab, onChangeTab }: StudioTabsProps) {
   const tabs: { key: StudioTab; label: string }[] = [
     { key: 'mix', label: 'Mix' },
-    { key: 'splits', label: 'Splits' },
+    { key: 'versions', label: 'Versions' },
   ]
 
   return (
@@ -302,6 +292,56 @@ function StudioTabs({ currentTab, onChangeTab }: StudioTabsProps) {
   )
 }
 
+type StudioVersionListProps = {
+  runs: RunDetail[]
+  selectedRunId: string | null
+  keeperRunId: string | null
+  compareRunId?: string | null
+  onSelectRun: (runId: string) => void
+}
+
+function StudioVersionList({
+  runs,
+  selectedRunId,
+  keeperRunId,
+  compareRunId = null,
+  onSelectRun,
+}: StudioVersionListProps) {
+  if (runs.length === 0) {
+    return <p className="empty-state">No versions yet. Queue the first split below.</p>
+  }
+
+  return (
+    <div className="studio-version-list" role="list" aria-label="Song versions">
+      {runs.map((run) => {
+        const isSelected = selectedRunId === run.id
+        const isKeeper = keeperRunId === run.id
+        const isCompareTarget = compareRunId === run.id
+        const metadata = [
+          run.status === 'completed' ? formatTimestampShort(run.updated_at) : statusLabel(run.status),
+          isKeeper ? 'Final version' : null,
+          isCompareTarget ? 'Compare target' : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+
+        return (
+          <button
+            key={run.id}
+            type="button"
+            role="listitem"
+            className={`studio-version-row ${isSelected ? 'studio-version-row-active' : ''}`}
+            onClick={() => onSelectRun(run.id)}
+          >
+            <strong>{run.processing.profile_label}</strong>
+            <span>{metadata}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 type StudioMixTabProps = {
   track: TrackDetail
   run: RunDetail | null
@@ -309,6 +349,7 @@ type StudioMixTabProps = {
   defaultBitrate: string
   savingMix: boolean
   settingKeeper: boolean
+  onSelectRun: (runId: string) => void
   onCreateRun: (trackId: string, processing: RunProcessingConfigInput) => Promise<unknown>
   onRetryRun: (runId: string) => Promise<unknown>
   onChangeTab: (tab: StudioTab) => void
@@ -325,6 +366,7 @@ function StudioMixTab({
   defaultBitrate,
   savingMix,
   settingKeeper,
+  onSelectRun,
   onCreateRun,
   onRetryRun,
   onChangeTab,
@@ -336,10 +378,10 @@ function StudioMixTab({
   if (!run) {
     return (
       <div className="studio-blocked">
-        <strong>No split selected</strong>
-        <p>Queue the first split in Splits before you start mixing.</p>
-        <button type="button" className="button-primary" onClick={() => onChangeTab('splits')}>
-          Open Splits
+        <strong>No version selected</strong>
+        <p>Queue the first split in Versions before you start mixing.</p>
+        <button type="button" className="button-primary" onClick={() => onChangeTab('versions')}>
+          Open Versions
         </button>
       </div>
     )
@@ -353,12 +395,12 @@ function StudioMixTab({
       <div className="studio-state-panel">
         <div className="studio-state-copy">
           <strong>{selectedRunSummary(run)}</strong>
-          <p>The selected split is still processing. Mixing unlocks as soon as this run finishes.</p>
+          <p>The selected version is still processing. Mixing unlocks as soon as this run finishes.</p>
         </div>
         <RunStepper status={run.status} lastActiveStatus={run.last_active_status} />
         <ProgressBar value={run.progress} label={run.status_message} />
-        <button type="button" className="button-secondary" onClick={() => onChangeTab('splits')}>
-          Open Splits
+        <button type="button" className="button-secondary" onClick={() => onChangeTab('versions')}>
+          Open Versions
         </button>
       </div>
     )
@@ -369,14 +411,14 @@ function StudioMixTab({
       <div className="studio-state-panel studio-state-panel-danger">
         <div className="studio-state-copy">
           <strong>{run.status === 'cancelled' ? 'Split cancelled' : 'Split needs attention'}</strong>
-          <p>{run.error_message || 'Retry this split or queue another version with a different setup.'}</p>
+          <p>{run.error_message || 'Retry this version or queue another one with a different setup.'}</p>
         </div>
         <div className="studio-inline-actions">
           <button type="button" className="button-primary" onClick={() => void onRetryRun(run.id)}>
             Retry split
           </button>
-          <button type="button" className="button-secondary" onClick={() => onChangeTab('splits')}>
-            Open Splits
+          <button type="button" className="button-secondary" onClick={() => onChangeTab('versions')}>
+            Open Versions
           </button>
         </div>
       </div>
@@ -386,10 +428,10 @@ function StudioMixTab({
   if (!mixable) {
     return (
       <div className="studio-blocked">
-        <strong>This split finished without mixable stems.</strong>
-        <p>Queue another split in Splits if you want a result you can shape in the mixer.</p>
-        <button type="button" className="button-primary" onClick={() => onChangeTab('splits')}>
-          Open Splits
+        <strong>This version finished without mixable stems.</strong>
+        <p>Queue another version in Versions if you want a result you can shape in the mixer.</p>
+        <button type="button" className="button-primary" onClick={() => onChangeTab('versions')}>
+          Open Versions
         </button>
       </div>
     )
@@ -398,8 +440,8 @@ function StudioMixTab({
   const keeperSelected = track.keeper_run_id === run.id
   const trackSummary = buildTrackSummary(track, run)
   const mixSummary = run.mix.is_default
-    ? 'Export the current split as-is or download its stems.'
-    : 'Export the saved custom balance or download raw stems from the same split.'
+    ? 'Export the current version as-is or download its stems.'
+    : 'Export the saved custom balance or download raw stems from the same version.'
 
   return (
     <div className="studio-mix-tab">
@@ -408,7 +450,7 @@ function StudioMixTab({
           <section className="studio-mix-intro">
             <div>
               <h2>Mix</h2>
-              <p>Shape one split at a time. Keep the adjustments simple, then export when it is ready.</p>
+              <p>Start with the closest version, shape the balance, then export once it sounds right.</p>
             </div>
             <span className="studio-mix-summary">
               {run.mix.is_default ? 'Default balance loaded' : 'Custom balance saved'}
@@ -453,11 +495,17 @@ function StudioMixTab({
 
         <aside className="studio-mix-sidebar">
           <section className="studio-side-section">
-            <h3>Selected split</h3>
+            <h3>Versions</h3>
             <p>{selectedRunSummary(run)}</p>
             <span>Updated {formatTimestampShort(run.updated_at)}</span>
-            <button type="button" className="button-secondary" onClick={() => onChangeTab('splits')}>
-              Open Splits
+            <StudioVersionList
+              runs={track.runs}
+              selectedRunId={run.id}
+              keeperRunId={track.keeper_run_id}
+              onSelectRun={onSelectRun}
+            />
+            <button type="button" className="button-secondary" onClick={() => onChangeTab('versions')}>
+              Open version tools
             </button>
           </section>
 
@@ -465,8 +513,8 @@ function StudioMixTab({
             <h3>Final version</h3>
             <p>
               {keeperSelected
-                ? 'This split is currently saved as the version to keep.'
-                : 'Save this split as the version to keep when the balance feels right.'}
+                ? 'This version is the saved one to keep for this song.'
+                : 'Mark this version as the one to keep once the balance feels right.'}
             </p>
             <button
               type="button"
@@ -480,7 +528,7 @@ function StudioMixTab({
 
           <section className="studio-side-section">
             <h3>Files</h3>
-            <p>Open the generated outputs directly when you need to inspect what this split produced.</p>
+            <p>Open the generated outputs directly when you need to inspect what this version produced.</p>
             <button
               type="button"
               className="button-secondary"
@@ -495,7 +543,7 @@ function StudioMixTab({
   )
 }
 
-type StudioSplitsTabProps = {
+type StudioVersionsTabProps = {
   track: TrackDetail
   selectedRun: RunDetail | null
   compareRun: RunDetail | null
@@ -522,7 +570,7 @@ type StudioSplitsTabProps = {
   onDeleteTrack: (trackId: string) => void
 }
 
-function StudioSplitsTab({
+function StudioVersionsTab({
   track,
   selectedRun,
   compareRun,
@@ -547,7 +595,7 @@ function StudioSplitsTab({
   onSetRunNote,
   onUpdateTrack,
   onDeleteTrack,
-}: StudioSplitsTabProps) {
+}: StudioVersionsTabProps) {
   const [editing, setEditing] = useState(false)
   const [titleDraft, setTitleDraft] = useState(track.title)
   const [artistDraft, setArtistDraft] = useState(track.artist ?? '')
@@ -579,67 +627,35 @@ function StudioSplitsTab({
   }
 
   return (
-    <div className="studio-splits-tab">
+    <div className="studio-versions-tab">
       <section className="studio-section">
         <div className="studio-section-head">
           <div>
-            <h2>Splits</h2>
-            <p>Choose the run you want to work from, compare finished results, or queue another attempt.</p>
+            <h2>Versions</h2>
+            <p>Choose the version you want to work from, compare finished results, or queue another attempt.</p>
           </div>
           {track.keeper_run_id ? (
             <ConfirmInline
-              label="Delete Non-Final Splits"
+              label="Delete Other Versions"
               pendingLabel="Cleaning…"
-              confirmLabel="Delete non-final splits"
+              confirmLabel="Delete other versions"
               cancelLabel="Keep them"
-              prompt="Delete every non-final split for this song?"
+              prompt="Delete every non-final version for this song?"
               onConfirm={() => onPurgeNonKeepers(track.id)}
             />
           ) : null}
         </div>
 
         {track.runs.length === 0 ? (
-          <p className="empty-state">No splits yet. Queue the first split below.</p>
+          <p className="empty-state">No versions yet. Queue the first split below.</p>
         ) : (
-          <div className="run-selector">
-            {track.runs.map((run, index) => {
-              const isSelected = selectedRun?.id === run.id
-              const isKeeper = track.keeper_run_id === run.id
-              const isCompareTarget = compareRunId === run.id
-              const shortcutDigit = index < 9 ? index + 1 : null
-
-              return (
-                <div
-                  key={run.id}
-                  className={`run-chip ${isSelected ? 'run-chip-active' : ''} ${isKeeper ? 'run-chip-keeper' : ''} ${isCompareTarget ? 'run-chip-compare' : ''}`}
-                >
-                  <button
-                    type="button"
-                    className="run-chip-select"
-                    onClick={() => onSelectRun(run.id)}
-                    title={shortcutDigit ? `Press ${shortcutDigit}` : undefined}
-                  >
-                    <strong>
-                      {shortcutDigit ? <kbd className="run-chip-key">{shortcutDigit}</kbd> : null}
-                      {run.processing.profile_label}
-                    </strong>
-                    <span>
-                      {run.status === 'completed'
-                        ? formatTimestampShort(run.updated_at)
-                        : statusLabel(run.status)}
-                    </span>
-                    {isKeeper || isCompareTarget ? (
-                      <em className="run-chip-meta">
-                        {isKeeper ? 'Final version' : null}
-                        {isKeeper && isCompareTarget ? ' · ' : null}
-                        {isCompareTarget ? 'Compare target' : null}
-                      </em>
-                    ) : null}
-                  </button>
-                </div>
-              )
-            })}
-          </div>
+          <StudioVersionList
+            runs={track.runs}
+            selectedRunId={selectedRun?.id ?? null}
+            keeperRunId={track.keeper_run_id}
+            compareRunId={compareRunId}
+            onSelectRun={onSelectRun}
+          />
         )}
       </section>
 
@@ -647,7 +663,7 @@ function StudioSplitsTab({
         <section className="studio-section">
           <div className="studio-section-head">
             <div>
-              <h2>Selected Split</h2>
+              <h2>Selected version</h2>
               <p>{selectedRunSummary(selectedRun)}</p>
             </div>
             <div className="studio-inline-actions">
@@ -667,9 +683,9 @@ function StudioSplitsTab({
                 <ConfirmInline
                   label="Cancel Split"
                   pendingLabel="Cancelling…"
-                  confirmLabel="Cancel split"
+                  confirmLabel="Cancel version"
                   cancelLabel="Keep running"
-                  prompt="Cancel this split?"
+                  prompt="Cancel this version?"
                   pending={cancellingRunId === selectedRun.id}
                   onConfirm={() => onCancelRun(selectedRun.id)}
                 />
@@ -695,28 +711,18 @@ function StudioSplitsTab({
         <section className="studio-section">
           <div className="studio-section-head">
             <div>
-              <h2>Compare Finished Splits</h2>
-              <p>Use this only when you need help choosing between two completed results.</p>
+              <h2>Compare finished versions</h2>
+              <p>Pick one other completed version only when you need help deciding between results.</p>
             </div>
           </div>
           <div className="studio-compare-controls">
-            <label className="field">
-              <span>Current split</span>
-              <select value={selectedRun.id} onChange={(event) => onSelectRun(event.target.value)}>
-                {completedRuns.map((run) => (
-                  <option key={run.id} value={run.id}>
-                    {run.processing.profile_label} · {formatTimestampShort(run.updated_at)}
-                  </option>
-                ))}
-              </select>
-            </label>
             <label className="field">
               <span>Compare with</span>
               <select
                 value={compareRun?.id ?? ''}
                 onChange={(event) => onSelectCompare(event.target.value || null)}
               >
-                <option value="">Choose another completed split</option>
+                <option value="">Choose another completed version</option>
                 {completedRuns
                   .filter((run) => run.id !== selectedRun.id)
                   .map((run) => (
@@ -740,7 +746,7 @@ function StudioSplitsTab({
             />
           ) : (
             <div className="studio-blocked studio-inline-blocked">
-              <strong>Choose a second completed split.</strong>
+              <strong>Choose a second completed version.</strong>
               <p>Waveform overlays and metrics appear once both compare targets are selected.</p>
             </div>
           )}
@@ -750,8 +756,8 @@ function StudioSplitsTab({
       <section className="studio-section">
         <div className="studio-section-head">
           <div>
-            <h2>{track.runs.length === 0 ? 'Queue First Split' : 'Queue Another Split'}</h2>
-            <p>Use this when the current result is not the one you want, or when the song has no split yet.</p>
+            <h2>{track.runs.length === 0 ? 'Queue First Split' : 'Queue Another Version'}</h2>
+            <p>Use this when the current result is not the one you want, or when the song has no version yet.</p>
           </div>
         </div>
         <div className="render-form">
@@ -788,7 +794,7 @@ function StudioSplitsTab({
               ) : track.runs.length === 0 ? (
                 'Start Split'
               ) : (
-                'Queue Another Split'
+                'Queue Another Version'
               )}
             </button>
           </div>
@@ -843,7 +849,7 @@ function StudioSplitsTab({
                 pendingLabel="Deleting…"
                 confirmLabel="Delete track"
                 cancelLabel="Keep it"
-                prompt={`Delete "${track.title}" and all its splits?`}
+                prompt={`Delete "${track.title}" and all its versions?`}
                 onConfirm={() => onDeleteTrack(track.id)}
               />
             </div>
@@ -875,7 +881,7 @@ function RunNoteEditor({ runId, note, saving, onSave }: RunNoteEditorProps) {
     <label className="run-note">
       <textarea
         value={draft}
-        placeholder="Add context about why this split is the one to keep."
+        placeholder="Add context about why this version is the one to keep."
         maxLength={RUN_NOTE_MAX_LENGTH}
         rows={3}
         onChange={(event) => setDraft(event.target.value)}

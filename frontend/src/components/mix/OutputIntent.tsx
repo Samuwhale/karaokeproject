@@ -31,11 +31,29 @@ export function OutputIntentPicker({
 }: OutputIntentPickerProps) {
   const inferredIntent = inferIntent(run)
   const [pendingIntent, setPendingIntent] = useState<PendingIntentState | null>(null)
-  const activeIntent =
-    pendingIntent?.runId === run.id ? pendingIntent.value : inferredIntent
+  const supportedIntents = useMemo(
+    () => INTENTS.filter((spec) => isIntentSupported(spec, run)),
+    [run],
+  )
+  const activeIntent = pendingIntent?.runId === run.id ? pendingIntent.value : inferredIntent
   const activeIntentSpec = useMemo(
     () => INTENTS.find((spec) => spec.value === activeIntent) ?? null,
     [activeIntent],
+  )
+  const rerunSuggestions = useMemo(
+    () =>
+      INTENTS.filter((spec) => !isIntentSupported(spec, run))
+        .map((spec) => ({
+          spec,
+          fallback: spec.requiresProfile
+            ? profiles.find((profile) => profile.key === spec.requiresProfile) ?? null
+            : null,
+        }))
+        .filter(
+          (item): item is { spec: (typeof INTENTS)[number]; fallback: ProcessingProfile } =>
+            item.fallback !== null,
+        ),
+    [profiles, run],
   )
 
   async function handleApplyIntent(intent: OutputIntent) {
@@ -57,7 +75,7 @@ export function OutputIntentPicker({
       <div className="output-intent-head">
         <h3 className="subsection-head">Starting Balance</h3>
         <p className="output-intent-summary">
-          Pick the closest outcome first, then adjust the stem rows below.
+          Start from the closest result, then fine-tune the stem balance below.
         </p>
         <span className="output-intent-state" aria-live="polite">
           {saving
@@ -66,53 +84,50 @@ export function OutputIntentPicker({
               : 'Saving changes…'
             : activeIntentSpec
               ? `${activeIntentSpec.label} loaded.`
-              : 'No preset fully matches the current balance.'}
+              : 'The current balance is custom.'}
         </span>
       </div>
+
       <div className="output-intent-options" role="group" aria-label="Quick mix presets">
-        {INTENTS.map((spec) => {
-          const supported = isIntentSupported(spec, run)
-          if (supported) {
-            const isActive = spec.value === activeIntent
-            return (
-              <button
-                key={spec.value}
-                type="button"
-                aria-pressed={isActive}
-                className={`output-intent-option ${isActive ? 'active' : ''}`}
-                onClick={() => {
-                  void handleApplyIntent(spec.value)
-                }}
-              >
-                <span className="output-intent-option-label">{spec.label}</span>
-                {isActive ? <span className="output-intent-option-desc">{spec.description}</span> : null}
-              </button>
-            )
-          }
-          const fallback = spec.requiresProfile
-            ? profiles.find((profile) => profile.key === spec.requiresProfile) ?? null
-            : null
-          const disabled = fallback === null
+        {supportedIntents.map((spec) => {
+          const isActive = spec.value === activeIntent
           return (
             <button
               key={spec.value}
               type="button"
-              disabled={disabled}
-              className="output-intent-option output-intent-option-unsupported"
+              aria-pressed={isActive}
+              className={`output-intent-option ${isActive ? 'active' : ''}`}
               onClick={() => {
-                if (fallback) onRerunWithProfile(fallback.key)
+                void handleApplyIntent(spec.value)
               }}
             >
               <span className="output-intent-option-label">{spec.label}</span>
-              <span className="output-intent-option-desc">
-                {fallback
-                  ? `Prepare another split with ${fallback.label} to unlock this target.`
-                  : 'Not available for the stems this run produced.'}
-              </span>
+              <span className="output-intent-option-desc">{spec.description}</span>
             </button>
           )
         })}
       </div>
+
+      {rerunSuggestions.length > 0 ? (
+        <div className="output-intent-reruns">
+          <div className="output-intent-reruns-copy">
+            <strong>Need another version first?</strong>
+            <p>Some outcomes need a more detailed split. Queue that separately instead of mixing and rerunning from the same control.</p>
+          </div>
+          <div className="output-intent-reruns-actions">
+            {rerunSuggestions.map(({ spec, fallback }) => (
+              <button
+                key={spec.value}
+                type="button"
+                className="button-secondary"
+                onClick={() => onRerunWithProfile(fallback.key)}
+              >
+                Queue {spec.label.toLowerCase()} version
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

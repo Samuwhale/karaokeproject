@@ -7,7 +7,6 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { ExportModal, type ExportPreset } from './components/ExportModal'
 import { ImportFlowDialog } from './components/ImportFlowDialog'
 import { LibraryPage } from './components/library/LibraryPage'
-import { QueuePage } from './components/queue/QueuePage'
 import { SettingsDrawer } from './components/SettingsDrawer'
 import { StudioPage } from './components/studio/StudioPage'
 import {
@@ -25,7 +24,6 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { filterImportableMediaFiles } from './importableMedia'
 import {
   buildLibraryPath,
-  buildQueuePath,
   buildStudioPath,
   normalizeStudioTab,
   parseLibraryView,
@@ -37,9 +35,7 @@ function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const studioMatch = useMatch('/studio/:trackId/:tab')
-  const queueMatch = useMatch('/queue')
   const libraryActive = location.pathname === '/library'
-  const queueActive = !!queueMatch
   const studioActive = !!studioMatch
   const studioTrackId = studioMatch?.params.trackId ?? null
   const studioTab = normalizeStudioTab(studioMatch?.params.tab)
@@ -226,7 +222,7 @@ function App() {
         : null
     const nextPath = buildStudioPath(selectedTrack.id, studioTab, {
       runId: resolvedRun?.id ?? null,
-      compareRunId: studioTab === 'splits' ? validCompare : null,
+      compareRunId: studioTab === 'versions' ? validCompare : null,
     })
 
     if (`${location.pathname}${location.search}` !== nextPath) {
@@ -278,7 +274,7 @@ function App() {
       const files = filterImportableMediaFiles(event.dataTransfer?.files ?? [])
       if (files.length) {
         handleResolveLocalImport(files)
-          .then(() => navigate(buildQueuePath()))
+          .then(() => navigate(buildLibraryPath(DEFAULT_LIBRARY_VIEW)))
           .catch(() => undefined)
         return
       }
@@ -311,7 +307,7 @@ function App() {
       if (!text || !/^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\b/i.test(text)) return
       event.preventDefault()
       handleResolveYouTube(text)
-        .then(() => navigate(buildQueuePath()))
+        .then(() => navigate(buildLibraryPath(DEFAULT_LIBRARY_VIEW)))
         .catch(() => undefined)
     }
 
@@ -345,7 +341,7 @@ function App() {
       void handleCreateRun(selectedTrack.id, defaultProcessing)
     },
     onSelectRunByIndex: (index) => {
-      if (!studioActive || !selectedTrack || (studioTab !== 'mix' && studioTab !== 'splits')) return
+      if (!studioActive || !selectedTrack || (studioTab !== 'mix' && studioTab !== 'versions')) return
       const run = selectedTrack.runs[index]
       if (!run) return
       openStudio(selectedTrack.id, {
@@ -355,19 +351,19 @@ function App() {
     },
     onToggleCompare: () => {
       if (!studioActive || !selectedTrack || !selectedStudioRun) return
-      if (studioTab !== 'splits') {
+      if (studioTab !== 'versions') {
         const candidate = selectedTrack.runs.find(
           (run) => run.status === 'completed' && run.id !== selectedStudioRun.id,
         )
         openStudio(selectedTrack.id, {
-          tab: 'splits',
+          tab: 'versions',
           runId: selectedStudioRun.id,
           compareRunId: candidate?.id ?? null,
         })
         return
       }
       openStudio(selectedTrack.id, {
-        tab: 'splits',
+        tab: 'versions',
         runId: selectedStudioRun.id,
         compareRunId: studioCompareRunId ? null : selectedTrack.runs.find(
           (run) => run.status === 'completed' && run.id !== selectedStudioRun.id,
@@ -382,7 +378,7 @@ function App() {
       if (settingsOpen) setSettingsOpen(false)
       else if (importOpen) setImportOpen(false)
       else if (exportSelection !== null) setExportSelection(null)
-      else if (queueActive && selectedQueueRunIds.size > 0) clearSelection('queue')
+      else if (libraryActive && selectedQueueRunIds.size > 0) clearSelection('queue')
       else if (libraryActive && selectedLibraryIds.size > 0) {
         clearSelection('library')
         setLibrarySelectionMode(false)
@@ -423,9 +419,6 @@ function App() {
           <nav className="topbar-nav" aria-label="Primary navigation">
             <NavLink to="/library" className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}>
               Songs
-            </NavLink>
-            <NavLink to={buildQueuePath()} className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}>
-              Queue
             </NavLink>
             {tracks[0] ? (
               <NavLink
@@ -474,25 +467,6 @@ function App() {
                   currentTrackId={studioTrackId}
                   selectionMode={librarySelectionMode || librarySelectionList.length > 0}
                   selectedIds={selectedLibraryIds}
-                  onViewChange={(nextView) => openLibrary(nextView)}
-                  onSelectionModeChange={setLibrarySelectionMode}
-                  onToggleSelect={toggleLibrarySelected}
-                  onSelectAll={(ids) => selectAll('library', ids)}
-                  onClearSelection={() => {
-                    clearSelection('library')
-                    setLibrarySelectionMode(false)
-                  }}
-                  onOpenTrack={(trackId) => openStudio(trackId)}
-                  onAddSongs={() => setImportOpen(true)}
-                />
-              }
-            />
-            <Route
-              path="/queue"
-              element={
-                <QueuePage
-                  draftsCount={drafts.length}
-                  queueCount={queueRuns.length}
                   stagedImports={drafts}
                   profiles={settings?.profiles ?? []}
                   defaultProfileKey={defaultProcessing.profile_key}
@@ -501,11 +475,38 @@ function App() {
                   queueRuns={queueRuns}
                   cancellingRunId={cancellingRunId}
                   retryingRunId={retryingRunId}
+                  onViewChange={(nextView) => openLibrary(nextView)}
+                  onSelectionModeChange={setLibrarySelectionMode}
+                  onToggleSelect={(trackId) => {
+                    if (selectedQueueRunIds.size > 0) clearSelection('queue')
+                    toggleLibrarySelected(trackId)
+                  }}
+                  onSelectAll={(ids) => {
+                    if (selectedQueueRunIds.size > 0) clearSelection('queue')
+                    selectAll('library', ids)
+                  }}
+                  onClearSelection={() => {
+                    clearSelection('library')
+                    setLibrarySelectionMode(false)
+                  }}
+                  onOpenTrack={(trackId) => openStudio(trackId)}
                   onAddSongs={() => setImportOpen(true)}
-                  onSelectRun={(trackId, runId) => openStudio(trackId, { runId })}
-                  onToggleQueueSelected={toggleQueueRunSelected}
-                  onSelectAllQueue={(ids) => selectAll('queue', ids)}
+                  onToggleQueueSelected={(runId) => {
+                    if (selectedLibraryIds.size > 0) {
+                      clearSelection('library')
+                      setLibrarySelectionMode(false)
+                    }
+                    toggleQueueRunSelected(runId)
+                  }}
+                  onSelectAllQueue={(ids) => {
+                    if (selectedLibraryIds.size > 0) {
+                      clearSelection('library')
+                      setLibrarySelectionMode(false)
+                    }
+                    selectAll('queue', ids)
+                  }}
                   onClearQueueSelection={() => clearSelection('queue')}
+                  onSelectRun={(trackId, runId) => openStudio(trackId, { runId })}
                   onCancelRun={handleCancelRun}
                   onRetryRun={async (runId) => {
                     const result = await handleRetryRun(runId)
@@ -519,12 +520,16 @@ function App() {
                   onDiscardStagedImport={handleDiscardDraft}
                   onConfirmStagedImports={async (payload) => {
                     await handleConfirmDrafts(payload)
-                    if (payload.queue) navigate(buildQueuePath())
-                    else navigate(buildLibraryPath({ ...DEFAULT_LIBRARY_VIEW, filter: 'ready-to-render' }))
+                    navigate(
+                      payload.queue
+                        ? buildLibraryPath(DEFAULT_LIBRARY_VIEW)
+                        : buildLibraryPath({ ...DEFAULT_LIBRARY_VIEW, filter: 'ready-to-render' }),
+                    )
                   }}
                 />
               }
             />
+            <Route path="/queue" element={<Navigate to="/library" replace />} />
             <Route
               path="/studio/:trackId/:tab"
               element={
@@ -550,7 +555,7 @@ function App() {
                     openStudio(selectedTrack.id, {
                       tab,
                       runId: selectedStudioRun?.id ?? null,
-                      compareRunId: tab === 'splits' ? studioCompareRunId : null,
+                      compareRunId: tab === 'versions' ? studioCompareRunId : null,
                     })
                   }}
                   onSelectRun={(runId) => {
@@ -559,13 +564,13 @@ function App() {
                     openStudio(selectedTrack.id, {
                       tab: studioTab,
                       runId,
-                      compareRunId: studioTab === 'splits' ? nextCompare : null,
+                      compareRunId: studioTab === 'versions' ? nextCompare : null,
                     })
                   }}
                   onSelectCompare={(runId) => {
                     if (!selectedTrack) return
                     openStudio(selectedTrack.id, {
-                      tab: 'splits',
+                      tab: 'versions',
                       runId: selectedStudioRun?.id ?? null,
                       compareRunId: runId,
                     })
@@ -573,14 +578,14 @@ function App() {
                   onCreateRun={async (trackId, processing) => {
                     const result = await handleCreateRun(trackId, processing)
                     if (result && typeof result === 'object' && 'run' in result) {
-                      openStudio(trackId, { tab: 'splits', runId: (result as { run: { id: string } }).run.id })
+                      openStudio(trackId, { tab: 'versions', runId: (result as { run: { id: string } }).run.id })
                     }
                   }}
                   onCancelRun={handleCancelRun}
                   onRetryRun={async (runId) => {
                     const result = await handleRetryRun(runId)
                     if (selectedTrack && result && typeof result === 'object' && 'run' in result) {
-                      openStudio(selectedTrack.id, { tab: 'splits', runId: (result as { run: { id: string } }).run.id })
+                      openStudio(selectedTrack.id, { tab: 'versions', runId: (result as { run: { id: string } }).run.id })
                     }
                   }}
                   onSetKeeper={handleSetKeeper}
@@ -601,7 +606,7 @@ function App() {
           </Routes>
         </main>
 
-        {libraryActive && librarySelectionList.length > 0 ? (
+        {libraryActive && queueSelectionList.length === 0 && librarySelectionList.length > 0 ? (
           <BatchActionBar
             selectedCount={librarySelectionList.length}
             selectionLabel="songs"
@@ -664,7 +669,7 @@ function App() {
           </BatchActionBar>
         ) : null}
 
-        {queueActive && queueSelectionList.length > 0 ? (
+        {libraryActive && queueSelectionList.length > 0 ? (
           <BatchActionBar
             selectedCount={queueSelectionList.length}
             selectionLabel="queue items"
@@ -728,7 +733,7 @@ function App() {
           open={importOpen}
           stagedImports={drafts}
           onClose={() => setImportOpen(false)}
-          onSourcesStaged={() => navigate(buildQueuePath())}
+          onSourcesStaged={() => navigate(buildLibraryPath(DEFAULT_LIBRARY_VIEW))}
           resolvingYoutubeImport={resolvingYoutubeImport}
           resolvingLocalImport={resolvingLocalImport}
           onResolveYouTube={async (sourceUrl) => {

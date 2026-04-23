@@ -1,7 +1,7 @@
 import type { LibraryFilter, LibrarySort, LibraryView } from './components/trackListView'
 
 export type AppPage = 'library' | 'queue' | 'studio'
-export type StudioTab = 'mix' | 'splits'
+export type StudioTab = 'mix' | 'versions'
 
 const LIBRARY_FILTERS = new Set<LibraryFilter>([
   'all',
@@ -12,7 +12,7 @@ const LIBRARY_FILTERS = new Set<LibraryFilter>([
 ])
 
 const LIBRARY_SORTS = new Set<LibrarySort>(['recent', 'created', 'title', 'runs'])
-const STUDIO_TABS = new Set<StudioTab>(['mix', 'splits'])
+const STUDIO_TABS = new Set<StudioTab>(['mix', 'versions'])
 
 export function parseLibraryView(searchParams: URLSearchParams): LibraryView {
   const filter = searchParams.get('filter')
@@ -37,10 +37,6 @@ export function buildLibraryPath(view: LibraryView) {
   return search ? `/library?${search}` : '/library'
 }
 
-export function buildQueuePath() {
-  return '/queue'
-}
-
 export function normalizeStudioTab(tab: string | undefined): StudioTab {
   if (tab && STUDIO_TABS.has(tab as StudioTab)) return tab as StudioTab
   return 'mix'
@@ -57,7 +53,7 @@ export function buildStudioPath(
   const searchParams = new URLSearchParams()
 
   if (options?.runId) searchParams.set('run', options.runId)
-  if (tab === 'splits' && options?.compareRunId) {
+  if (tab === 'versions' && options?.compareRunId) {
     searchParams.set('compare', options.compareRunId)
   }
 
