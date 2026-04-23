@@ -1,24 +1,14 @@
-import { QueueList } from '../QueueList'
-import { StagedImportsPanel } from '../StagedImportsPanel'
 import { ProgressBar } from '../feedback/ProgressBar'
 import { Skeleton } from '../feedback/Skeleton'
 import { isActiveRunStatus } from '../runStatus'
 import {
   LIBRARY_FILTERS,
   type LibraryFilter,
-  libraryFilterMeta,
   type LibrarySort,
   type LibraryView,
   trackStageSummary,
 } from '../trackListView'
-import type {
-  ProcessingProfile,
-  QueueRunEntry,
-  RunProcessingConfigInput,
-  StagedImport,
-  TrackSummary,
-  UpdateImportDraftInput,
-} from '../../types'
+import type { TrackSummary } from '../../types'
 
 const SORT_OPTIONS: { value: LibrarySort; label: string }[] = [
   { value: 'recent', label: 'Recently updated' },
@@ -34,38 +24,19 @@ type LibraryPageProps = {
   hasFirstSync: boolean
   countsByFilter: Record<LibraryFilter, number>
   currentTrackId: string | null
-  selectionMode: boolean
+  workQueue: {
+    stagedCount: number
+    activeCount: number
+    followUpCount: number
+  }
   selectedIds: Set<string>
-  stagedImports: StagedImport[]
-  profiles: ProcessingProfile[]
-  defaultProfileKey: string
-  confirmingDrafts: boolean
-  selectedQueueRunIds: Set<string>
-  queueRuns: QueueRunEntry[]
-  cancellingRunId: string | null
-  retryingRunId: string | null
   onViewChange: (view: LibraryView) => void
-  onSelectionModeChange: (enabled: boolean) => void
+  onOpenQueue: () => void
   onToggleSelect: (trackId: string) => void
   onSelectAll: (ids: string[]) => void
   onClearSelection: () => void
-  onOpenTrack: (trackId: string) => void
+  onOpenTrack: (track: TrackSummary) => void
   onAddSongs: () => void
-  onToggleQueueSelected: (runId: string) => void
-  onSelectAllQueue: (ids: string[]) => void
-  onClearQueueSelection: () => void
-  onSelectRun: (trackId: string, runId: string) => void
-  onCancelRun: (runId: string) => Promise<void>
-  onRetryRun: (runId: string) => Promise<void>
-  onDismissRun: (runId: string) => Promise<void>
-  onUpdateStagedImport: (draftId: string, payload: UpdateImportDraftInput) => Promise<void>
-  onDiscardStagedImport: (draftId: string) => Promise<void>
-  onConfirmStagedImports: (payload: {
-    draft_ids: string[]
-    queue: boolean
-    processing?: RunProcessingConfigInput
-    processing_overrides?: Record<string, RunProcessingConfigInput>
-  }) => Promise<unknown>
 }
 
 function formatDuration(seconds: number | null) {
@@ -81,8 +52,15 @@ function artistLine(track: TrackSummary) {
   return `(from ${track.source_filename})`
 }
 
+function sourceLabel(track: TrackSummary) {
+  if (track.source_type === 'youtube') return 'YouTube link'
+  return 'Local file'
+}
+
 function emptyMessage(filter: LibraryFilter) {
   switch (filter) {
+    case 'rendering':
+      return 'No songs are currently splitting.'
     case 'needs-attention':
       return 'No songs need another attempt right now.'
     case 'ready-to-render':
@@ -96,6 +74,21 @@ function emptyMessage(filter: LibraryFilter) {
   }
 }
 
+function trackActionLabel(track: TrackSummary) {
+  switch (trackStageSummary(track).key) {
+    case 'rendering':
+      return 'Open queue'
+    case 'needs-attention':
+      return 'Review version'
+    case 'ready':
+      return 'Choose version'
+    case 'final':
+      return 'Open mix'
+    default:
+      return 'Queue split'
+  }
+}
+
 export function LibraryPage({
   view,
   tracks,
@@ -103,43 +96,34 @@ export function LibraryPage({
   hasFirstSync,
   countsByFilter,
   currentTrackId,
-  selectionMode,
+  workQueue,
   selectedIds,
-  stagedImports,
-  profiles,
-  defaultProfileKey,
-  confirmingDrafts,
-  selectedQueueRunIds,
-  queueRuns,
-  cancellingRunId,
-  retryingRunId,
   onViewChange,
-  onSelectionModeChange,
+  onOpenQueue,
   onToggleSelect,
   onSelectAll,
   onClearSelection,
   onOpenTrack,
   onAddSongs,
-  onToggleQueueSelected,
-  onSelectAllQueue,
-  onClearQueueSelection,
-  onSelectRun,
-  onCancelRun,
-  onRetryRun,
-  onDismissRun,
-  onUpdateStagedImport,
-  onDiscardStagedImport,
-  onConfirmStagedImports,
 }: LibraryPageProps) {
   const loading = !hasFirstSync && totalCount === 0
   const libraryEmpty = hasFirstSync && totalCount === 0
   const noMatches = hasFirstSync && totalCount > 0 && tracks.length === 0
   const allSelected = tracks.length > 0 && tracks.every((track) => selectedIds.has(track.id))
-  const activeQueueCount = queueRuns.filter((entry) => isActiveRunStatus(entry.run.status)).length
-  const needsFollowUpCount = queueRuns.length - activeQueueCount
-  const hasImports = stagedImports.length > 0
-  const hasQueue = queueRuns.length > 0
-  const activeFilterMeta = libraryFilterMeta(view.filter)
+  const selectedCount = selectedIds.size
+  const queueSummary = [
+    workQueue.stagedCount > 0
+      ? `${workQueue.stagedCount} import review${workQueue.stagedCount === 1 ? '' : 's'}`
+      : null,
+    workQueue.activeCount > 0
+      ? `${workQueue.activeCount} split${workQueue.activeCount === 1 ? '' : 's'} running`
+      : null,
+    workQueue.followUpCount > 0
+      ? `${workQueue.followUpCount} need follow-up`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   function handleToggleAll() {
     if (allSelected) onClearSelection()
@@ -151,88 +135,28 @@ export function LibraryPage({
       <header className="suite-page-head">
         <div>
           <h1>Songs</h1>
-          <p>Add sources, review the next actions, then open Studio only when a song is ready to judge.</p>
+          <p>Manage your studio stems and splitting progress.</p>
         </div>
         <div className="suite-page-head-actions">
-          <button type="button" className="button-secondary" onClick={() => onSelectionModeChange(!selectionMode)}>
-            {selectionMode ? 'Done' : 'Select songs'}
-          </button>
           <button type="button" className="button-primary" onClick={onAddSongs}>
             Add songs
           </button>
         </div>
       </header>
 
-      {hasImports || hasQueue ? (
-        <section className="songs-priority">
-          <div className="songs-priority-head">
-            <div>
-              <h2>Next up</h2>
-              <p>Keep new imports and active work together so the queue feels like part of the song flow, not a separate place to manage.</p>
-            </div>
-            <div className="songs-priority-meta">
-              {hasImports ? <span>{stagedImports.length} import review</span> : null}
-              {activeQueueCount > 0 ? <span>{activeQueueCount} running</span> : null}
-              {needsFollowUpCount > 0 ? <span>{needsFollowUpCount} need follow-up</span> : null}
-            </div>
+      {queueSummary ? (
+        <section className="work-queue-summary">
+          <div>
+            <h2>Work queue</h2>
+            <p>{queueSummary}</p>
           </div>
-
-          {hasImports ? (
-            <section className="songs-priority-section">
-              <div className="queue-section-head">
-                <div>
-                  <h2>Review imports</h2>
-                  <p>Fix titles only when needed, resolve duplicates, and queue the right split once for the whole batch.</p>
-                </div>
-              </div>
-              <StagedImportsPanel
-                stagedImports={stagedImports}
-                profiles={profiles}
-                defaultProfileKey={defaultProfileKey}
-                confirming={confirmingDrafts}
-                onUpdateStagedImport={onUpdateStagedImport}
-                onDiscardStagedImport={onDiscardStagedImport}
-                onConfirmStagedImports={onConfirmStagedImports}
-              />
-            </section>
-          ) : null}
-
-          {hasQueue ? (
-            <section className="songs-priority-section">
-              <div className="queue-section-head">
-                <div>
-                  <h2>Processing and follow-up</h2>
-                  <p>Watch active splits here and jump into the exact song version that needs a decision.</p>
-                </div>
-              </div>
-              <QueueList
-                embedded
-                showHeader={false}
-                entries={queueRuns}
-                selectedIds={selectedQueueRunIds}
-                onToggleSelect={onToggleQueueSelected}
-                onSelectAll={onSelectAllQueue}
-                onClearSelection={onClearQueueSelection}
-                onSelectRun={onSelectRun}
-                onCancelRun={onCancelRun}
-                onRetryRun={onRetryRun}
-                onDismissRun={onDismissRun}
-                cancellingRunId={cancellingRunId}
-                retryingRunId={retryingRunId}
-              />
-            </section>
-          ) : null}
+          <button type="button" className="button-secondary" onClick={onOpenQueue}>
+            Open queue
+          </button>
         </section>
       ) : null}
 
       <section className="songs-library">
-        <div className="queue-section-head">
-          <div>
-            <h2>Library</h2>
-            <p>{activeFilterMeta.description}</p>
-          </div>
-        </div>
-
         <div className="library-filter-bar" role="tablist" aria-label="Song workflow filters">
           {LIBRARY_FILTERS.map((filter) => (
             <button
@@ -270,12 +194,13 @@ export function LibraryPage({
                 </option>
               ))}
             </select>
-            {selectionMode && tracks.length > 0 ? (
+            {tracks.length > 0 ? (
               <label className="checkbox-row library-select-all">
                 <input type="checkbox" checked={allSelected} onChange={handleToggleAll} />
                 <span>{allSelected ? 'Clear all' : 'Select all'}</span>
               </label>
             ) : null}
+            {selectedCount > 0 ? <span className="library-selection-count">{selectedCount} selected</span> : null}
           </div>
         </div>
 
@@ -295,67 +220,96 @@ export function LibraryPage({
         ) : noMatches ? (
           <p className="empty-state track-list-empty">{emptyMessage(view.filter)}</p>
         ) : (
-          <div className="track-list">
-            {tracks.map((track) => {
-              const latest = track.latest_run
-              const isSelected = selectedIds.has(track.id)
-              const stage = trackStageSummary(track)
-              const latestRunActive = latest ? isActiveRunStatus(latest.status) : false
-              const stageSummary = latestRunActive
-                ? latest?.status_message || 'Split in progress'
-                : track.has_custom_mix
-                  ? 'Custom mix saved'
+          <div className="library-table">
+            <div className="library-table-head" aria-hidden>
+              <span />
+              <span>Title &amp; artist</span>
+              <span>Source</span>
+              <span>State</span>
+              <span>Action</span>
+            </div>
+            <div className="track-list">
+              {tracks.map((track) => {
+                const latest = track.latest_run
+                const isSelected = selectedIds.has(track.id)
+                const stage = trackStageSummary(track)
+                const actionLabel = trackActionLabel(track)
+                const latestRunActive = latest ? isActiveRunStatus(latest.status) : false
+                const stageSummary = latestRunActive
+                  ? latest?.status_message || 'Split in progress'
                   : stage.key === 'needs-attention'
-                    ? 'Retry this version or queue a different setup'
+                    ? 'Retry required'
                     : stage.key === 'ready'
-                      ? 'Open Studio, compare versions, and choose the keeper'
+                      ? 'Ready for review'
                       : stage.key === 'final'
-                        ? 'Ready to export again'
-                        : 'Queue the first split'
-              const metaSummary = [
-                track.source_type === 'youtube' ? 'YouTube' : 'Local',
-                formatDuration(track.duration_seconds),
-                track.run_count === 0
-                  ? 'No versions yet'
-                  : `${track.run_count} version${track.run_count === 1 ? '' : 's'}`,
-              ].join(' · ')
+                        ? 'Ready to export'
+                        : track.has_custom_mix
+                          ? 'Custom mix saved'
+                          : 'Waiting to split'
+                const metaSummary = [
+                  formatDuration(track.duration_seconds),
+                  track.run_count === 0
+                    ? 'No versions yet'
+                    : `${track.run_count} version${track.run_count === 1 ? '' : 's'}`,
+                ].join(' · ')
+                const initials = track.title.trim().slice(0, 1).toUpperCase() || 'S'
 
-              return (
-                <div
-                  key={track.id}
-                  className={`track-card-shell ${selectionMode ? 'track-card-shell-selecting' : ''} ${currentTrackId === track.id ? 'track-card-active' : ''} ${isSelected ? 'track-card-checked' : ''}`}
-                >
-                  {selectionMode ? (
-                    <label className="track-card-check" onClick={(event) => event.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => onToggleSelect(track.id)}
-                        aria-label={`Select ${track.title}`}
-                      />
-                    </label>
-                  ) : null}
-                  <button type="button" className="track-card track-card-main" onClick={() => onOpenTrack(track.id)}>
-                    <div className="track-card-header">
-                      <div>
-                        <strong>{track.title}</strong>
-                        <p>{artistLine(track)}</p>
-                      </div>
-                      <span className={`track-card-stage ${stage.toneClassName}`}>{stage.label}</span>
+                return (
+                  <div
+                    key={track.id}
+                    className={`${currentTrackId === track.id ? 'track-row-active' : ''} ${isSelected ? 'track-row-checked' : ''}`}
+                  >
+                    <div className="track-row-shell">
+                      <label className="track-row-check" onClick={(event) => event.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => onToggleSelect(track.id)}
+                          aria-label={`Select ${track.title}`}
+                        />
+                      </label>
+
+                      <button type="button" className="track-row" onClick={() => onOpenTrack(track)}>
+                        <div className="track-row-title-cell">
+                          {track.thumbnail_url ? (
+                            <img
+                              className="track-row-art"
+                              src={track.thumbnail_url}
+                              alt=""
+                              loading="lazy"
+                            />
+                          ) : (
+                            <span className="track-row-art track-row-art-fallback" aria-hidden>
+                              {initials}
+                            </span>
+                          )}
+                          <div className="track-row-title">
+                            <strong>{track.title}</strong>
+                            <span>{artistLine(track)}</span>
+                          </div>
+                        </div>
+
+                        <div className="track-row-source-cell">
+                          <strong>{sourceLabel(track)}</strong>
+                          <span>{metaSummary}</span>
+                        </div>
+
+                        <div className="track-row-state-cell">
+                          <span className={`track-row-stage ${stage.toneClassName}`}>{stage.label}</span>
+                          <span className="track-row-state-copy">{stageSummary}</span>
+                          {latestRunActive && latest ? <ProgressBar value={latest.progress} /> : null}
+                        </div>
+
+                        <div className="track-row-action-cell">
+                          <span>{actionLabel}</span>
+                          {latestRunActive && latest ? <strong>{Math.round(latest.progress)}%</strong> : null}
+                        </div>
+                      </button>
                     </div>
-                    <div className="track-card-footer">
-                      <strong className="track-card-next">{stageSummary}</strong>
-                      <span className="track-card-meta">{metaSummary}</span>
-                    </div>
-                    {latestRunActive && latest ? (
-                      <div className="track-card-progress">
-                        <ProgressBar value={latest.progress} />
-                      </div>
-                    ) : null}
-                  </button>
-                </div>
-              )
-            })}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </section>

@@ -129,7 +129,7 @@ function ImportFlowDialogContent({
         <header className="import-modal-head">
           <div className="import-flow-head-copy">
             <h2>Add songs</h2>
-            <p>Add sources here, then review them in Songs before you start splitting.</p>
+            <p>Add sources here, then review them in Work queue before you start splitting.</p>
           </div>
           <div className="import-flow-head-actions">
             <button ref={closeButtonRef} type="button" className="button-secondary" onClick={handleClose}>
@@ -147,7 +147,7 @@ function ImportFlowDialogContent({
 
           {stagedImports.length > 0 ? (
             <p className="import-flow-note">
-              {stagedImports.length} staged source{stagedImports.length === 1 ? '' : 's'} already waiting in Songs.
+              {stagedImports.length} staged source{stagedImports.length === 1 ? '' : 's'} already waiting in Work queue.
             </p>
           ) : null}
 
@@ -155,7 +155,7 @@ function ImportFlowDialogContent({
             <section className="import-flow-section">
               <div className="import-flow-section-head">
                 <h3>YouTube link</h3>
-                <p>Paste one link now. You can rename or de-duplicate it in Songs.</p>
+                <p>Paste one link now. You can rename or de-duplicate it in Work queue.</p>
               </div>
               <label className="field">
                 <span>YouTube URL</span>
@@ -195,7 +195,7 @@ function ImportFlowDialogContent({
             <section className="import-flow-section">
               <div className="import-flow-section-head">
                 <h3>Local files</h3>
-                <p>Drop files here now, then finish the batch in Songs.</p>
+                <p>Drop files here now, then finish the batch in Work queue.</p>
               </div>
               <div
                 className={`drop-zone ${dragActive ? 'drop-zone-active' : ''}`}

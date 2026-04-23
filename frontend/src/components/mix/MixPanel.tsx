@@ -181,7 +181,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
           <div className="mix-panel-head-copy">
             <h3 className="subsection-head">Mixer</h3>
             <p className="mix-panel-copy">
-              Leave most stems at unity. Mute what should disappear and use Listen only to audition one stem at a time.
+              Start from a saved balance, then fine-tune levels here. Double-click any fader to reset it to unity.
             </p>
           </div>
           <div className="mix-panel-head-actions">
@@ -313,9 +313,6 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
           )
         })}
       </div>
-      <p className="mix-panel-hint">
-        Double-click any fader to reset it to unity. Level and mute save automatically. Listen affects preview only and is never saved.
-      </p>
     </section>
   )
 }

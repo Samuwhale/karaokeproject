@@ -188,7 +188,7 @@ export function CompareView({
         <p className="empty-state">No matching artifacts to overlay.</p>
       )}
 
-      <details className="compare-metrics" open={metricsReady}>
+      <details className="compare-metrics">
         <summary>Technical metrics</summary>
         <table className="compare-table">
           <thead>

@@ -84,11 +84,13 @@ export function QueueList({
 
       const rowClassName = [
         'queue-row',
+        `queue-row-${group}`,
         selected ? 'queue-row-selected' : '',
         failed ? 'queue-row-failed' : '',
       ]
         .filter(Boolean)
         .join(' ')
+      const initials = entry.track_title.trim().slice(0, 1).toUpperCase() || 'S'
 
       return (
         <article key={run.id} className={rowClassName}>
@@ -104,23 +106,28 @@ export function QueueList({
             className="queue-row-main"
             onClick={() => onSelectRun(entry.track_id, run.id)}
           >
-            <div className="queue-row-title">
-              <strong>{entry.track_title}</strong>
-              {entry.track_artist ? <span> · {entry.track_artist}</span> : null}
-            </div>
-            <div className="queue-row-meta">
-              {RUN_STATUS_LABELS[run.status] ?? run.status} · {run.processing.profile_label} · {timingLabel}
-            </div>
-            {group === 'active' ? (
-              <ProgressBar value={run.progress} label={description || RUN_STATUS_LABELS[run.status]} />
-            ) : null}
-            {description ? <div className="queue-row-message">{description}</div> : null}
-            {group === 'followup' && run.error_message ? (
-              <div className="queue-row-error">
-                <div>{run.error_message}</div>
-                {remediation ? <div className="queue-row-hint">{remediation}</div> : null}
+            <span className="queue-row-art" aria-hidden>
+              {initials}
+            </span>
+            <div className="queue-row-copy">
+              <div className="queue-row-title">
+                <strong>{entry.track_title}</strong>
+                {entry.track_artist ? <span>{entry.track_artist}</span> : null}
               </div>
-            ) : null}
+              <div className="queue-row-meta">
+                {RUN_STATUS_LABELS[run.status] ?? run.status} · {run.processing.profile_label} · {timingLabel}
+              </div>
+              {group === 'active' ? (
+                <ProgressBar value={run.progress} label={description || RUN_STATUS_LABELS[run.status]} />
+              ) : null}
+              {description ? <div className="queue-row-message">{description}</div> : null}
+              {group === 'followup' && run.error_message ? (
+                <div className="queue-row-error">
+                  <div>{run.error_message}</div>
+                  {remediation ? <div className="queue-row-hint">{remediation}</div> : null}
+                </div>
+              ) : null}
+            </div>
           </button>
           <div className="queue-row-actions">
             {group === 'followup' ? (

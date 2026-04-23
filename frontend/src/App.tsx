@@ -7,12 +7,14 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { ExportModal, type ExportPreset } from './components/ExportModal'
 import { ImportFlowDialog } from './components/ImportFlowDialog'
 import { LibraryPage } from './components/library/LibraryPage'
+import { QueuePage } from './components/queue/QueuePage'
 import { SettingsDrawer } from './components/SettingsDrawer'
 import { StudioPage } from './components/studio/StudioPage'
 import {
   DEFAULT_LIBRARY_VIEW,
   applyLibraryView,
   countLibraryFilters,
+  trackStageSummary,
 } from './components/trackListView'
 import type { LibraryView } from './components/trackListView'
 import { ConfirmInline } from './components/feedback/ConfirmInline'
@@ -29,13 +31,14 @@ import {
   parseLibraryView,
 } from './routes'
 import { resolveSelectedRun } from './runSelection'
-import type { RunProcessingConfigInput } from './types'
+import type { RunProcessingConfigInput, TrackSummary } from './types'
 
 function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const studioMatch = useMatch('/studio/:trackId/:tab')
   const libraryActive = location.pathname === '/library'
+  const queueActive = location.pathname === '/queue'
   const studioActive = !!studioMatch
   const studioTrackId = studioMatch?.params.trackId ?? null
   const studioTab = normalizeStudioTab(studioMatch?.params.tab)
@@ -116,7 +119,6 @@ function App() {
   )
   const [importOpen, setImportOpen] = useState(false)
   const [dragOverlayActive, setDragOverlayActive] = useState(false)
-  const [librarySelectionMode, setLibrarySelectionMode] = useState(false)
   const [exportSelection, setExportSelection] = useState<{
     trackIds: string[]
     runIds: Record<string, string>
@@ -144,6 +146,11 @@ function App() {
   const hasFirstSync = connection.lastSyncAt > 0
   const setupRequired = hasFirstSync && diagnostics ? !diagnostics.app_ready : false
   const selectedStudioRun = selectedTrack ? resolveSelectedRun(selectedTrack, studioRunId) : null
+  const queueActiveCount = useMemo(
+    () => queueRuns.filter((entry) => isActiveRunStatus(entry.run.status)).length,
+    [queueRuns],
+  )
+  const queueFollowUpCount = queueRuns.length - queueActiveCount
 
   function openSettings(view: 'preferences' | 'maintenance' | 'storage') {
     setSettingsView(view)
@@ -152,6 +159,22 @@ function App() {
 
   function openLibrary(view: LibraryView = libraryView) {
     navigate(buildLibraryPath(view))
+  }
+
+  function preferredStudioTabForTrack(
+    track: TrackSummary,
+    options?: { runStatus?: string | null; runId?: string | null },
+  ) {
+    if (options?.runStatus) {
+      if (isActiveRunStatus(options.runStatus)) return 'versions' as const
+      if (options.runStatus === 'failed' || options.runStatus === 'cancelled') return 'versions' as const
+    }
+
+    if (track.keeper_run_id && (!options?.runId || track.keeper_run_id === options.runId)) {
+      return 'mix' as const
+    }
+
+    return 'versions' as const
   }
 
   function openStudio(
@@ -164,6 +187,22 @@ function App() {
         compareRunId: options?.compareRunId ?? null,
       }),
     )
+  }
+
+  function openTrackWorkspace(track: TrackSummary, options?: { runId?: string | null; runStatus?: string | null }) {
+    const stage = trackStageSummary(track)
+    if (stage.key === 'rendering') {
+      navigate('/queue')
+      return
+    }
+
+    const runId = options?.runId ?? track.keeper_run_id ?? track.latest_run?.id ?? null
+    const tab = preferredStudioTabForTrack(track, {
+      runId,
+      runStatus: options?.runStatus ?? track.latest_run?.status ?? null,
+    })
+
+    openStudio(track.id, { tab, runId })
   }
 
   function openBatchExport(trackIds: string[]) {
@@ -274,7 +313,7 @@ function App() {
       const files = filterImportableMediaFiles(event.dataTransfer?.files ?? [])
       if (files.length) {
         handleResolveLocalImport(files)
-          .then(() => navigate(buildLibraryPath(DEFAULT_LIBRARY_VIEW)))
+          .then(() => navigate('/queue'))
           .catch(() => undefined)
         return
       }
@@ -307,7 +346,7 @@ function App() {
       if (!text || !/^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\b/i.test(text)) return
       event.preventDefault()
       handleResolveYouTube(text)
-        .then(() => navigate(buildLibraryPath(DEFAULT_LIBRARY_VIEW)))
+        .then(() => navigate('/queue'))
         .catch(() => undefined)
     }
 
@@ -327,10 +366,11 @@ function App() {
     const nextTrack = activePageTracks[nextIndex]
     if (!nextTrack) return
     if (studioActive) {
-      openStudio(nextTrack.id, { tab: studioTab })
+      const nextRunId = nextTrack.keeper_run_id ?? nextTrack.latest_run?.id ?? null
+      openStudio(nextTrack.id, { tab: studioTab, runId: nextRunId })
       return
     }
-    openStudio(nextTrack.id)
+    openTrackWorkspace(nextTrack)
   }
 
   useKeyboardShortcuts({
@@ -378,10 +418,9 @@ function App() {
       if (settingsOpen) setSettingsOpen(false)
       else if (importOpen) setImportOpen(false)
       else if (exportSelection !== null) setExportSelection(null)
-      else if (libraryActive && selectedQueueRunIds.size > 0) clearSelection('queue')
+      else if ((libraryActive || queueActive) && selectedQueueRunIds.size > 0) clearSelection('queue')
       else if (libraryActive && selectedLibraryIds.size > 0) {
         clearSelection('library')
-        setLibrarySelectionMode(false)
       }
     },
   })
@@ -411,200 +450,278 @@ function App() {
     const selectedIds = new Set(librarySelectionList)
     return tracks.filter((track) => selectedIds.has(track.id) && track.keeper_run_id).length
   }, [librarySelectionList, tracks])
+  const studioLandingTrack = tracks[0] ?? null
+  const studioLandingPath = studioLandingTrack
+    ? buildStudioPath(
+        studioLandingTrack.id,
+        preferredStudioTabForTrack(studioLandingTrack, {
+          runId: studioLandingTrack.keeper_run_id ?? studioLandingTrack.latest_run?.id ?? null,
+          runStatus: studioLandingTrack.latest_run?.status ?? null,
+        }),
+        {
+          runId: studioLandingTrack.keeper_run_id ?? studioLandingTrack.latest_run?.id ?? null,
+        },
+      )
+    : null
+  const suiteMainClassName = `suite-main ${studioActive && studioTab === 'mix' ? 'suite-main-fixed-workspace' : ''}`
+  const shellTitle = libraryActive
+    ? 'Songs Library'
+    : queueActive
+      ? 'Open Queue'
+      : studioActive
+        ? studioTab === 'mix'
+          ? 'Studio Mix'
+          : 'Studio Versions'
+        : 'Studio'
+
   return (
     <ErrorBoundary>
       <div className="app-shell">
-        <header className="topbar" inert={anyDialogOpen || undefined}>
-          <div className="topbar-brand">stems</div>
-          <nav className="topbar-nav" aria-label="Primary navigation">
-            <NavLink to="/library" className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}>
-              Songs
+        <aside className="shell-rail" inert={anyDialogOpen || undefined}>
+          <div className="shell-rail-brand">
+            <strong>Studio</strong>
+            <span>Stem Splitter</span>
+          </div>
+
+          <nav className="shell-rail-nav" aria-label="Primary navigation">
+            <NavLink to="/library" className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}>
+              <LibraryIcon />
+              <span>Songs</span>
             </NavLink>
-            {tracks[0] ? (
+            <NavLink to="/queue" className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}>
+              <QueueIcon />
+              <span>Queue</span>
+            </NavLink>
+            {studioLandingPath ? (
               <NavLink
-                to={studioActive ? location.pathname + location.search : buildStudioPath(studioTrackId ?? tracks[0].id, 'mix')}
-                className={({ isActive }) => `topbar-nav-link ${isActive ? 'topbar-nav-link-active' : ''}`}
+                to={studioActive ? location.pathname + location.search : studioLandingPath}
+                className={({ isActive }) => `shell-rail-link ${isActive ? 'shell-rail-link-active' : ''}`}
               >
-                Studio
+                <StudioIcon />
+                <span>Studio</span>
               </NavLink>
             ) : (
-              <span className="topbar-nav-link topbar-nav-link-disabled">Studio</span>
+              <span className="shell-rail-link shell-rail-link-disabled">
+                <StudioIcon />
+                <span>Studio</span>
+              </span>
             )}
           </nav>
-          <div className="topbar-meta">
-            <button type="button" className="button-primary topbar-add" onClick={() => setImportOpen(true)}>
+
+          <div className="shell-rail-footer">
+            <button type="button" className="button-primary shell-rail-add" onClick={() => setImportOpen(true)}>
               Add songs
             </button>
-            <StatusChip
-              connection={connection}
-              setupRequired={setupRequired}
-              onOpenSettings={() => openSettings('maintenance')}
-            />
             <button
               type="button"
-              className="topbar-gear"
+              className="shell-rail-settings"
               onClick={() => openSettings('preferences')}
-              aria-label="Open settings"
-              title="Settings (⌘,)"
             >
               <GearIcon />
+              <span>Settings</span>
             </button>
           </div>
-        </header>
+        </aside>
 
-        <main className="suite-main" inert={anyDialogOpen || undefined}>
-          <Routes>
-            <Route path="/" element={<Navigate to="/library" replace />} />
-            <Route
-              path="/library"
-              element={
-                <LibraryPage
-                  view={libraryView}
-                  tracks={visibleTracks}
-                  totalCount={tracks.length}
-                  hasFirstSync={hasFirstSync}
-                  countsByFilter={countsByFilter}
-                  currentTrackId={studioTrackId}
-                  selectionMode={librarySelectionMode || librarySelectionList.length > 0}
-                  selectedIds={selectedLibraryIds}
-                  stagedImports={drafts}
-                  profiles={settings?.profiles ?? []}
-                  defaultProfileKey={defaultProcessing.profile_key}
-                  confirmingDrafts={confirmingDrafts}
-                  selectedQueueRunIds={selectedQueueRunIds}
-                  queueRuns={queueRuns}
-                  cancellingRunId={cancellingRunId}
-                  retryingRunId={retryingRunId}
-                  onViewChange={(nextView) => openLibrary(nextView)}
-                  onSelectionModeChange={setLibrarySelectionMode}
-                  onToggleSelect={(trackId) => {
-                    if (selectedQueueRunIds.size > 0) clearSelection('queue')
-                    toggleLibrarySelected(trackId)
-                  }}
-                  onSelectAll={(ids) => {
-                    if (selectedQueueRunIds.size > 0) clearSelection('queue')
-                    selectAll('library', ids)
-                  }}
-                  onClearSelection={() => {
-                    clearSelection('library')
-                    setLibrarySelectionMode(false)
-                  }}
-                  onOpenTrack={(trackId) => openStudio(trackId)}
-                  onAddSongs={() => setImportOpen(true)}
-                  onToggleQueueSelected={(runId) => {
-                    if (selectedLibraryIds.size > 0) {
+        <div className="shell-canvas">
+          <header className="shell-topbar" inert={anyDialogOpen || undefined}>
+            <div className="shell-topbar-copy">
+              <span>Project Studio</span>
+              <strong>{shellTitle}</strong>
+            </div>
+            <div className="shell-topbar-meta">
+              <StatusChip
+                connection={connection}
+                setupRequired={setupRequired}
+                onOpenSettings={() => openSettings('maintenance')}
+              />
+              <button
+                type="button"
+                className="topbar-gear"
+                onClick={() => openSettings('preferences')}
+                aria-label="Open settings"
+                title="Settings (⌘,)"
+              >
+                <GearIcon />
+              </button>
+              <span className="shell-avatar" aria-hidden>
+                S
+              </span>
+            </div>
+          </header>
+
+          <main className={suiteMainClassName} inert={anyDialogOpen || undefined}>
+            <Routes>
+              <Route path="/" element={<Navigate to="/library" replace />} />
+              <Route
+                path="/library"
+                element={
+                  <LibraryPage
+                    view={libraryView}
+                    tracks={visibleTracks}
+                    totalCount={tracks.length}
+                    hasFirstSync={hasFirstSync}
+                    countsByFilter={countsByFilter}
+                    currentTrackId={studioTrackId}
+                    workQueue={{
+                      stagedCount: drafts.length,
+                      activeCount: queueActiveCount,
+                      followUpCount: queueFollowUpCount,
+                    }}
+                    selectedIds={selectedLibraryIds}
+                    onViewChange={(nextView) => openLibrary(nextView)}
+                    onOpenQueue={() => navigate('/queue')}
+                    onToggleSelect={(trackId) => {
+                      if (selectedQueueRunIds.size > 0) clearSelection('queue')
+                      toggleLibrarySelected(trackId)
+                    }}
+                    onSelectAll={(ids) => {
+                      if (selectedQueueRunIds.size > 0) clearSelection('queue')
+                      selectAll('library', ids)
+                    }}
+                    onClearSelection={() => {
                       clearSelection('library')
-                      setLibrarySelectionMode(false)
-                    }
-                    toggleQueueRunSelected(runId)
-                  }}
-                  onSelectAllQueue={(ids) => {
-                    if (selectedLibraryIds.size > 0) {
-                      clearSelection('library')
-                      setLibrarySelectionMode(false)
-                    }
-                    selectAll('queue', ids)
-                  }}
-                  onClearQueueSelection={() => clearSelection('queue')}
-                  onSelectRun={(trackId, runId) => openStudio(trackId, { runId })}
-                  onCancelRun={handleCancelRun}
-                  onRetryRun={async (runId) => {
-                    const result = await handleRetryRun(runId)
-                    const trackId = queueRuns.find((entry) => entry.run.id === runId)?.track_id
-                    if (trackId && result && typeof result === 'object' && 'run' in result) {
-                      openStudio(trackId, { runId: (result as { run: { id: string } }).run.id })
-                    }
-                  }}
-                  onDismissRun={handleDismissRun}
-                  onUpdateStagedImport={handleUpdateDraft}
-                  onDiscardStagedImport={handleDiscardDraft}
-                  onConfirmStagedImports={async (payload) => {
-                    await handleConfirmDrafts(payload)
-                    navigate(
-                      payload.queue
-                        ? buildLibraryPath(DEFAULT_LIBRARY_VIEW)
-                        : buildLibraryPath({ ...DEFAULT_LIBRARY_VIEW, filter: 'ready-to-render' }),
-                    )
-                  }}
-                />
-              }
-            />
-            <Route path="/queue" element={<Navigate to="/library" replace />} />
-            <Route
-              path="/studio/:trackId/:tab"
-              element={
-                <StudioPage
-                  track={selectedTrack}
-                  tab={studioTab}
-                  selectedRunId={studioRunId}
-                  compareRunId={studioCompareRunId}
-                  profiles={settings?.profiles ?? []}
-                  cachedModels={cachedModels}
-                  defaultProfileKey={defaultProcessing.profile_key}
-                  defaultBitrate={defaultBitrate}
-                  creatingRun={creatingRun}
-                  cancellingRunId={cancellingRunId}
-                  retryingRunId={retryingRunId}
-                  settingKeeper={settingKeeper}
-                  savingNoteRunId={savingNoteRunId}
-                  savingMixRunId={savingMixRunId}
-                  updatingTrack={updatingTrack}
-                  onBackToLibrary={() => openLibrary()}
-                  onChangeTab={(tab) => {
-                    if (!selectedTrack) return
-                    openStudio(selectedTrack.id, {
-                      tab,
-                      runId: selectedStudioRun?.id ?? null,
-                      compareRunId: tab === 'versions' ? studioCompareRunId : null,
-                    })
-                  }}
-                  onSelectRun={(runId) => {
-                    if (!selectedTrack) return
-                    const nextCompare = studioCompareRunId === runId ? null : studioCompareRunId
-                    openStudio(selectedTrack.id, {
-                      tab: studioTab,
-                      runId,
-                      compareRunId: studioTab === 'versions' ? nextCompare : null,
-                    })
-                  }}
-                  onSelectCompare={(runId) => {
-                    if (!selectedTrack) return
-                    openStudio(selectedTrack.id, {
-                      tab: 'versions',
-                      runId: selectedStudioRun?.id ?? null,
-                      compareRunId: runId,
-                    })
-                  }}
-                  onCreateRun={async (trackId, processing) => {
-                    const result = await handleCreateRun(trackId, processing)
-                    if (result && typeof result === 'object' && 'run' in result) {
-                      openStudio(trackId, { tab: 'versions', runId: (result as { run: { id: string } }).run.id })
-                    }
-                  }}
-                  onCancelRun={handleCancelRun}
-                  onRetryRun={async (runId) => {
-                    const result = await handleRetryRun(runId)
-                    if (selectedTrack && result && typeof result === 'object' && 'run' in result) {
-                      openStudio(selectedTrack.id, { tab: 'versions', runId: (result as { run: { id: string } }).run.id })
-                    }
-                  }}
-                  onSetKeeper={handleSetKeeper}
-                  onPurgeNonKeepers={handlePurgeNonKeepers}
-                  onSetRunNote={handleSetRunNote}
-                  onSaveMix={handleSaveMix}
-                  onUpdateTrack={handleUpdateTrack}
-                  onDeleteTrack={(trackId) => {
-                    handleDeleteTrack(trackId)
-                    navigate('/library')
-                  }}
-                  onReveal={handleRevealFolder}
-                  onError={(message) => pushToast('error', message)}
-                />
-              }
-            />
-            <Route path="*" element={<Navigate to="/library" replace />} />
-          </Routes>
-        </main>
+                    }}
+                    onOpenTrack={(track) => openTrackWorkspace(track)}
+                    onAddSongs={() => setImportOpen(true)}
+                  />
+                }
+              />
+              <Route
+                path="/queue"
+                element={
+                  <QueuePage
+                    stagedImports={drafts}
+                    profiles={settings?.profiles ?? []}
+                    defaultProfileKey={defaultProcessing.profile_key}
+                    confirmingDrafts={confirmingDrafts}
+                    selectedQueueRunIds={selectedQueueRunIds}
+                    queueRuns={queueRuns}
+                    cancellingRunId={cancellingRunId}
+                    retryingRunId={retryingRunId}
+                    onAddSongs={() => setImportOpen(true)}
+                    onToggleQueueSelected={(runId) => {
+                      if (selectedLibraryIds.size > 0) {
+                        clearSelection('library')
+                      }
+                      toggleQueueRunSelected(runId)
+                    }}
+                    onSelectAllQueue={(ids) => {
+                      if (selectedLibraryIds.size > 0) {
+                        clearSelection('library')
+                      }
+                      selectAll('queue', ids)
+                    }}
+                    onClearQueueSelection={() => clearSelection('queue')}
+                    onSelectRun={(trackId, runId) => {
+                      const track = tracks.find((entry) => entry.id === trackId)
+                      if (!track) {
+                        openStudio(trackId, { tab: 'versions', runId })
+                        return
+                      }
+                      const runStatus =
+                        queueRuns.find((entry) => entry.run.id === runId)?.run.status ?? null
+                      const tab = preferredStudioTabForTrack(track, { runId, runStatus })
+                      openStudio(trackId, { tab, runId })
+                    }}
+                    onCancelRun={handleCancelRun}
+                    onRetryRun={async (runId) => {
+                      const result = await handleRetryRun(runId)
+                      const trackId = queueRuns.find((entry) => entry.run.id === runId)?.track_id
+                      if (trackId && result && typeof result === 'object' && 'run' in result) {
+                        openStudio(trackId, { runId: (result as { run: { id: string } }).run.id })
+                      }
+                    }}
+                    onDismissRun={handleDismissRun}
+                    onUpdateStagedImport={handleUpdateDraft}
+                    onDiscardStagedImport={handleDiscardDraft}
+                    onConfirmStagedImports={async (payload) => {
+                      await handleConfirmDrafts(payload)
+                      navigate(
+                        payload.queue
+                          ? '/queue'
+                          : buildLibraryPath({ ...DEFAULT_LIBRARY_VIEW, filter: 'ready-to-render' }),
+                      )
+                    }}
+                  />
+                }
+              />
+              <Route
+                path="/studio/:trackId/:tab"
+                element={
+                  <StudioPage
+                    track={selectedTrack}
+                    tab={studioTab}
+                    selectedRunId={studioRunId}
+                    compareRunId={studioCompareRunId}
+                    profiles={settings?.profiles ?? []}
+                    cachedModels={cachedModels}
+                    defaultProfileKey={defaultProcessing.profile_key}
+                    defaultBitrate={defaultBitrate}
+                    creatingRun={creatingRun}
+                    cancellingRunId={cancellingRunId}
+                    retryingRunId={retryingRunId}
+                    settingKeeper={settingKeeper}
+                    savingNoteRunId={savingNoteRunId}
+                    savingMixRunId={savingMixRunId}
+                    updatingTrack={updatingTrack}
+                    onBackToLibrary={() => openLibrary()}
+                    onChangeTab={(tab) => {
+                      if (!selectedTrack) return
+                      openStudio(selectedTrack.id, {
+                        tab,
+                        runId: selectedStudioRun?.id ?? null,
+                        compareRunId: tab === 'versions' ? studioCompareRunId : null,
+                      })
+                    }}
+                    onSelectRun={(runId) => {
+                      if (!selectedTrack) return
+                      const nextCompare = studioCompareRunId === runId ? null : studioCompareRunId
+                      openStudio(selectedTrack.id, {
+                        tab: studioTab,
+                        runId,
+                        compareRunId: studioTab === 'versions' ? nextCompare : null,
+                      })
+                    }}
+                    onSelectCompare={(runId) => {
+                      if (!selectedTrack) return
+                      openStudio(selectedTrack.id, {
+                        tab: 'versions',
+                        runId: selectedStudioRun?.id ?? null,
+                        compareRunId: runId,
+                      })
+                    }}
+                    onCreateRun={async (trackId, processing) => {
+                      const result = await handleCreateRun(trackId, processing)
+                      if (result && typeof result === 'object' && 'run' in result) {
+                        openStudio(trackId, { tab: 'versions', runId: (result as { run: { id: string } }).run.id })
+                      }
+                    }}
+                    onCancelRun={handleCancelRun}
+                    onRetryRun={async (runId) => {
+                      const result = await handleRetryRun(runId)
+                      if (selectedTrack && result && typeof result === 'object' && 'run' in result) {
+                        openStudio(selectedTrack.id, { tab: 'versions', runId: (result as { run: { id: string } }).run.id })
+                      }
+                    }}
+                    onSetKeeper={handleSetKeeper}
+                    onPurgeNonKeepers={handlePurgeNonKeepers}
+                    onSetRunNote={handleSetRunNote}
+                    onSaveMix={handleSaveMix}
+                    onUpdateTrack={handleUpdateTrack}
+                    onDeleteTrack={(trackId) => {
+                      handleDeleteTrack(trackId)
+                      navigate('/library')
+                    }}
+                    onReveal={handleRevealFolder}
+                    onError={(message) => pushToast('error', message)}
+                  />
+                }
+              />
+              <Route path="*" element={<Navigate to="/library" replace />} />
+            </Routes>
+          </main>
+        </div>
 
         {libraryActive && queueSelectionList.length === 0 && librarySelectionList.length > 0 ? (
           <BatchActionBar
@@ -612,7 +729,6 @@ function App() {
             selectionLabel="songs"
             onClear={() => {
               clearSelection('library')
-              setLibrarySelectionMode(false)
             }}
             busy={batching}
             inert={anyDialogOpen}
@@ -669,7 +785,7 @@ function App() {
           </BatchActionBar>
         ) : null}
 
-        {libraryActive && queueSelectionList.length > 0 ? (
+        {queueActive && queueSelectionList.length > 0 ? (
           <BatchActionBar
             selectedCount={queueSelectionList.length}
             selectionLabel="queue items"
@@ -733,7 +849,7 @@ function App() {
           open={importOpen}
           stagedImports={drafts}
           onClose={() => setImportOpen(false)}
-          onSourcesStaged={() => navigate(buildLibraryPath(DEFAULT_LIBRARY_VIEW))}
+          onSourcesStaged={() => navigate('/queue')}
           resolvingYoutubeImport={resolvingYoutubeImport}
           resolvingLocalImport={resolvingLocalImport}
           onResolveYouTube={async (sourceUrl) => {
@@ -847,6 +963,39 @@ function GearIcon() {
         strokeWidth="1.25"
         strokeLinejoin="round"
       />
+    </svg>
+  )
+}
+
+function LibraryIcon() {
+  return (
+    <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="2.25" y="3" width="11.5" height="10" rx="1.75" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M5.25 3V13" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M7.75 5.5H11" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M7.75 8H11" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function QueueIcon() {
+  return (
+    <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M3 4.25H13" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M3 8H10.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M3 11.75H8.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <circle cx="12" cy="11.75" r="1.75" stroke="currentColor" strokeWidth="1.25" />
+    </svg>
+  )
+}
+
+function StudioIcon() {
+  return (
+    <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="2.5" y="2.5" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M5 10.75V7.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M8 10.75V5.75" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M11 10.75V8.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
     </svg>
   )
 }

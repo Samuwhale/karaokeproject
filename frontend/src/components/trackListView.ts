@@ -4,6 +4,7 @@ import { isActiveRunStatus } from './runStatus'
 export type LibrarySort = 'recent' | 'created' | 'title' | 'runs'
 export type LibraryFilter =
   | 'all'
+  | 'rendering'
   | 'needs-attention'
   | 'ready-to-render'
   | 'ready'
@@ -42,6 +43,11 @@ export const LIBRARY_FILTERS: LibraryFilterMeta[] = [
     description: 'Everything in the library, regardless of where it sits in the workflow.',
   },
   {
+    value: 'rendering',
+    label: 'Rendering',
+    description: 'Songs with a split still running in the background.',
+  },
+  {
     value: 'needs-attention',
     label: 'Retry split',
     description: 'The latest split failed or was cancelled and needs another attempt.',
@@ -54,7 +60,7 @@ export const LIBRARY_FILTERS: LibraryFilterMeta[] = [
   {
     value: 'ready',
     label: 'Needs final choice',
-    description: 'Completed splits that are ready to compare, mix, and choose from.',
+    description: 'Completed splits that are ready to compare so you can choose the right version before mixing.',
   },
   {
     value: 'final',
@@ -104,8 +110,8 @@ export function trackStageSummary(track: TrackSummary): LibraryStageSummary {
       key: 'ready',
       label: 'Needs final choice',
       detail: track.has_custom_mix
-        ? 'A custom mix is saved. Decide whether this split is the final version.'
-        : 'The split is usable. Review it, compare it, and choose the final version.',
+        ? 'A custom mix is saved. Re-open it or compare it before you lock in the final version.'
+        : 'The split is usable. Compare versions first, then open the winner in Mix.',
       toneClassName: 'track-card-stage-ready',
     }
   }
@@ -121,6 +127,7 @@ export function trackStageSummary(track: TrackSummary): LibraryStageSummary {
 export function countLibraryFilters(tracks: TrackSummary[]): Record<LibraryFilter, number> {
   const counts: Record<LibraryFilter, number> = {
     all: tracks.length,
+    rendering: 0,
     'needs-attention': 0,
     'ready-to-render': 0,
     ready: 0,
@@ -129,7 +136,6 @@ export function countLibraryFilters(tracks: TrackSummary[]): Record<LibraryFilte
 
   for (const track of tracks) {
     const stage = trackStageSummary(track)
-    if (stage.key === 'rendering') continue
     counts[stage.key] += 1
   }
 
@@ -146,6 +152,7 @@ export function applyLibraryView(tracks: TrackSummary[], view: LibraryView): Tra
 
     const stage = trackStageSummary(track)
     switch (view.filter) {
+      case 'rendering':
       case 'needs-attention':
       case 'ready-to-render':
       case 'ready':

@@ -1,38 +1,38 @@
-@import url('https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@500;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --bg: oklch(0.15 0.004 155);
-  --surface: oklch(0.21 0.005 155);
-  --surface-2: oklch(0.245 0.006 155);
-  --surface-sunk: oklch(0.17 0.004 155);
-  --surface-hover: oklch(0.285 0.007 155);
-  --surface-active: oklch(0.31 0.009 155);
+  --bg: #fcf9f5;
+  --surface: #ffffff;
+  --surface-2: #f6f3ef;
+  --surface-sunk: #f6f3ef;
+  --surface-hover: #efeae4;
+  --surface-active: #e7e0d8;
 
-  --border: oklch(0.33 0.007 155);
-  --border-soft: oklch(0.26 0.005 155);
-  --border-strong: oklch(0.46 0.009 155);
+  --border: #ddd6ce;
+  --border-soft: #ebe4dc;
+  --border-strong: #bdb4aa;
 
-  --text: oklch(0.92 0.003 155);
-  --text-2: oklch(0.83 0.004 155);
-  --text-muted: oklch(0.75 0.006 155);
-  --text-faint: oklch(0.66 0.007 155);
+  --text: #171715;
+  --text-2: #2b302d;
+  --text-muted: #666e6a;
+  --text-faint: #8b908b;
 
-  --accent: oklch(0.78 0.09 205);
-  --accent-press: oklch(0.68 0.10 205);
-  --accent-dim: color-mix(in oklch, var(--accent) 14%, transparent);
-  --accent-ink: oklch(0.20 0.04 205);
+  --accent: #005f53;
+  --accent-press: #00473f;
+  --accent-dim: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-ink: #ffffff;
 
-  --ok: oklch(0.82 0.11 155);
-  --warn: oklch(0.80 0.13 75);
-  --err: oklch(0.72 0.17 25);
-  --info: oklch(0.75 0.09 240);
+  --ok: #4a9e86;
+  --warn: #b17b1f;
+  --err: #ba1a1a;
+  --info: #296a9a;
 
   --space-2xs: 2px;
   --space-xs: 6px;
@@ -42,11 +42,12 @@
   --space-xl: 28px;
   --space-2xl: 40px;
 
-  --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 4px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
 
-  --font-sans: 'General Sans', -apple-system, system-ui, sans-serif;
+  --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --font-display: 'Manrope', 'Inter', -apple-system, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
   --line-height-base: 1.5;
@@ -57,10 +58,11 @@
   --t-sm: 13px;
   --t-base: 14px;
   --t-md: 15px;
-  --t-lg: 17px;
-  --t-xl: 22px;
+  --t-lg: 18px;
+  --t-xl: 24px;
 
-  --topbar-h: 44px;
+  --topbar-h: 64px;
+  --rail-w: 232px;
 }
 
 * {

@@ -15,6 +15,7 @@ type OutputIntentPickerProps = {
   onApplyTemplate: (stems: RunMixStemEntry[]) => void | Promise<void>
   onRerunWithProfile: (profileKey: string) => void
   saving: boolean
+  compact?: boolean
 }
 
 type PendingIntentState = {
@@ -28,6 +29,7 @@ export function OutputIntentPicker({
   onApplyTemplate,
   onRerunWithProfile,
   saving,
+  compact = false,
 }: OutputIntentPickerProps) {
   const inferredIntent = inferIntent(run)
   const [pendingIntent, setPendingIntent] = useState<PendingIntentState | null>(null)
@@ -71,12 +73,16 @@ export function OutputIntentPicker({
   }
 
   return (
-    <section className="output-intent">
+    <div className={`output-intent ${compact ? 'output-intent-compact' : ''}`}>
       <div className="output-intent-head">
-        <h3 className="subsection-head">Starting Balance</h3>
-        <p className="output-intent-summary">
-          Start from the closest result, then fine-tune the stem balance below.
-        </p>
+        <div className="output-intent-copy">
+          <h3 className="subsection-head">Starting Balance</h3>
+          {!compact ? (
+            <p className="output-intent-summary">
+              Start from the closest result, then fine-tune the stem balance below.
+            </p>
+          ) : null}
+        </div>
         <span className="output-intent-state" aria-live="polite">
           {saving
             ? activeIntentSpec
@@ -102,32 +108,32 @@ export function OutputIntentPicker({
               }}
             >
               <span className="output-intent-option-label">{spec.label}</span>
-              <span className="output-intent-option-desc">{spec.description}</span>
+              {!compact ? <span className="output-intent-option-desc">{spec.description}</span> : null}
             </button>
           )
         })}
       </div>
 
       {rerunSuggestions.length > 0 ? (
-        <div className="output-intent-reruns">
-          <div className="output-intent-reruns-copy">
-            <strong>Need another version first?</strong>
-            <p>Some outcomes need a more detailed split. Queue that separately instead of mixing and rerunning from the same control.</p>
+        <details className="output-intent-reruns">
+          <summary>Need another kind of split?</summary>
+          <div className="output-intent-reruns-body">
+            <p>Queue a more detailed version instead of forcing the current split to do too much.</p>
+            <div className="output-intent-reruns-actions">
+              {rerunSuggestions.map(({ spec, fallback }) => (
+                <button
+                  key={spec.value}
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => onRerunWithProfile(fallback.key)}
+                >
+                  Queue {spec.label.toLowerCase()} version
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="output-intent-reruns-actions">
-            {rerunSuggestions.map(({ spec, fallback }) => (
-              <button
-                key={spec.value}
-                type="button"
-                className="button-secondary"
-                onClick={() => onRerunWithProfile(fallback.key)}
-              >
-                Queue {spec.label.toLowerCase()} version
-              </button>
-            ))}
-          </div>
-        </div>
+        </details>
       ) : null}
-    </section>
+    </div>
   )
 }

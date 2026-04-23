@@ -5,6 +5,7 @@ export type StudioTab = 'mix' | 'versions'
 
 const LIBRARY_FILTERS = new Set<LibraryFilter>([
   'all',
+  'rendering',
   'needs-attention',
   'ready-to-render',
   'ready',
