@@ -791,7 +791,7 @@ function MixWorkspaceContent({
             )
           ) : (
             <>
-              <p>Choose a profile to split this track into stems. Each profile uses a different AI model.</p>
+              <p>Choose a profile to split this track into stems.</p>
               <InlineProfilePicker
                 profiles={profiles}
                 defaultProfileKey={defaultProfileKey}

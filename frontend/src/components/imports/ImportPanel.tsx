@@ -53,20 +53,6 @@ function needsDuplicateDecision(item: ImportDraft) {
   )
 }
 
-function duplicateHint(item: ImportDraft) {
-  if (item.duplicate_tracks.length === 0) return null
-  if (item.duplicate_action === null) return 'Already in your library — choose what to do.'
-  if (item.duplicate_action === 'skip') return 'This import will be discarded.'
-  if (item.duplicate_action === 'create-new') return 'Saved as a separate song with its own versions.'
-  if (item.duplicate_action === 'reuse-existing') {
-    if (item.duplicate_tracks.length > 1 && !item.existing_track_id) {
-      return 'Pick which existing song to attach this version to.'
-    }
-    return 'Added as another version of the existing song.'
-  }
-  return null
-}
-
 function countAction(items: ImportDraft[], action: DraftDuplicateAction) {
   return items.filter((item) => item.duplicate_action === action).length
 }
@@ -92,7 +78,6 @@ const ImportRow = forwardRef<ImportRowHandle, ImportRowProps>(function ImportRow
   const [artist, setArtist] = useState<string | null>(null)
   const flushPromiseRef = useRef<Promise<void> | null>(null)
   const needsDecision = needsDuplicateDecision(draft)
-  const hint = duplicateHint(draft)
 
   function buildPendingPatch(): UpdateImportDraftInput | null {
     const patch: UpdateImportDraftInput = {}
@@ -181,49 +166,61 @@ const ImportRow = forwardRef<ImportRowHandle, ImportRowProps>(function ImportRow
 
       {draft.duplicate_tracks.length > 0 ? (
         <div className="import-row-dup">
-          <select
-            value={draft.duplicate_action ?? ''}
-            onChange={(event) => {
-              const action = (event.target.value || null) as DraftDuplicateAction | null
-              const nextExisting =
-                action === 'reuse-existing' && draft.duplicate_tracks.length === 1
-                  ? draft.duplicate_tracks[0]?.id ?? null
-                  : action === 'reuse-existing'
-                    ? draft.existing_track_id
-                    : null
-              discardRejection(() => onUpdate({
-                duplicate_action: action,
-                existing_track_id: nextExisting,
-              }))
-            }}
-            disabled={busy}
-          >
-            <option value="">Choose what to do…</option>
-            <option value="create-new">Add as separate song</option>
-            <option value="reuse-existing">Attach as another version</option>
-            <option value="skip">Discard this import</option>
-          </select>
-          {draft.duplicate_action === 'reuse-existing' && draft.duplicate_tracks.length > 1 ? (
-            <select
-              value={draft.existing_track_id ?? ''}
-              onChange={(event) => {
-                discardRejection(() => onUpdate({
-                  duplicate_action: 'reuse-existing',
-                  existing_track_id: event.target.value || null,
-                }))
-              }}
+          <span className="import-row-dup-label">
+            {draft.duplicate_tracks.length === 1
+              ? `"${draft.duplicate_tracks[0].title}" is already in your library`
+              : `${draft.duplicate_tracks.length} existing songs match`}
+          </span>
+          <div className="import-row-dup-choices" role="group" aria-label="Handle duplicate">
+            <button
+              type="button"
+              className={`import-dup-choice ${draft.duplicate_action === 'create-new' ? 'is-selected' : ''}`}
               disabled={busy}
+              onClick={() => discardRejection(() => onUpdate({ duplicate_action: 'create-new', existing_track_id: null }))}
             >
-              <option value="">Choose a track…</option>
+              New track
+            </button>
+            <button
+              type="button"
+              className={`import-dup-choice ${draft.duplicate_action === 'reuse-existing' ? 'is-selected' : ''}`}
+              disabled={busy}
+              onClick={() => discardRejection(() => onUpdate({
+                duplicate_action: 'reuse-existing',
+                existing_track_id: draft.duplicate_tracks.length === 1
+                  ? (draft.duplicate_tracks[0]?.id ?? null)
+                  : draft.existing_track_id,
+              }))}
+            >
+              Add version
+            </button>
+            <button
+              type="button"
+              className={`import-dup-choice import-dup-choice-skip ${draft.duplicate_action === 'skip' ? 'is-selected' : ''}`}
+              disabled={busy}
+              onClick={() => discardRejection(() => onUpdate({ duplicate_action: 'skip', existing_track_id: null }))}
+            >
+              Skip
+            </button>
+          </div>
+          {draft.duplicate_action === 'reuse-existing' && draft.duplicate_tracks.length > 1 ? (
+            <div className="import-row-dup-tracks">
               {draft.duplicate_tracks.map((match: ExistingTrackDuplicate) => (
-                <option key={match.id} value={match.id}>
-                  {match.title}
-                  {match.artist ? ` · ${match.artist}` : ''}
-                </option>
+                <button
+                  key={match.id}
+                  type="button"
+                  className={`import-dup-track-btn ${draft.existing_track_id === match.id ? 'is-selected' : ''}`}
+                  disabled={busy}
+                  onClick={() => discardRejection(() => onUpdate({ duplicate_action: 'reuse-existing', existing_track_id: match.id }))}
+                >
+                  <span className="import-dup-track-name">{match.title}</span>
+                  {match.artist ? <span className="import-dup-track-artist">{match.artist}</span> : null}
+                </button>
               ))}
-            </select>
+            </div>
           ) : null}
-          {hint ? <span className="import-row-dup-hint">{hint}</span> : null}
+          {draft.duplicate_action === 'skip' ? (
+            <span className="import-row-dup-hint">This import will be discarded.</span>
+          ) : null}
         </div>
       ) : null}
     </article>

@@ -289,6 +289,7 @@ export function SongsPage({
   onBatchDelete,
 }: SongsPageProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [deleteArmed, setDeleteArmed] = useState(false)
 
   useEffect(() => {
     if (selected.size === 0) return
@@ -298,6 +299,18 @@ export function SongsPage({
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [selected.size])
+
+  // Disarm delete when selection changes or clears
+  useEffect(() => {
+    setDeleteArmed(false)
+  }, [selected.size])
+
+  // Auto-disarm delete after 4 seconds
+  useEffect(() => {
+    if (!deleteArmed) return
+    const id = window.setTimeout(() => setDeleteArmed(false), 4000)
+    return () => window.clearTimeout(id)
+  }, [deleteArmed])
 
   const browseTracks = useMemo(
     () => applySongBrowse(tracks, { search: view.search, sort: view.sort, filter: view.filter }),
@@ -396,6 +409,11 @@ export function SongsPage({
 
   function handleDelete() {
     if (!selectedCount) return
+    if (!deleteArmed) {
+      setDeleteArmed(true)
+      return
+    }
+    setDeleteArmed(false)
     onBatchDelete(selectedIds)
     setSelected(new Set())
   }
@@ -614,27 +632,41 @@ export function SongsPage({
             {selectedCount} selected
           </span>
           <div className="batch-bar-spacer" />
-          {!allSelected ? (
-            <button type="button" className="button-link" onClick={toggleAll}>
-              Select all
-            </button>
-          ) : null}
-          <button type="button" className="button-link" onClick={clearSelection}>
-            Clear
-          </button>
-          {splitEligible.length > 0 ? (
-            <button type="button" className="button-primary" onClick={handleSplit}>
-              Split {splitEligible.length}
-            </button>
-          ) : null}
-          {exportEligible.length > 0 ? (
-            <button type="button" className="button-secondary" onClick={handleExport}>
-              Export {exportEligible.length}
-            </button>
-          ) : null}
-          <button type="button" className="button-danger" onClick={handleDelete}>
-            Delete {selectedCount}
-          </button>
+          {!deleteArmed ? (
+            <>
+              {!allSelected ? (
+                <button type="button" className="button-link" onClick={toggleAll}>
+                  Select all
+                </button>
+              ) : null}
+              <button type="button" className="button-link" onClick={clearSelection}>
+                Clear
+              </button>
+              {splitEligible.length > 0 ? (
+                <button type="button" className="button-primary" onClick={handleSplit}>
+                  Split {splitEligible.length}
+                </button>
+              ) : null}
+              {exportEligible.length > 0 ? (
+                <button type="button" className="button-secondary" onClick={handleExport}>
+                  Export {exportEligible.length}
+                </button>
+              ) : null}
+              <button type="button" className="button-danger" onClick={handleDelete}>
+                Delete {selectedCount}
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="batch-bar-delete-prompt">Permanently delete {selectedCount} song{selectedCount === 1 ? '' : 's'}?</span>
+              <button type="button" className="button-danger" onClick={handleDelete}>
+                Delete
+              </button>
+              <button type="button" className="button-link" onClick={() => setDeleteArmed(false)}>
+                Cancel
+              </button>
+            </>
+          )}
         </div>
       ) : null}
     </section>
