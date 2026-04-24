@@ -4,7 +4,7 @@ import { discardRejection } from '../../async'
 import { describeRun, isActiveRunStatus, RUN_STATUS_LABELS } from '../runStatus'
 import { SONG_BROWSE_SORT_OPTIONS, applySongBrowse, trackStageSummary } from '../trackListView'
 import type { TrackStageSummary } from '../trackListView'
-import type { SongsView } from '../../routes'
+import type { SongsFilter, SongsView } from '../../routes'
 import type { QueueRunEntry, RunSummary, TrackSummary } from '../../types'
 
 type SongsPageProps = {
@@ -247,6 +247,8 @@ function TrackWaveThumb({ track }: { track: TrackSummary }) {
   )
 }
 
+type FilterTab = { value: SongsFilter; label: string; count: number }
+
 export function SongsPage({
   view,
   tracks,
@@ -269,8 +271,8 @@ export function SongsPage({
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const browseTracks = useMemo(
-    () => applySongBrowse(tracks, { search: view.search, sort: view.sort }),
-    [tracks, view.search, view.sort],
+    () => applySongBrowse(tracks, { search: view.search, sort: view.sort, filter: view.filter }),
+    [tracks, view.search, view.sort, view.filter],
   )
   const activeRuns = useMemo(
     () => queueRuns.filter((entry) => isActiveRunStatus(entry.run.status)),
@@ -281,6 +283,34 @@ export function SongsPage({
     [queueRuns],
   )
   const showQueue = stagedImportsCount > 0 || activeRuns.length > 0 || failedRuns.length > 0
+
+  // Counts per filter bucket (always computed from full tracks list, not filtered)
+  const filterCounts = useMemo(() => {
+    const counts = { 'needs-split': 0, processing: 0, attention: 0, ready: 0 }
+    for (const track of tracks) {
+      const stage = trackStageSummary(track)
+      if (stage.key === 'needs-split') counts['needs-split']++
+      else if (stage.key === 'processing') counts.processing++
+      else if (stage.key === 'needs-attention') counts.attention++
+      else if (stage.key === 'ready' || stage.key === 'final') counts.ready++
+    }
+    return counts
+  }, [tracks])
+
+  const filterTabs = useMemo<FilterTab[]>(() => {
+    const tabs: FilterTab[] = [{ value: 'all', label: 'All', count: tracks.length }]
+    if (filterCounts.processing > 0)
+      tabs.push({ value: 'processing', label: 'Splitting', count: filterCounts.processing })
+    if (filterCounts['needs-split'] > 0)
+      tabs.push({ value: 'needs-split', label: 'Unsplit', count: filterCounts['needs-split'] })
+    if (filterCounts.attention > 0)
+      tabs.push({ value: 'attention', label: 'Issues', count: filterCounts.attention })
+    if (filterCounts.ready > 0)
+      tabs.push({ value: 'ready', label: 'Ready', count: filterCounts.ready })
+    return tabs
+  }, [tracks.length, filterCounts])
+
+  const showFilterTabs = filterTabs.length > 2 // only show tabs when there's real variety
 
   const { exportableIds, splittableIds } = useMemo(() => {
     const exportable = new Set<string>()
@@ -341,6 +371,15 @@ export function SongsPage({
     setSelected(new Set())
   }
 
+  const countLabel =
+    view.search.trim() && browseTracks.length !== tracks.length
+      ? `${browseTracks.length} of ${tracks.length}`
+      : view.filter !== 'all'
+        ? `${browseTracks.length} of ${tracks.length}`
+        : tracks.length > 0
+          ? `${tracks.length}`
+          : null
+
   return (
     <section className="library">
       {showQueue ? (
@@ -381,7 +420,30 @@ export function SongsPage({
             </option>
           ))}
         </select>
+        {countLabel ? (
+          <span className="library-count" aria-live="polite">{countLabel}</span>
+        ) : null}
       </div>
+
+      {showFilterTabs ? (
+        <div className="library-filters" role="tablist" aria-label="Filter songs">
+          {filterTabs.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={view.filter === tab.value}
+              className={`library-filter ${view.filter === tab.value ? 'is-active' : ''}`}
+              onClick={() => onViewChange({ ...view, filter: tab.value })}
+            >
+              {tab.label}
+              {tab.value !== 'all' ? (
+                <span className="library-filter-count">{tab.count}</span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {browseTracks.length > 0 ? (
         <div className="library-list" role="list">
@@ -419,8 +481,11 @@ export function SongsPage({
                   className="song-row-open"
                   onClick={() => onOpenTrack(track)}
                 >
-                  <span className="song-row-art" aria-hidden>
+                  <span className="song-row-art" aria-hidden data-stage={stage.key}>
                     {track.thumbnail_url ? <img src={track.thumbnail_url} alt="" loading="lazy" /> : initials}
+                    {stage.key !== 'needs-split' ? (
+                      <span className="song-row-art-dot" aria-hidden />
+                    ) : null}
                   </span>
                   <span className="song-row-copy">
                     <span className="song-row-title">{track.title}</span>
@@ -451,7 +516,23 @@ export function SongsPage({
           })}
         </div>
       ) : tracks.length > 0 ? (
-        <p className="library-empty">No songs match this search.</p>
+        <div className="library-empty">
+          <strong>No songs match</strong>
+          {view.filter !== 'all' ? (
+            <>
+              <p>No songs in this filter.</p>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => onViewChange({ ...view, filter: 'all' })}
+              >
+                Show all songs
+              </button>
+            </>
+          ) : (
+            <p>Try a different search or clear the query.</p>
+          )}
+        </div>
       ) : (
         <div className="library-empty">
           <strong>No songs yet</strong>

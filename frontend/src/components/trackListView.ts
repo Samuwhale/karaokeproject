@@ -1,3 +1,4 @@
+import type { SongsFilter } from '../routes'
 import type { TrackSummary } from '../types'
 import { isActiveRunStatus } from './runStatus'
 
@@ -69,14 +70,25 @@ export function applySongBrowse(
   view: {
     search: string
     sort: SongBrowseSort
+    filter?: SongsFilter
   },
 ) {
   const query = view.search.trim().toLowerCase()
+  const filter = view.filter ?? 'all'
 
   const matches = tracks.filter((track) => {
-    if (!query) return true
-    const haystack = `${track.title} ${track.artist ?? ''}`.toLowerCase()
-    return haystack.includes(query)
+    if (query) {
+      const haystack = `${track.title} ${track.artist ?? ''}`.toLowerCase()
+      if (!haystack.includes(query)) return false
+    }
+    if (filter !== 'all') {
+      const stage = trackStageSummary(track)
+      if (filter === 'needs-split') return stage.key === 'needs-split'
+      if (filter === 'processing') return stage.key === 'processing'
+      if (filter === 'attention') return stage.key === 'needs-attention'
+      if (filter === 'ready') return stage.key === 'ready' || stage.key === 'final'
+    }
+    return true
   })
 
   return [...matches].sort((a, b) => {

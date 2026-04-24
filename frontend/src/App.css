@@ -497,7 +497,7 @@ h1, h2, h3, h4, p {
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
-  transition: background-color 80ms ease, border-color 80ms ease, color 80ms ease;
+  transition: background-color 80ms ease, border-color 80ms ease, color 80ms ease, box-shadow 80ms ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -508,11 +508,13 @@ h1, h2, h3, h4, p {
   background: var(--accent);
   color: var(--accent-ink);
   border-color: var(--accent);
+  box-shadow: 0 1px 3px color-mix(in oklch, var(--accent) 30%, transparent);
 }
 
 .button-primary:hover:not(:disabled) {
   background: var(--accent-press);
   border-color: var(--accent-press);
+  box-shadow: 0 2px 6px color-mix(in oklch, var(--accent) 35%, transparent);
 }
 
 .button-secondary {

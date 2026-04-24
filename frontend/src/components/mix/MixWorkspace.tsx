@@ -101,11 +101,12 @@ function isMixableRun(run: RunDetail) {
   return run.status === 'completed' && run.artifacts.some((artifact) => isStemKind(artifact.kind))
 }
 
-function versionSummary(run: RunDetail | null, keeperId: string | null): string {
+function versionSummary(run: RunDetail | null, keeperId: string | null, runCount: number): string {
   if (!run) return 'No version yet'
   const isKeeper = keeperId && run.id === keeperId
   const prefix = isKeeper ? 'Final · ' : ''
-  return `${prefix}${run.processing.profile_label}`
+  const suffix = runCount > 1 ? ` · ${runCount}` : ''
+  return `${prefix}${run.processing.profile_label}${suffix}`
 }
 
 function Chevron() {
@@ -489,7 +490,7 @@ function MixWorkspaceContent({
   const selectedRun = resolveSelectedRun(track, selectedRunId)
   const mixable = selectedRun ? isMixableRun(selectedRun) : false
   const canExport = !!selectedRun && selectedRun.status === 'completed'
-  const versionLabel = versionSummary(selectedRun, track.keeper_run_id)
+  const versionLabel = versionSummary(selectedRun, track.keeper_run_id, track.runs.length)
   const activeSplit = selectedRun && isActiveRunStatus(selectedRun.status)
   const progressPct = activeSplit ? Math.round(selectedRun.progress * 100) : null
 
