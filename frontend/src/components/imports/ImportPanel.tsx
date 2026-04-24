@@ -525,9 +525,9 @@ function ImportPanelContent({
               <div className="import-panel-divider">
                 <span>Queued · {drafts.length}</span>
                 <span className="import-panel-divider-stats">
-                  {createNew > 0 ? `${createNew} new` : null}
-                  {reuse > 0 ? `${reuse} attached` : null}
-                  {skip > 0 ? `${skip} skipped` : null}
+                  {createNew > 0 ? <span>{createNew} new</span> : null}
+                  {reuse > 0 ? <span>{reuse} attached</span> : null}
+                  {skip > 0 ? <span>{skip} skipped</span> : null}
                 </span>
               </div>
 

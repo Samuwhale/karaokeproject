@@ -127,16 +127,18 @@ function QueueStrip({
 
       {activeCount > 0 ? (
         <>
-          <div
-            className="library-queue-aggregate"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(aggregate * 100)}
-            aria-label="Overall split progress"
-          >
-            <span className="library-queue-aggregate-fill" style={{ width: `${aggregate * 100}%` }} />
-          </div>
+          {activeCount > 1 ? (
+            <div
+              className="library-queue-aggregate"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(aggregate * 100)}
+              aria-label="Overall split progress"
+            >
+              <span className="library-queue-aggregate-fill" style={{ width: `${aggregate * 100}%` }} />
+            </div>
+          ) : null}
           <ul className="library-queue-list">
             {activeRuns.map((entry) => {
               const fraction = Math.max(0, Math.min(1, entry.run.progress))
@@ -550,7 +552,16 @@ export function SongsPage({
               </button>
             </>
           ) : (
-            <p>Try a different search or clear the query.</p>
+            <>
+              <p>No results for "{view.search}".</p>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => onViewChange({ ...view, search: '' })}
+              >
+                Clear search
+              </button>
+            </>
           )}
         </div>
       ) : (

@@ -2256,17 +2256,18 @@
 /* Mix workspace: inline profile picker in zero state ----------------------- */
 
 .mix-profile-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: min(100%, 380px);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: 480px;
 }
 
 .mix-profile-option {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 14px 18px;
+  gap: 4px;
+  padding: 16px 18px;
   text-align: left;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
@@ -2309,6 +2310,30 @@
   font-size: var(--t-xs);
   color: var(--text-muted);
   line-height: 1.4;
+}
+
+.mix-profile-option-stems {
+  font-size: var(--t-xs);
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+  line-height: 1.4;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mix-profile-option:hover:not(:disabled) .mix-profile-option-stems {
+  color: color-mix(in oklch, var(--accent) 55%, var(--text-faint));
+}
+
+.mix-profile-option-tradeoff {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.4;
+  padding-top: 6px;
+  margin-top: auto;
+  border-top: 1px solid var(--border-soft);
 }
 
 .mix-blocked-hint {

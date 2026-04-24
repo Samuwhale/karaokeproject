@@ -9,7 +9,7 @@ import { MixPanel } from './MixPanel'
 import { OutputIntentPicker } from './OutputIntent'
 import { RUN_STATUS_SHORT_LABELS, isActiveRunStatus } from '../runStatus'
 import { resolveSelectedRun } from '../../runSelection'
-import { isStemKind } from '../../stems'
+import { isStemKind, stemLabel } from '../../stems'
 import type {
   ProcessingProfile,
   RevealFolderInput,
@@ -74,6 +74,14 @@ function InlineProfilePicker({ profiles, creatingRun, onCreateRun }: InlineProfi
               <span className="mix-profile-option-label">{profile.label}</span>
               {profile.best_for ? (
                 <span className="mix-profile-option-hint">{profile.best_for}</span>
+              ) : null}
+              {profile.stems.length > 0 ? (
+                <span className="mix-profile-option-stems">
+                  {profile.stems.map((s) => stemLabel(s)).join(' · ')}
+                </span>
+              ) : null}
+              {profile.tradeoff ? (
+                <span className="mix-profile-option-tradeoff">{profile.tradeoff}</span>
               ) : null}
             </button>
           ))}
@@ -730,7 +738,7 @@ function MixWorkspaceContent({
           ) : (
             <>
               <strong>Split this track</strong>
-              <p>Choose a profile to separate this song into stems you can mix and export.</p>
+              <p>Pick a profile to begin. Each profile uses a different model and produces a different set of stems.</p>
               <InlineProfilePicker
                 profiles={profiles}
                 creatingRun={creatingRun}
