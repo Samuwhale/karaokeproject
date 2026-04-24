@@ -294,7 +294,14 @@ function App() {
       <div className="shell">
         {!mixActive ? (
           <header className="app-top" inert={anyDialogOpen || undefined}>
-            <strong className="app-top-brand">Stems</strong>
+            <button
+              type="button"
+              className="app-top-brand"
+              onClick={() => openSongs({ ...songsView, search: '', filter: 'all' })}
+              aria-label="Go to library"
+            >
+              Stems
+            </button>
             <div className="app-top-actions">
               {setupRequired ? (
                 <button

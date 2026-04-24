@@ -564,33 +564,36 @@ function MixWorkspaceContent({
     <section className="mix" ref={mixRef}>
       <header className="mix-top">
         <div className="mix-top-nav">
-          <button type="button" className="mix-back" onClick={onBackToSongs}>
+          <button type="button" className="mix-back" onClick={onBackToSongs} title="Back to library (Esc)">
             <BackArrow />
             Library
           </button>
-          <span className="mix-nav-sep" aria-hidden />
-          <button
-            type="button"
-            className="icon-button mix-nav-btn"
-            onClick={onNavigatePrev}
-            disabled={!hasPrevTrack}
-            aria-label="Previous track"
-            title="Previous track (k)"
-          >
-            <ChevronUp />
-          </button>
-          <button
-            type="button"
-            className="icon-button mix-nav-btn"
-            onClick={onNavigateNext}
-            disabled={!hasNextTrack}
-            aria-label="Next track"
-            title="Next track (j)"
-          >
-            <ChevronDown />
-          </button>
           {trackPosition && trackPosition.total > 1 ? (
-            <span className="mix-nav-position">{trackPosition.index + 1}/{trackPosition.total}</span>
+            <div className="mix-nav-stepper" role="group" aria-label="Browse tracks">
+              <button
+                type="button"
+                className="icon-button mix-nav-btn"
+                onClick={onNavigatePrev}
+                disabled={!hasPrevTrack}
+                aria-label="Previous track"
+                title="Previous track (k)"
+              >
+                <ChevronUp />
+              </button>
+              <span className="mix-nav-position" aria-live="polite">
+                {trackPosition.index + 1}<span aria-hidden>/</span>{trackPosition.total}
+              </span>
+              <button
+                type="button"
+                className="icon-button mix-nav-btn"
+                onClick={onNavigateNext}
+                disabled={!hasNextTrack}
+                aria-label="Next track"
+                title="Next track (j)"
+              >
+                <ChevronDown />
+              </button>
+            </div>
           ) : null}
         </div>
         <div className="mix-top-title">
@@ -609,6 +612,7 @@ function MixWorkspaceContent({
             <span className="popover-anchor">
               {(() => {
                 const completedCount = track.runs.filter((r) => r.status === 'completed').length
+                const isQueued = selectedRun?.status === 'queued'
                 return (
                   <button
                     type="button"
@@ -622,8 +626,12 @@ function MixWorkspaceContent({
                     {!activeSplit && selectedRunIsKeeper ? (
                       <span className="mix-version-star" aria-hidden>★</span>
                     ) : null}
-                    <span>{selectedRun?.status === 'queued' ? 'Queued' : progressPct !== null ? `${progressPct}%` : versionLabel}</span>
-                    {progressPct === null && completedCount > 1 ? (
+                    <span className="mix-version-pill-label">{versionLabel}</span>
+                    {isQueued ? (
+                      <span className="mix-version-count">queued</span>
+                    ) : progressPct !== null ? (
+                      <span className="mix-version-count">{progressPct}%</span>
+                    ) : completedCount > 1 ? (
                       <span className="mix-version-count" aria-label={`${completedCount} versions`}>·{completedCount}</span>
                     ) : null}
                     <Chevron />
@@ -783,7 +791,8 @@ function MixWorkspaceContent({
             )
           ) : (
             <>
-              <p>Separate this track into stems to mix and export.</p>
+              <strong>Split this song into stems</strong>
+              <p>Pick how you want it separated. You can add more versions later.</p>
               <InlineProfilePicker
                 profiles={profiles}
                 defaultProfileKey={defaultProfileKey}

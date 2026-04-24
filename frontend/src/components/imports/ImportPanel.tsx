@@ -615,8 +615,9 @@ function ImportPanelContent({
                 className="button-link"
                 disabled={!canConfirm}
                 onClick={() => discardRejection(() => confirm(false))}
+                title="Add to your library without queueing a split. You can split later from the song."
               >
-                Import only
+                Add without splitting
               </button>
               {profiles.length > 0 ? (
                 <button

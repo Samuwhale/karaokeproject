@@ -214,7 +214,7 @@ function MixStateLabel({ stems, anySoloed }: { stems: StemRow[]; anySoloed: bool
         : `Soloing ${soloed.length} stems · preview`
     return (
       <>
-        <span className="mix-time-sep" aria-hidden>·</span>
+        <span className="mix-transport-sep" aria-hidden>·</span>
         <span className="mix-transport-state is-solo" aria-live="polite">{label}</span>
       </>
     )
@@ -230,7 +230,7 @@ function MixStateLabel({ stems, anySoloed }: { stems: StemRow[]; anySoloed: bool
 
   return (
     <>
-      <span className="mix-time-sep" aria-hidden>·</span>
+      <span className="mix-transport-sep" aria-hidden>·</span>
       <span className="mix-transport-state" aria-live="polite">{label}</span>
     </>
   )
@@ -492,9 +492,11 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
           aria-label="Seek"
           style={{ '--seek-pct': `${mixer.duration > 0 ? ((mixer.currentTime / mixer.duration) * 100).toFixed(1) : 0}%` } as React.CSSProperties}
         />
-        <span className="mix-time">{formatTime(mixer.currentTime)}</span>
-        <span className="mix-time-sep" aria-hidden>·</span>
-        <span className="mix-time mix-time-total">{formatTime(mixer.duration)}</span>
+        <span className="mix-time">
+          {formatTime(mixer.currentTime)}
+          <span className="mix-time-sep" aria-hidden> / </span>
+          <span className="mix-time-total">{formatTime(mixer.duration)}</span>
+        </span>
         <MixStateLabel stems={stems} anySoloed={anySoloed} />
       </div>
 

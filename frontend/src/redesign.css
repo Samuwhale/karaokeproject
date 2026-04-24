@@ -46,6 +46,21 @@
   font-size: 18px;
   letter-spacing: -0.03em;
   color: var(--text);
+  background: transparent;
+  border: 0;
+  padding: 4px 2px;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: color 120ms;
+}
+
+.app-top-brand:hover {
+  color: var(--accent);
+}
+
+.app-top-brand:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .app-top-actions {
@@ -1178,7 +1193,7 @@
 .mix-top-nav {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 10px;
 }
 
 .mix-back {
@@ -1196,36 +1211,40 @@
   background: var(--surface-2);
 }
 
+.mix-nav-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+}
+
 .mix-nav-btn {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   color: var(--text-muted);
+  border-radius: var(--radius-xs);
 }
 
 .mix-nav-btn:not(:disabled):hover {
   color: var(--text);
+  background: var(--surface-hover);
 }
 
 .mix-nav-btn:disabled {
   color: var(--text-faint);
 }
 
-.mix-nav-sep {
-  display: block;
-  width: 1px;
-  height: 14px;
-  background: var(--border-soft);
-  margin: 0 4px;
-  flex-shrink: 0;
-}
-
 .mix-nav-position {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   padding: 0 6px;
   white-space: nowrap;
+  min-width: 34px;
+  text-align: center;
 }
 
 .mix-top-title {
@@ -1328,12 +1347,20 @@
   flex: none;
 }
 
+.mix-version-pill-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
 .mix-version-count {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--text-faint);
   letter-spacing: 0.01em;
+  flex: none;
 }
 
 .mix-version-dot[data-state='active'] {
@@ -1854,13 +1881,18 @@ button.stem-row-gain:focus-visible {
   font-variant-numeric: tabular-nums;
   font-size: 13px;
   color: var(--text);
-  min-width: 36px;
+  white-space: nowrap;
 }
 
 .mix-time-sep {
   color: var(--text-faint);
+  padding: 0 1px;
+}
+
+.mix-transport-sep {
+  color: var(--text-faint);
   font-size: 13px;
-  padding: 0 2px;
+  padding: 0 4px;
 }
 
 .mix-time-total {
