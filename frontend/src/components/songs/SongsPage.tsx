@@ -35,26 +35,35 @@ function formatDuration(seconds: number | null) {
   return `${minutes}:${remaining}`
 }
 
-type RowStatus = { text: string | null; tone: 'processing' | 'attn' | 'final' | 'ready' | null }
+type RowStatus = {
+  text: string | null
+  tone: 'processing' | 'attn' | 'final' | 'ready' | null
+  count: number | null
+}
 
 function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowStatus {
   if (stage.key === 'processing') {
     const run = track.latest_run
     const stageLabel = run ? (RUN_STATUS_LABELS[run.status] ?? 'Splitting') : 'Splitting'
-    if (!run || run.status === 'queued') return { text: stageLabel, tone: 'processing' }
+    if (!run || run.status === 'queued') return { text: stageLabel, tone: 'processing', count: null }
     const pct = Math.round(run.progress * 100)
-    return { text: `${stageLabel} · ${pct}%`, tone: 'processing' }
+    return { text: `${stageLabel} · ${pct}%`, tone: 'processing', count: null }
   }
   if (stage.key === 'needs-attention') {
     return {
       text: track.latest_run?.status === 'cancelled' ? 'Cancelled' : 'Split failed',
       tone: 'attn',
+      count: null,
     }
   }
-  if (stage.key === 'needs-split') return { text: null, tone: null }
-  if (stage.key === 'final') return { text: 'Final', tone: 'final' }
-  if (stage.key === 'ready') return { text: stage.label, tone: 'ready' }
-  return { text: null, tone: null }
+  if (stage.key === 'needs-split') return { text: null, tone: null, count: null }
+  if (stage.key === 'final') {
+    return { text: 'Final', tone: 'final', count: track.run_count > 1 ? track.run_count : null }
+  }
+  if (stage.key === 'ready') {
+    return { text: stage.label, tone: 'ready', count: track.run_count > 1 ? track.run_count : null }
+  }
+  return { text: null, tone: null, count: null }
 }
 
 function RowProgressBar({ run }: { run: RunSummary }) {
@@ -310,7 +319,7 @@ export function SongsPage({
     return tabs
   }, [tracks.length, filterCounts])
 
-  const showFilterTabs = filterTabs.length > 2 // only show tabs when there's real variety
+  const showFilterTabs = filterTabs.length > 2 // only show when at least 2 distinct stages are present
 
   const { exportableIds, splittableIds } = useMemo(() => {
     const exportable = new Set<string>()
@@ -509,6 +518,11 @@ export function SongsPage({
                   ) : status.text ? (
                     <span className={`song-row-status ${status.tone ? `is-${status.tone}` : ''}`}>
                       {status.text}
+                      {status.count ? (
+                        <span className="song-row-status-count" aria-label={`${status.count} versions`}>
+                          · {status.count}
+                        </span>
+                      ) : null}
                     </span>
                   ) : null}
                 </div>

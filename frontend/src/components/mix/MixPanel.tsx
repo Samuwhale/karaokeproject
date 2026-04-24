@@ -328,6 +328,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                   onKeyDown={(event) => handleFaderKey(index, stem.gain_db, event)}
                   onDoubleClick={() => updateStem(index, { gain_db: 0 })}
                   aria-label={`${stem.label} gain`}
+                  title="Double-click to reset to 0 dB"
                 />
               </label>
             </div>
@@ -342,6 +343,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
           onClick={handleTogglePlay}
           disabled={playDisabled}
           aria-label={playLoading ? 'Loading audio…' : mixer.isPlaying ? 'Pause preview' : 'Play preview'}
+          title={playLoading ? undefined : mixer.isPlaying ? 'Pause (Space)' : 'Play (Space)'}
         >
           {playLoading ? <Spinner /> : mixer.isPlaying ? <PauseGlyph /> : <PlayGlyph />}
         </button>
@@ -358,7 +360,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
           style={{ '--seek-pct': `${mixer.duration > 0 ? ((mixer.currentTime / mixer.duration) * 100).toFixed(1) : 0}%` } as React.CSSProperties}
         />
         <span className="mix-time">{formatTime(mixer.currentTime)}</span>
-        <span className="mix-time-sep" aria-hidden>/</span>
+        <span className="mix-time-sep" aria-hidden>·</span>
         <span className="mix-time mix-time-total">{formatTime(mixer.duration)}</span>
       </div>
 
