@@ -133,18 +133,27 @@ function faderFillStyle(gainDb: number): React.CSSProperties {
 }
 
 function MixStateLabel({ stems, anySoloed }: { stems: StemRow[]; anySoloed: boolean }) {
-  const silenced = stems.filter((s) => s.muted || (anySoloed && !s.soloed))
-  if (silenced.length === 0 || silenced.length === stems.length) return null
-
-  let label: string
-  if (silenced.length === 1) {
-    label = `${silenced[0].label} muted`
-  } else if (silenced.length <= 2) {
-    label = `${silenced.map((s) => s.label).join(', ')} muted`
-  } else {
-    const activeCount = stems.length - silenced.length
-    label = `${activeCount} of ${stems.length} active`
+  if (anySoloed) {
+    const soloed = stems.filter((s) => s.soloed)
+    const label =
+      soloed.length <= 2
+        ? `Soloing ${soloed.map((s) => s.label).join(', ')} · preview`
+        : `Soloing ${soloed.length} stems · preview`
+    return (
+      <>
+        <span className="mix-time-sep" aria-hidden>·</span>
+        <span className="mix-transport-state is-solo" aria-live="polite">{label}</span>
+      </>
+    )
   }
+
+  const muted = stems.filter((s) => s.muted)
+  if (muted.length === 0 || muted.length === stems.length) return null
+
+  const label =
+    muted.length <= 2
+      ? `${muted.map((s) => s.label).join(', ')} muted`
+      : `${stems.length - muted.length} of ${stems.length} active`
 
   return (
     <>
@@ -318,7 +327,18 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                 <span className="stem-row-dot" aria-hidden />
                 <div className="stem-row-label">
                   <strong>{stem.label}</strong>
-                  <span className={`stem-row-gain ${Math.abs(stem.gain_db) < 0.05 ? 'is-zero' : 'is-set'}`}>{formatGain(stem.gain_db)}</span>
+                  {Math.abs(stem.gain_db) < 0.05 ? (
+                    <span className="stem-row-gain is-zero">{formatGain(stem.gain_db)}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="stem-row-gain is-set stem-row-gain-reset"
+                      onClick={() => updateStem(index, { gain_db: 0 })}
+                      title="Reset to 0 dB"
+                    >
+                      {formatGain(stem.gain_db)}
+                    </button>
+                  )}
                 </div>
                 <div className="stem-row-toggles">
                   <button

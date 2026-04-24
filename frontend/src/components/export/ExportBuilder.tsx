@@ -12,6 +12,7 @@ import type {
   RevealFolderInput,
 } from '../../types'
 import { exportStemKind, stemLabel } from '../../stems'
+import { formatSize } from '../metrics'
 import { Spinner } from '../feedback/Spinner'
 
 type Format = 'mp3' | 'wav'
@@ -51,13 +52,6 @@ function stemAvailabilityHint(option: ExportStemOption, totalTracks: number): st
   if (totalTracks <= 1) return 'Separated stem from this track.'
   if (option.track_count >= totalTracks) return `Available in all ${totalTracks} tracks.`
   return `Available in ${option.track_count} of ${totalTracks} tracks.`
-}
-
-function formatBytes(bytes: number) {
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  if (bytes >= 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
-  return `${bytes} B`
 }
 
 export function ExportBuilder({
@@ -232,7 +226,7 @@ export function ExportBuilder({
         <strong>Built {result.filename}</strong>
         <p>
           {result.included_track_count} track{result.included_track_count === 1 ? '' : 's'} included ·{' '}
-          {formatBytes(result.byte_count)}
+          {formatSize(result.byte_count)}
         </p>
         {result.skipped.length ? (
           <details className="export-result-skipped">
@@ -361,7 +355,7 @@ export function ExportBuilder({
             {planLoading && !plan
               ? 'Checking…'
               : plan
-                ? `${includedCount} ready · ${skippedCount} skipped · ${formatBytes(totalBytes)}`
+                ? `${includedCount} ready · ${skippedCount} skipped · ${formatSize(totalBytes)}`
                 : ''}
           </span>
         </div>
@@ -520,7 +514,7 @@ const ManifestRow = memo(function ManifestRow({ track, artifactList, stemOptions
                 <span aria-hidden>{present ? '✓' : '—'}</span>
                 <span>{artifactLabel(kind, stemOptions)}</span>
                 {present && match?.size_bytes != null ? (
-                  <span className="export-manifest-size">{formatBytes(match.size_bytes)}</span>
+                  <span className="export-manifest-size">{formatSize(match.size_bytes)}</span>
                 ) : null}
               </li>
             )

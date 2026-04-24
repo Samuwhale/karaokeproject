@@ -5,6 +5,7 @@ import { discardRejection } from '../../async'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { filterImportableMediaFiles } from '../../importableMedia'
 import { stemLabel } from '../../stems'
+import { formatDuration, formatSize } from '../metrics'
 import { Spinner } from '../feedback/Spinner'
 import type {
   ConfirmImportDraftsInput,
@@ -32,20 +33,6 @@ export type ImportPanelProps = {
 }
 
 // ---- Helpers ---------------------------------------------------------------
-
-function formatDuration(seconds: number | null) {
-  if (seconds === null) return '—'
-  const total = Math.round(seconds)
-  const m = Math.floor(total / 60)
-  const s = (total % 60).toString().padStart(2, '0')
-  return `${m}:${s}`
-}
-
-function formatSize(bytes: number | null) {
-  if (bytes === null) return null
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`
-}
 
 function sourceLabel(item: ImportDraft) {
   if (item.source_type === 'youtube') return item.playlist_source_url ? 'YouTube playlist' : 'YouTube'
@@ -161,8 +148,9 @@ const ImportRow = forwardRef<ImportRowHandle, ImportRowProps>(function ImportRow
         <div className="import-row-title">
           <strong>{draft.title || 'Untitled'}</strong>
           <span>
-            {sourceLabel(draft)} · {formatDuration(draft.duration_seconds)}
-            {formatSize(draft.size_bytes) ? ` · ${formatSize(draft.size_bytes)}` : ''}
+            {[sourceLabel(draft), formatDuration(draft.duration_seconds), formatSize(draft.size_bytes)]
+              .filter(Boolean)
+              .join(' · ')}
           </span>
         </div>
         <button type="button" className="import-row-remove" disabled={busy} onClick={onDiscard}>

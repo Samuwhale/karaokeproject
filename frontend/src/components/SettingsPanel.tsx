@@ -49,10 +49,6 @@ function createDraft(settings: Settings | null): SettingsDraft {
   }
 }
 
-function formatBytes(bytes: number) {
-  return formatSize(bytes) ?? '0 KB'
-}
-
 function bucketFor(storageOverview: StorageOverview | null, key: StorageBucket['key']) {
   return storageOverview?.items.find((item) => item.key === key) ?? null
 }
@@ -232,10 +228,10 @@ export function SettingsPanel({
                     <p>{item.path}</p>
                   </div>
                   <div className="storage-usage-metrics">
-                    <span>{formatBytes(item.total_bytes)}</span>
+                    <span>{formatSize(item.total_bytes)}</span>
                     <span>
                       {item.reclaimable_bytes > 0
-                        ? `${formatBytes(item.reclaimable_bytes)} reclaimable`
+                        ? `${formatSize(item.reclaimable_bytes)} reclaimable`
                         : 'No cleanup action'}
                     </span>
                   </div>
@@ -260,7 +256,7 @@ export function SettingsPanel({
                   <p>Removes temporary processing files. Safe when you want to reclaim scratch space.</p>
                 </div>
                 <ConfirmInline
-                  label={cleaningTempStorage ? 'Working…' : formatBytes(temp?.reclaimable_bytes ?? 0)}
+                  label={cleaningTempStorage ? 'Working…' : formatSize(temp?.reclaimable_bytes ?? 0) ?? '0 B'}
                   pendingLabel="Working…"
                   confirmLabel="Clear temp workspace"
                   cancelLabel="Keep temp files"
@@ -277,7 +273,7 @@ export function SettingsPanel({
                   <p>Removes built zip bundles only. Your saved songs, splits, and source files stay intact.</p>
                 </div>
                 <ConfirmInline
-                  label={cleaningExportBundles ? 'Working…' : formatBytes(exportBundles?.reclaimable_bytes ?? 0)}
+                  label={cleaningExportBundles ? 'Working…' : formatSize(exportBundles?.reclaimable_bytes ?? 0) ?? '0 B'}
                   pendingLabel="Working…"
                   confirmLabel="Delete export bundles"
                   cancelLabel="Keep bundles"
@@ -290,15 +286,15 @@ export function SettingsPanel({
 
               <div className="storage-action-row">
                 <div className="storage-action-copy">
-                  <strong>Purge non-final splits</strong>
-                  <p>Deletes split outputs that are not marked as final. Use this only after you have chosen winners.</p>
+                  <strong>Purge non-preferred splits</strong>
+                  <p>Deletes split outputs that are not marked as preferred. Use this only after you have chosen winners.</p>
                 </div>
                 <ConfirmInline
-                  label={cleaningLibraryRuns ? 'Working…' : formatBytes(outputs?.reclaimable_bytes ?? 0)}
+                  label={cleaningLibraryRuns ? 'Working…' : formatSize(outputs?.reclaimable_bytes ?? 0) ?? '0 B'}
                   pendingLabel="Working…"
-                  confirmLabel="Purge non-final splits"
+                  confirmLabel="Purge non-preferred splits"
                   cancelLabel="Keep all splits"
-                  prompt="Delete non-final split outputs across the library?"
+                  prompt="Delete non-preferred split outputs across the library?"
                   pending={cleaningLibraryRuns}
                   disabled={(outputs?.reclaimable_bytes ?? 0) === 0}
                   onConfirm={async () => onCleanupLibraryRuns()}

@@ -60,7 +60,6 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
 
   return (
     <div className="mix-presets" role="group" aria-label="Output preset">
-      <span className="mix-presets-label" aria-hidden>Mix as</span>
       <div className="mix-preset-group">
         {supported.map((spec) => {
           const active = activeIntent === spec.value
@@ -84,9 +83,9 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
               type="button"
               className="mix-preset mix-preset-reset"
               onClick={() => discardRejection(applyReset)}
-              title="Reset all stems to default levels"
+              title="Unmute every stem at 0 dB"
             >
-              All stems
+              Full mix
             </button>
           </>
         ) : null}

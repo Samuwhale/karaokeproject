@@ -32,9 +32,10 @@ export function formatChannels(channels: number | null | undefined) {
 
 export function formatSize(bytes: number | null | undefined) {
   if (bytes == null) return null
-  const mb = bytes / (1024 * 1024)
-  if (mb < 1) return `${Math.round(bytes / 1024)} KB`
-  return `${mb.toFixed(1)} MB`
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes >= 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${Math.max(0, Math.round(bytes))} B`
 }
 
 export function formatMetricsStrip(metrics: ArtifactMetrics) {

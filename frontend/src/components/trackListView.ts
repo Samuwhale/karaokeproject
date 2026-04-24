@@ -24,8 +24,8 @@ export function trackStageSummary(track: TrackSummary): TrackStageSummary {
   if (track.keeper_run_id) {
     return {
       key: 'final',
-      label: 'Final saved',
-      description: track.has_custom_mix ? 'Saved custom mix on the chosen final version.' : 'Final version saved and ready to export.',
+      label: 'Ready',
+      description: track.has_custom_mix ? 'Saved custom mix on the preferred version.' : 'Preferred version ready to export.',
       actionLabel: 'Open mix',
     }
   }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { discardRejection } from '../../async'
+import { formatDuration } from '../metrics'
 import { describeRun, isActiveRunStatus, RUN_STATUS_LABELS } from '../runStatus'
 import { SONG_BROWSE_SORT_OPTIONS, applySongBrowse, trackStageSummary } from '../trackListView'
 import type { TrackStageSummary } from '../trackListView'
@@ -27,18 +28,11 @@ type SongsPageProps = {
   onBatchDelete: (trackIds: string[]) => void
 }
 
-function formatDuration(seconds: number | null) {
-  if (seconds === null) return '—'
-  const total = Math.round(seconds)
-  const minutes = Math.floor(total / 60)
-  const remaining = (total % 60).toString().padStart(2, '0')
-  return `${minutes}:${remaining}`
-}
-
 type RowStatus = {
   text: string | null
-  tone: 'processing' | 'attn' | 'final' | 'ready' | null
+  tone: 'processing' | 'attn' | 'ready' | null
   count: number | null
+  preferred: boolean
 }
 
 function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowStatus {
@@ -46,23 +40,26 @@ function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowS
     const run = track.latest_run
     const stageLabel = run ? (RUN_STATUS_LABELS[run.status] ?? 'Splitting') : 'Splitting'
     // The progress bar in the wave cell already shows percentage — don't duplicate it
-    return { text: stageLabel, tone: 'processing', count: null }
+    return { text: stageLabel, tone: 'processing', count: null, preferred: false }
   }
   if (stage.key === 'needs-attention') {
     return {
       text: track.latest_run?.status === 'cancelled' ? 'Cancelled' : 'Split failed',
       tone: 'attn',
       count: null,
+      preferred: false,
     }
   }
-  if (stage.key === 'needs-split') return { text: null, tone: null, count: null }
-  if (stage.key === 'final') {
-    return { text: 'Final', tone: 'final', count: track.run_count > 1 ? track.run_count : null }
+  if (stage.key === 'needs-split') return { text: null, tone: null, count: null, preferred: false }
+  if (stage.key === 'final' || stage.key === 'ready') {
+    return {
+      text: 'Ready',
+      tone: 'ready',
+      count: track.run_count > 1 ? track.run_count : null,
+      preferred: stage.key === 'final',
+    }
   }
-  if (stage.key === 'ready') {
-    return { text: stage.label, tone: 'ready', count: track.run_count > 1 ? track.run_count : null }
-  }
-  return { text: null, tone: null, count: null }
+  return { text: null, tone: null, count: null, preferred: false }
 }
 
 function ClearIcon() {
@@ -557,7 +554,10 @@ export function SongsPage({
                       Split
                     </button>
                   ) : status.text ? (
-                    <span className={`song-row-status ${status.tone ? `is-${status.tone}` : ''}`}>
+                    <span className={`song-row-status ${status.tone ? `is-${status.tone}` : ''} ${status.preferred ? 'is-preferred' : ''}`}>
+                      {status.preferred ? (
+                        <span className="song-row-status-star" aria-label="Preferred version" title="Preferred version">★</span>
+                      ) : null}
                       {status.text}
                       {status.count ? (
                         <span className="song-row-status-count" aria-label={`${status.count} versions`}>

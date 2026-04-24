@@ -566,7 +566,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     setSettingKeeper(true)
     try {
       await setKeeperRun(trackId, runId)
-      pushToast('success', runId ? 'Set final version.' : 'Cleared final version.')
+      pushToast('success', runId ? 'Marked as preferred version.' : 'Cleared preferred version.')
       await refreshDashboard()
     } catch (error) {
       pushToast('error', getErrorMessage(error))
@@ -749,7 +749,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
           : ''
       pushToast(
         'success',
-        `Purged ${result.deleted_run_count} non-final render${result.deleted_run_count === 1 ? '' : 's'} across ${result.purged_track_count} track${result.purged_track_count === 1 ? '' : 's'} · ${formatReclaimed(result.bytes_reclaimed)} reclaimed${skipped}.`,
+        `Purged ${result.deleted_run_count} non-preferred render${result.deleted_run_count === 1 ? '' : 's'} across ${result.purged_track_count} track${result.purged_track_count === 1 ? '' : 's'} · ${formatReclaimed(result.bytes_reclaimed)} reclaimed${skipped}.`,
       )
       await refreshDashboard()
     } catch (error) {
@@ -774,7 +774,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     setCleaningLibraryRuns(true)
     pushToast(
       'info',
-      'Scheduled non-final render cleanup across the library.',
+      'Scheduled non-preferred render cleanup across the library.',
       {
         autoDismissMs: PURGE_UNDO_MS,
         action: {

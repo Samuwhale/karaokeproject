@@ -11,6 +11,7 @@ import type {
   TrackDetail,
 } from '../../types'
 import { exportStemKind } from '../../stems'
+import { formatSize } from '../metrics'
 
 type MixExportPopoverProps = {
   track: TrackDetail
@@ -52,13 +53,6 @@ function buildArtifactList(
     }
   }
   return kinds
-}
-
-function formatBytes(bytes: number) {
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  if (bytes >= 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
-  return `${bytes} B`
 }
 
 export function MixExportPopover({
@@ -153,7 +147,7 @@ export function MixExportPopover({
         <div className="popover popover-right popover-wide" role="dialog" aria-label="Export ready">
           <div className="popover-title">{result.filename}</div>
           <div className="export-pop-status">
-            {formatBytes(result.byte_count)}
+            {formatSize(result.byte_count)}
           </div>
           <div className="popover-foot">
             <a className="button-primary" href={result.download_url} download={result.filename}>
@@ -208,7 +202,7 @@ export function MixExportPopover({
             : planError
               ? planError
             : plannedBytes !== null
-              ? `Estimated ${formatBytes(plannedBytes)}.`
+              ? `Estimated ${formatSize(plannedBytes)}.`
               : 'Estimating size…'}
         </div>
 

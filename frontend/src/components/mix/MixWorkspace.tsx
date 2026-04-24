@@ -120,9 +120,8 @@ function isMixableRun(run: RunDetail) {
   return run.status === 'completed' && run.artifacts.some((artifact) => isStemKind(artifact.kind))
 }
 
-function versionSummary(run: RunDetail, keeperId: string | null): string {
-  const isKeeper = keeperId && run.id === keeperId
-  return isKeeper ? `Final · ${run.processing.profile_label}` : run.processing.profile_label
+function versionSummary(run: RunDetail): string {
+  return run.processing.profile_label
 }
 
 function Chevron() {
@@ -273,9 +272,7 @@ function VersionsPopover({
     if (!run) return profile.best_for || null
     if (isActiveRunStatus(run.status)) return run.status_message || formatStatus(run.status)
     const when = formatTimestampShort(run.updated_at)
-    if (run.status === 'completed') {
-      return run.id === keeperId ? `Final · ${when}` : when
-    }
+    if (run.status === 'completed') return when
     return `${formatStatus(run.status)} · ${when}`
   }
 
@@ -329,16 +326,22 @@ function VersionsPopover({
                 )
               }
 
+              const isPreferred = !!run && run.id === keeperId
               return (
                 <button
                   key={profile.key}
                   type="button"
-                  className={`popover-row ${isActive ? 'is-active' : ''}`}
+                  className={`popover-row ${isActive ? 'is-active' : ''} ${isPreferred ? 'is-preferred' : ''}`}
                   disabled={disabled}
                   onClick={() => handleRowClick(profile.key, run)}
                 >
                   <span className="popover-row-copy">
-                    <strong>{profile.label}</strong>
+                    <strong>
+                      {isPreferred ? (
+                        <span className="popover-row-star" aria-label="Preferred" title="Preferred version">★</span>
+                      ) : null}
+                      {profile.label}
+                    </strong>
                     {detail ? <span>{detail}</span> : null}
                     {run && profile.best_for ? (
                       <span className="popover-row-hint">{profile.best_for}</span>
@@ -373,7 +376,7 @@ function VersionsPopover({
                 discardRejection(() => onSetKeeper(selectedIsKeeper ? null : selectedRun.id))
               }
             >
-              {selectedIsKeeper ? 'Clear final' : 'Mark as final'}
+              {selectedIsKeeper ? 'Clear preferred' : 'Set as preferred'}
             </button>
             {canDeleteSelected ? (
               <ConfirmInline
@@ -531,7 +534,7 @@ function MixWorkspaceContent({
   const selectedRun = resolveSelectedRun(track, selectedRunId)
   const mixable = selectedRun ? isMixableRun(selectedRun) : false
   const canExport = !!selectedRun && selectedRun.status === 'completed'
-  const versionLabel = selectedRun ? versionSummary(selectedRun, track.keeper_run_id) : ''
+  const versionLabel = selectedRun ? versionSummary(selectedRun) : ''
   const activeSplit = selectedRun && isActiveRunStatus(selectedRun.status)
   const selectedRunIsKeeper = !!selectedRun && selectedRun.id === track.keeper_run_id
   const progressPct = activeSplit ? Math.round(selectedRun.progress * 100) : null
@@ -601,9 +604,12 @@ function MixWorkspaceContent({
                     onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
                     aria-haspopup="dialog"
                     aria-expanded={popover === 'versions'}
-                    title="Versions — click to generate, switch, or manage"
+                    title={selectedRunIsKeeper ? 'Preferred version — click for all versions' : 'Versions — click to generate, switch, or manage'}
                   >
                     {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
+                    {!activeSplit && selectedRunIsKeeper ? (
+                      <span className="mix-version-star" aria-hidden>★</span>
+                    ) : null}
                     <span>{selectedRun?.status === 'queued' ? 'Queued' : progressPct !== null ? `${progressPct}%` : versionLabel}</span>
                     {progressPct === null && completedCount > 1 ? (
                       <span className="mix-version-count" aria-label={`${completedCount} versions`}>·{completedCount}</span>
@@ -764,8 +770,7 @@ function MixWorkspaceContent({
             )
           ) : (
             <>
-              <strong>Split this track</strong>
-              <p>Pick a profile to begin. Each profile uses a different model and produces a different set of stems.</p>
+              <p>Choose a profile to split this track into stems. Each profile uses a different AI model.</p>
               <InlineProfilePicker
                 profiles={profiles}
                 defaultProfileKey={defaultProfileKey}
