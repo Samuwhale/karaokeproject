@@ -402,6 +402,7 @@ function App() {
                     openSongs()
                   }}
                   onReveal={handleRevealFolder}
+                  onOpenShortcuts={() => setShortcutsOpen(true)}
                   onError={(message) => pushToast('error', message)}
                 />
               }

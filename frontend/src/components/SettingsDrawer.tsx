@@ -76,7 +76,7 @@ function SettingsDrawerContent({
         ? readinessBlocked
           ? 'Processing is blocked. Fix the setup issue first, then return to the workspace.'
           : 'Check readiness, then repair anything blocking the workspace.'
-        : 'Review disk usage, cleanup targets, and storage paths when the workspace layout needs to change.'
+        : 'Reclaim disk space, review workspace usage, and tune paths when the layout needs to change.'
 
   return (
     <div className="drawer" role="dialog" aria-modal="true" aria-label="Settings">

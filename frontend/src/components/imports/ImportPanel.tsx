@@ -55,14 +55,14 @@ function needsDuplicateDecision(item: ImportDraft) {
 
 function duplicateHint(item: ImportDraft) {
   if (item.duplicate_tracks.length === 0) return null
-  if (item.duplicate_action === null) return 'Duplicate found — choose an action.'
-  if (item.duplicate_action === 'skip') return 'Will be skipped.'
-  if (item.duplicate_action === 'create-new') return 'Will be added as a new song.'
+  if (item.duplicate_action === null) return 'Already in your library — choose what to do.'
+  if (item.duplicate_action === 'skip') return 'This import will be discarded.'
+  if (item.duplicate_action === 'create-new') return 'Saved as a separate song with its own versions.'
   if (item.duplicate_action === 'reuse-existing') {
     if (item.duplicate_tracks.length > 1 && !item.existing_track_id) {
-      return 'Pick which existing song to attach to.'
+      return 'Pick which existing song to attach this version to.'
     }
-    return 'Will attach to the existing song.'
+    return 'Added as another version of the existing song.'
   }
   return null
 }
@@ -198,10 +198,10 @@ const ImportRow = forwardRef<ImportRowHandle, ImportRowProps>(function ImportRow
             }}
             disabled={busy}
           >
-            <option value="">Choose an action…</option>
-            <option value="create-new">Keep as a new song</option>
-            <option value="reuse-existing">Use an existing song</option>
-            <option value="skip">Skip</option>
+            <option value="">Choose what to do…</option>
+            <option value="create-new">Add as separate song</option>
+            <option value="reuse-existing">Attach as another version</option>
+            <option value="skip">Discard this import</option>
           </select>
           {draft.duplicate_action === 'reuse-existing' && draft.duplicate_tracks.length > 1 ? (
             <select

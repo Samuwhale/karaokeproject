@@ -28,6 +28,79 @@ type StemRow = {
 
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'failed'
 
+type GainFieldProps = {
+  gainDb: number
+  onCommit: (nextDb: number) => void
+  label: string
+}
+
+function GainField({ gainDb, onCommit, label }: GainFieldProps) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (!editing) return
+    const input = inputRef.current
+    if (input) {
+      input.focus()
+      input.select()
+    }
+  }, [editing])
+
+  function startEdit() {
+    setDraft(gainDb.toFixed(1))
+    setEditing(true)
+  }
+
+  function commit() {
+    const parsed = Number.parseFloat(draft.replace(/[^-0-9.]/g, ''))
+    if (Number.isFinite(parsed)) {
+      onCommit(clampGain(parsed))
+    }
+    setEditing(false)
+  }
+
+  function cancel() {
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="decimal"
+        className="stem-row-gain stem-row-gain-edit"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            commit()
+          } else if (event.key === 'Escape') {
+            event.preventDefault()
+            cancel()
+          }
+        }}
+        aria-label={`${label} gain in decibels`}
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      className={`stem-row-gain ${Math.abs(gainDb) < 0.05 ? 'is-zero' : 'is-set'}`}
+      onClick={startEdit}
+      title={`${label} gain — click to type a value, double-click fader to reset`}
+    >
+      {formatGain(gainDb)}
+    </button>
+  )
+}
+
 const SAVE_DEBOUNCE_MS = 400
 const FADER_STEP = 0.5
 const FADER_STEP_FINE = 0.1
@@ -327,18 +400,11 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                 <span className="stem-row-dot" aria-hidden />
                 <div className="stem-row-label">
                   <strong>{stem.label}</strong>
-                  {Math.abs(stem.gain_db) < 0.05 ? (
-                    <span className="stem-row-gain is-zero">{formatGain(stem.gain_db)}</span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="stem-row-gain is-set stem-row-gain-reset"
-                      onClick={() => updateStem(index, { gain_db: 0 })}
-                      title="Reset to 0 dB"
-                    >
-                      {formatGain(stem.gain_db)}
-                    </button>
-                  )}
+                  <GainField
+                    gainDb={stem.gain_db}
+                    onCommit={(next) => updateStem(index, { gain_db: next })}
+                    label={stem.label}
+                  />
                 </div>
                 <div className="stem-row-toggles">
                   <button

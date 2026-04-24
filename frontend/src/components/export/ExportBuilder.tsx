@@ -24,6 +24,12 @@ type ExportBuilderProps = {
   onError: (message: string) => void
   onReveal: (payload: RevealFolderInput) => void | Promise<void>
   footerAction?: React.ReactNode
+  /**
+   * 'full' (default) shows the per-track manifest and Included header bar.
+   * 'compact' hides the manifest (useful when there's only one track and
+   * the summary line is enough).
+   */
+  variant?: 'full' | 'compact'
 }
 
 const BITRATE_PATTERN = /^\d{2,3}k$/
@@ -61,6 +67,7 @@ export function ExportBuilder({
   onError,
   onReveal,
   footerAction,
+  variant = 'full',
 }: ExportBuilderProps) {
   const resolvedRunIds = useMemo(() => runIds ?? {}, [runIds])
   const [loadedStemOptions, setLoadedStemOptions] = useState<{
@@ -348,29 +355,43 @@ export function ExportBuilder({
         </div>
       ) : null}
 
-      <section className="export-manifest-section">
-        <div className="export-manifest-head-bar">
-          <span>Included</span>
-          <span className="export-manifest-count">
-            {planLoading && !plan
-              ? 'Checking…'
-              : plan
-                ? `${includedCount} ready · ${skippedCount} skipped · ${formatSize(totalBytes)}`
-                : ''}
-          </span>
-        </div>
-        {plan ? (
-          <ExportManifest plan={plan} artifactList={artifactList} stemOptions={stemOptions} />
-        ) : planError ? (
-          <p className="inline-hint">{planError}</p>
-        ) : planLoading ? (
-          <p className="inline-hint">
-            <Spinner /> Checking which artifacts are available…
-          </p>
-        ) : (
-          <p className="inline-hint">Pick at least one thing to include to see what will be in the export.</p>
-        )}
-      </section>
+      {variant === 'full' ? (
+        <section className="export-manifest-section">
+          <div className="export-manifest-head-bar">
+            <span>Included</span>
+            <span className="export-manifest-count">
+              {planLoading && !plan
+                ? 'Checking…'
+                : plan
+                  ? `${includedCount} ready · ${skippedCount} skipped · ${formatSize(totalBytes)}`
+                  : ''}
+            </span>
+          </div>
+          {plan ? (
+            <ExportManifest plan={plan} artifactList={artifactList} stemOptions={stemOptions} />
+          ) : planError ? (
+            <p className="inline-hint">{planError}</p>
+          ) : planLoading ? (
+            <p className="inline-hint">
+              <Spinner /> Checking which artifacts are available…
+            </p>
+          ) : (
+            <p className="inline-hint">Pick at least one thing to include to see what will be in the export.</p>
+          )}
+        </section>
+      ) : (
+        <p className="export-compact-summary" aria-live="polite">
+          {!artifactList.length
+            ? 'Pick at least one output.'
+            : planLoading && !plan
+              ? 'Estimating size…'
+              : planError
+                ? planError
+                : plan
+                  ? `Estimated ${formatSize(totalBytes)}`
+                  : ''}
+        </p>
+      )}
 
       <div className="import-footer">
         <span>{blockingReason ?? (busy ? 'Building bundle…' : '')}</span>

@@ -218,37 +218,8 @@ export function SettingsPanel({
 
       {view === 'storage' ? (
         <form className="import-form" onSubmit={handleSubmit}>
-          <section className="storage-panel-block">
-            <div className="subsection-head">Workspace usage</div>
-            <div className="storage-usage-list">
-              {(storageOverview?.items ?? []).map((item) => (
-                <article key={item.key} className="storage-usage-row">
-                  <div className="storage-usage-copy">
-                    <strong>{item.label}</strong>
-                    <p>{item.path}</p>
-                  </div>
-                  <div className="storage-usage-metrics">
-                    <span>{formatSize(item.total_bytes)}</span>
-                    <span>
-                      {item.reclaimable_bytes > 0
-                        ? `${formatSize(item.reclaimable_bytes)} reclaimable`
-                        : 'No cleanup action'}
-                    </span>
-                  </div>
-                </article>
-              ))}
-            </div>
-            {!storageOverview ? (
-              <div className="skeleton-stack">
-                <Skeleton height={36} />
-                <Skeleton height={36} />
-                <Skeleton height={36} />
-              </div>
-            ) : null}
-          </section>
-
           <section className="storage-panel-block settings-cleanup-block">
-            <div className="subsection-head">Cleanup now</div>
+            <div className="subsection-head">Reclaim space</div>
             <div className="storage-action-list">
               <div className="storage-action-row">
                 <div className="storage-action-copy">
@@ -304,7 +275,36 @@ export function SettingsPanel({
           </section>
 
           <section className="storage-panel-block">
-            <div className="subsection-head">Storage paths</div>
+            <div className="subsection-head">Workspace usage</div>
+            <div className="storage-usage-list">
+              {(storageOverview?.items ?? []).map((item) => (
+                <article key={item.key} className="storage-usage-row">
+                  <div className="storage-usage-copy">
+                    <strong>{item.label}</strong>
+                    <p>{item.path}</p>
+                  </div>
+                  <div className="storage-usage-metrics">
+                    <span>{formatSize(item.total_bytes)}</span>
+                    <span>
+                      {item.reclaimable_bytes > 0
+                        ? `${formatSize(item.reclaimable_bytes)} reclaimable`
+                        : 'No cleanup action'}
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
+            {!storageOverview ? (
+              <div className="skeleton-stack">
+                <Skeleton height={36} />
+                <Skeleton height={36} />
+                <Skeleton height={36} />
+              </div>
+            ) : null}
+          </section>
+
+          <details className="storage-panel-block storage-paths-collapsible">
+            <summary className="subsection-head">Storage paths &amp; retention</summary>
             <div className="storage-path-grid">
               <label className="field">
                 <span>Database path</span>
@@ -381,10 +381,8 @@ export function SettingsPanel({
                 />
               </label>
             </div>
-          </section>
 
-          <section className="storage-panel-block">
-            <div className="subsection-head">Retention</div>
+            <div className="storage-panel-subhead">Retention</div>
             <div className="processing-grid">
               <label className="field">
                 <span>Temp max age (hours)</span>
@@ -422,7 +420,7 @@ export function SettingsPanel({
                 />
               </label>
             </div>
-          </section>
+          </details>
 
           <div className="import-footer">
             <span>{savedAt ? <span className="field-saved">Storage settings saved.</span> : null}</span>

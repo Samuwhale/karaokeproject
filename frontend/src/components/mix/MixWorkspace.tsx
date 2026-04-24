@@ -48,6 +48,7 @@ type MixWorkspaceProps = {
   onUpdateTrack: (trackId: string, payload: { title?: string; artist?: string | null }) => Promise<void>
   onDeleteTrack: (trackId: string) => void
   onReveal: (payload: RevealFolderInput) => void | Promise<void>
+  onOpenShortcuts: () => void
   onError: (message: string) => void
 }
 
@@ -162,6 +163,16 @@ function ChevronDown() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
       <path d="M3 5L7 9L11 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function QuestionGlyph() {
+  return (
+    <svg aria-hidden width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M6.5 6.2c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5c0 .7-.4 1.2-1 1.5-.4.2-.5.5-.5.8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <circle cx="8" cy="11" r=".75" fill="currentColor" />
     </svg>
   )
 }
@@ -528,6 +539,7 @@ function MixWorkspaceContent({
   onUpdateTrack,
   onDeleteTrack,
   onReveal,
+  onOpenShortcuts,
   onError,
 }: MixWorkspaceProps & { track: TrackDetail }) {
   const [popover, setPopover] = useState<Popover>(null)
@@ -662,6 +674,15 @@ function MixWorkspaceContent({
               />
             ) : null}
           </span>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onOpenShortcuts}
+            aria-label="Keyboard shortcuts"
+            title="Keyboard shortcuts (?)"
+          >
+            <QuestionGlyph />
+          </button>
           <span className="popover-anchor">
             <button
               type="button"

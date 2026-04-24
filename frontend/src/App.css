@@ -662,6 +662,47 @@ code {
   padding-top: var(--space-xs);
 }
 
+.storage-paths-collapsible {
+  display: block;
+  padding-top: var(--space-xs);
+}
+
+.storage-paths-collapsible > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) 0;
+  user-select: none;
+}
+
+.storage-paths-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.storage-paths-collapsible > summary::after {
+  content: '▸';
+  font-size: 10px;
+  color: var(--text-faint);
+  transition: transform 120ms ease;
+}
+
+.storage-paths-collapsible[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+.storage-paths-collapsible > *:not(summary) {
+  margin-top: var(--space-sm);
+}
+
+.storage-panel-subhead {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: var(--space-xs);
+}
+
 .storage-usage-list, .storage-action-list {
   display: grid;
   gap: var(--space-xs);

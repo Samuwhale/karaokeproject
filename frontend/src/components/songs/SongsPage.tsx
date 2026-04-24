@@ -599,9 +599,9 @@ export function SongsPage({
           )}
         </div>
       ) : (
-        <div className="library-empty">
-          <strong>No songs yet</strong>
-          <p>Paste a YouTube URL, drag in audio files, or click Add songs to browse.</p>
+        <div className="library-empty library-empty-onboard">
+          <strong>Start by adding a song</strong>
+          <p>Drop audio files anywhere, paste a YouTube URL, or browse your computer.</p>
           <button type="button" className="button-primary" onClick={onAddSongs}>
             Add songs
           </button>
