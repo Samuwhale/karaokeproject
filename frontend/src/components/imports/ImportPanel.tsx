@@ -420,7 +420,7 @@ function ImportPanelContent({
 
         <div className="overlay-body">
           {/* ---- Source input ------------------------------------------- */}
-          <div className="import-panel-source">
+          <div className={`import-panel-source ${drafts.length > 0 ? 'is-compact' : ''}`}>
             <div className="import-panel-url-row">
               <div className="import-panel-url-wrap">
                 <input
@@ -612,7 +612,7 @@ function ImportPanelContent({
             <div className="overlay-foot-actions">
               <button
                 type="button"
-                className="button-link"
+                className="button-secondary"
                 disabled={!canConfirm}
                 onClick={() => discardRejection(() => confirm(false))}
                 title="Add to your library without queueing a split. You can split later from the song."

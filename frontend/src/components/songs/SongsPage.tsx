@@ -596,19 +596,33 @@ export function SongsPage({
                     >
                       Split
                     </button>
-                  ) : status.text ? (
-                    <span className={`song-row-status ${status.tone ? `is-${status.tone}` : ''} ${status.preferred ? 'is-preferred' : ''}`}>
-                      {status.preferred ? (
-                        <span className="song-row-status-star" aria-label="Preferred version" title="Preferred version">★</span>
-                      ) : null}
-                      {status.text}
-                      {status.count ? (
-                        <span className="song-row-status-count" aria-label={`${status.count} versions`}>
-                          · {status.count}
-                        </span>
-                      ) : null}
-                    </span>
-                  ) : null}
+                  ) : stage.key === 'needs-attention' && track.latest_run ? (
+                    <button
+                      type="button"
+                      className="song-row-retry-action"
+                      disabled={retryingRunId === track.latest_run.id}
+                      onClick={() => discardRejection(() => onRetryRun(track.latest_run!.id))}
+                      aria-label={`Retry split for ${track.title}`}
+                    >
+                      {retryingRunId === track.latest_run.id ? 'Retrying…' : 'Retry'}
+                    </button>
+                  ) : status.text ? (() => {
+                    const hideText = status.preferred && !track.has_custom_mix
+                    const showText = !hideText
+                    return (
+                      <span className={`song-row-status ${status.tone ? `is-${status.tone}` : ''} ${status.preferred ? 'is-preferred' : ''}`}>
+                        {status.preferred ? (
+                          <span className="song-row-status-star" aria-label="Preferred version" title="Preferred version">★</span>
+                        ) : null}
+                        {showText ? status.text : null}
+                        {status.count ? (
+                          <span className="song-row-status-count" aria-label={`${status.count} versions`}>
+                            {showText ? `· ${status.count}` : status.count}
+                          </span>
+                        ) : null}
+                      </span>
+                    )
+                  })() : null}
                 </div>
               </div>
             )
@@ -645,7 +659,7 @@ export function SongsPage({
         <div className="library-empty library-empty-onboard">
           <WaveformIcon />
           <strong>Add your first song</strong>
-          <p>Drop audio files or paste a YouTube URL to split into individual stems — then mix, mute, or download each part.</p>
+          <p>Drop files or paste a YouTube URL to separate a song into stems — then mix, mute, or export each part.</p>
           <button type="button" className="button-primary" onClick={onAddSongs}>
             Add songs
           </button>

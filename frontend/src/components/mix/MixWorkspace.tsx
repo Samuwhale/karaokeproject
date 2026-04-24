@@ -553,12 +553,35 @@ function MixWorkspaceContent({
 
   const mixRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
+    function isEditable(target: EventTarget | null) {
+      if (!(target instanceof HTMLElement)) return false
+      const tag = target.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable
+    }
+
     function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape' && popover) setPopover(null)
+      if (event.key === 'Escape') {
+        if (popover) setPopover(null)
+        return
+      }
+      if (isEditable(event.target)) return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+
+      if (event.key === 'e') {
+        if (!canExport) return
+        event.preventDefault()
+        setPopover((p) => (p === 'export' ? null : 'export'))
+        return
+      }
+      if (event.key === 'v') {
+        if (!selectedRun) return
+        event.preventDefault()
+        setPopover((p) => (p === 'versions' ? null : 'versions'))
+      }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [popover])
+  }, [popover, canExport, selectedRun])
 
   return (
     <section className="mix" ref={mixRef}>
@@ -620,7 +643,7 @@ function MixWorkspaceContent({
                     onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
                     aria-haspopup="dialog"
                     aria-expanded={popover === 'versions'}
-                    title={selectedRunIsKeeper ? 'Preferred version — click for all versions' : 'Versions — click to generate, switch, or manage'}
+                    title={selectedRunIsKeeper ? 'Preferred version — click for all versions (v)' : 'Versions — click to generate, switch, or manage (v)'}
                   >
                     {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
                     {!activeSplit && selectedRunIsKeeper ? (
@@ -632,7 +655,7 @@ function MixWorkspaceContent({
                     ) : progressPct !== null ? (
                       <span className="mix-version-count">{progressPct}%</span>
                     ) : completedCount > 1 ? (
-                      <span className="mix-version-count" aria-label={`${completedCount} versions`}>·{completedCount}</span>
+                      <span className="mix-version-count mix-version-count-badge" aria-label={`${completedCount} versions`}>{completedCount}</span>
                     ) : null}
                     <Chevron />
                   </button>
@@ -667,7 +690,7 @@ function MixWorkspaceContent({
               disabled={!canExport}
               aria-haspopup="dialog"
               aria-expanded={popover === 'export'}
-              title={canExport ? undefined : track.runs.length === 0 ? 'Split this track first to enable export.' : 'Export unlocks after the selected version finishes.'}
+              title={canExport ? 'Export (e)' : track.runs.length === 0 ? 'Split this track first to enable export.' : 'Export unlocks after the selected version finishes.'}
             >
               Export
             </button>
@@ -766,26 +789,36 @@ function MixWorkspaceContent({
               </>
             ) : RETRYABLE_STATUSES.has(selectedRun.status) ? (
               <>
-                <strong>Split failed</strong>
-                <p>{selectedRun.error_message || 'Retry this version, or open Versions to try a different profile.'}</p>
-                <button
-                  type="button"
-                  className="button-primary"
-                  onClick={() => discardRejection(() => onRetryRun(selectedRun.id))}
-                >
-                  {retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry split'}
-                </button>
+                <strong>{selectedRun.processing.profile_label} split failed</strong>
+                <p>{selectedRun.error_message || 'Retry this version, or try a different profile.'}</p>
+                <div className="mix-blocked-actions">
+                  <button
+                    type="button"
+                    className="button-primary"
+                    disabled={retryingRunId === selectedRun.id}
+                    onClick={() => discardRejection(() => onRetryRun(selectedRun.id))}
+                  >
+                    {retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry split'}
+                  </button>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={() => setPopover('versions')}
+                  >
+                    Try another profile
+                  </button>
+                </div>
               </>
             ) : (
               <>
-                <strong>No stems to mix</strong>
-                <p>This version completed without producing stem files.</p>
+                <strong>{selectedRun.processing.profile_label} produced no stems</strong>
+                <p>This version completed without separated stem files. Try another profile.</p>
                 <button
                   type="button"
                   className="button-secondary"
                   onClick={() => setPopover('versions')}
                 >
-                  Open Versions
+                  Open versions
                 </button>
               </>
             )

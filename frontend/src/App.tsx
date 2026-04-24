@@ -504,6 +504,8 @@ const SHORTCUT_ENTRIES: ShortcutEntry[] = [
   { key: 'k / ↑', desc: 'Previous track' },
   { key: 'r', desc: 'Re-split with default profile', note: 'Mix workspace' },
   { key: '1 – 9', desc: 'Switch to version by index', note: 'Mix workspace' },
+  { key: 'v', desc: 'Open Versions panel', note: 'Mix workspace' },
+  { key: 'e', desc: 'Open Export panel', note: 'Mix workspace' },
   { key: 'Space', desc: 'Play / Pause', note: 'Mix workspace' },
   { key: '← →', desc: 'Adjust fader', note: '0.5 dB step' },
   { key: 'Shift + ← →', desc: 'Fine fader', note: '0.1 dB step' },
