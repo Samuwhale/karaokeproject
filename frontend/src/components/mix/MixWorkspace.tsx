@@ -167,15 +167,6 @@ function ChevronDown() {
   )
 }
 
-function QuestionGlyph() {
-  return (
-    <svg aria-hidden width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.25" />
-      <path d="M6.5 6.2c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5c0 .7-.4 1.2-1 1.5-.4.2-.5.5-.5.8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-      <circle cx="8" cy="11" r=".75" fill="currentColor" />
-    </svg>
-  )
-}
 
 type VersionsPopoverProps = {
   track: TrackDetail
@@ -414,9 +405,10 @@ type OverflowMenuProps = {
   onReveal: () => void | Promise<void>
   onUpdateTrack: (payload: { title?: string; artist?: string | null }) => Promise<void>
   onDeleteTrack: () => void
+  onOpenShortcuts: () => void
 }
 
-function OverflowMenu({ track, updatingTrack, onClose, onReveal, onUpdateTrack, onDeleteTrack }: OverflowMenuProps) {
+function OverflowMenu({ track, updatingTrack, onClose, onReveal, onUpdateTrack, onDeleteTrack, onOpenShortcuts }: OverflowMenuProps) {
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(track.title)
   const [artist, setArtist] = useState(track.artist ?? '')
@@ -478,6 +470,14 @@ function OverflowMenu({ track, updatingTrack, onClose, onReveal, onUpdateTrack, 
             >
               Reveal source folder
             </button>
+            <button
+              type="button"
+              className="menu-item"
+              onClick={() => { onOpenShortcuts(); onClose() }}
+            >
+              Keyboard shortcuts
+            </button>
+            <div className="menu-sep" aria-hidden />
             <ConfirmInline
               label="Delete song…"
               pendingLabel="Deleting…"
@@ -674,15 +674,6 @@ function MixWorkspaceContent({
               />
             ) : null}
           </span>
-          <button
-            type="button"
-            className="icon-button"
-            onClick={onOpenShortcuts}
-            aria-label="Keyboard shortcuts"
-            title="Keyboard shortcuts (?)"
-          >
-            <QuestionGlyph />
-          </button>
           <span className="popover-anchor">
             <button
               type="button"
@@ -703,6 +694,7 @@ function MixWorkspaceContent({
                 onReveal={() => onReveal({ kind: 'track-outputs', track_id: track.id })}
                 onUpdateTrack={(payload) => onUpdateTrack(track.id, payload)}
                 onDeleteTrack={() => onDeleteTrack(track.id)}
+                onOpenShortcuts={onOpenShortcuts}
               />
             ) : null}
           </span>
@@ -766,8 +758,8 @@ function MixWorkspaceContent({
               </>
             ) : RETRYABLE_STATUSES.has(selectedRun.status) ? (
               <>
-                <strong>This split didn't complete</strong>
-                <p>{selectedRun.error_message || 'Retry this version or open Versions to try a different profile.'}</p>
+                <strong>Split failed</strong>
+                <p>{selectedRun.error_message || 'Retry this version, or open Versions to try a different profile.'}</p>
                 <button
                   type="button"
                   className="button-primary"
@@ -778,8 +770,8 @@ function MixWorkspaceContent({
               </>
             ) : (
               <>
-                <strong>No stems available</strong>
-                <p>This version completed without stem outputs.</p>
+                <strong>No stems to mix</strong>
+                <p>This version completed without producing stem files.</p>
                 <button
                   type="button"
                   className="button-secondary"
@@ -791,7 +783,7 @@ function MixWorkspaceContent({
             )
           ) : (
             <>
-              <p>Choose a profile to split this track into stems.</p>
+              <p>Choose a profile to separate this track into stems you can mix and export.</p>
               <InlineProfilePicker
                 profiles={profiles}
                 defaultProfileKey={defaultProfileKey}

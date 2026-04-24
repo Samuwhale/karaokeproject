@@ -53,7 +53,7 @@ function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowS
   if (stage.key === 'needs-split') return { text: null, tone: null, count: null, preferred: false }
   if (stage.key === 'final' || stage.key === 'ready') {
     return {
-      text: 'Ready',
+      text: track.has_custom_mix ? 'Mix saved' : 'Ready',
       tone: 'ready',
       count: track.run_count > 1 ? track.run_count : null,
       preferred: stage.key === 'final',

@@ -539,7 +539,7 @@ function ImportPanelContent({
           </div>
 
           {/* ---- Profile picker ----------------------------------------- */}
-          {drafts.length > 0 && profiles.length > 1 ? (
+          {drafts.length > 0 && profiles.length > 0 ? (
             <div className="import-panel-profiles" role="group" aria-label="Split profile">
               {profiles.map((profile) => {
                 const isSelected = profile.key === profileKey

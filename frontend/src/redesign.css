@@ -253,6 +253,10 @@
   grid-template-columns: minmax(0, 1.1fr) 72px minmax(0, 1.9fr);
 }
 
+.library-queue-item.is-failed .library-queue-item-stage {
+  color: var(--err);
+}
+
 .library-queue-item-reason {
   color: var(--text-muted);
   font-size: 12px;
@@ -620,7 +624,7 @@
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 15px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1213,16 +1217,16 @@
 }
 
 .mix-top-art {
-  width: 32px;
-  height: 32px;
-  border-radius: 5px;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
   background: color-mix(in oklch, var(--accent) 8%, var(--surface-2));
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 13px;
   color: color-mix(in oklch, var(--accent) 60%, var(--text-2));
   flex-shrink: 0;
   overflow: hidden;
@@ -1422,7 +1426,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 8px 24px 8px;
+  padding: 4px 24px;
   gap: 0;
   overflow-y: auto;
 }
@@ -1759,8 +1763,8 @@ button.stem-row-gain:focus-visible {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 24px;
-  min-height: 64px;
+  padding: 8px 24px;
+  min-height: 56px;
   border-top: 1px solid var(--border-soft);
   background: var(--bg);
 }
@@ -2210,6 +2214,12 @@ button.stem-row-gain:focus-visible {
 
 .menu-item:disabled:hover {
   background: transparent;
+}
+
+.menu-sep {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 4px 6px;
 }
 
 /* Export popover / builder shared rows */
@@ -2715,7 +2725,7 @@ button.stem-row-gain:focus-visible {
   align-items: center;
   justify-content: center;
   text-decoration: none;
-  opacity: 0.45;
+  opacity: 0.55;
   transition: opacity 120ms, background 120ms, color 120ms;
 }
 
