@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 
 import { discardRejection } from '../../async'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
+import { stemLabel } from '../../stems'
 import { Spinner } from '../feedback/Spinner'
 import { trackStageSummary } from '../trackListView'
 import type {
@@ -101,20 +102,33 @@ function BatchSplitOverlayContent({
             <p className="imports-empty">No tracks selected.</p>
           ) : (
             <div className="batch-split">
-              <label className="batch-split-profile">
-                <span>Profile</span>
-                <select
-                  value={profileKey}
-                  onChange={(event) => setSelectedProfileKey(event.target.value)}
-                  disabled={busy || !eligibleRows.length}
-                >
-                  {profiles.map((profile) => (
-                    <option key={profile.key} value={profile.key}>
-                      {profile.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {profiles.length > 1 ? (
+                <div className="import-panel-profiles" role="group" aria-label="Split profile">
+                  {profiles.map((profile) => {
+                    const isSelected = profile.key === profileKey
+                    return (
+                      <button
+                        key={profile.key}
+                        type="button"
+                        className={`import-panel-profile-btn ${isSelected ? 'is-selected' : ''}`}
+                        aria-pressed={isSelected}
+                        disabled={busy || !eligibleRows.length}
+                        onClick={() => setSelectedProfileKey(profile.key)}
+                      >
+                        <span className="import-panel-profile-name">{profile.label}</span>
+                        {profile.best_for ? (
+                          <span className="import-panel-profile-hint">{profile.best_for}</span>
+                        ) : null}
+                        {profile.stems.length > 0 ? (
+                          <span className="import-panel-profile-stems">
+                            {profile.stems.map((s) => stemLabel(s)).join(' · ')}
+                          </span>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : null}
 
               <ul className="export-manifest">
                 {rows.map((row) => (

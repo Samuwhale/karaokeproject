@@ -132,6 +132,28 @@ function faderFillStyle(gainDb: number): React.CSSProperties {
   return { left: `${center - width}%`, width: `${width}%` }
 }
 
+function MixStateLabel({ stems, anySoloed }: { stems: StemRow[]; anySoloed: boolean }) {
+  const silenced = stems.filter((s) => s.muted || (anySoloed && !s.soloed))
+  if (silenced.length === 0 || silenced.length === stems.length) return null
+
+  let label: string
+  if (silenced.length === 1) {
+    label = `${silenced[0].label} muted`
+  } else if (silenced.length <= 2) {
+    label = `${silenced.map((s) => s.label).join(', ')} muted`
+  } else {
+    const activeCount = stems.length - silenced.length
+    label = `${activeCount} of ${stems.length} active`
+  }
+
+  return (
+    <>
+      <span className="mix-time-sep" aria-hidden>·</span>
+      <span className="mix-transport-state" aria-live="polite">{label}</span>
+    </>
+  )
+}
+
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   const tag = target.tagName
@@ -387,6 +409,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
         <span className="mix-time">{formatTime(mixer.currentTime)}</span>
         <span className="mix-time-sep" aria-hidden>·</span>
         <span className="mix-time mix-time-total">{formatTime(mixer.duration)}</span>
+        <MixStateLabel stems={stems} anySoloed={anySoloed} />
       </div>
 
       {footerVisible || showErrors ? (

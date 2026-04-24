@@ -2043,6 +2043,19 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Transport: muted-stem state indicator ------------------------------------ */
+
+.mix-transport-state {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  flex-shrink: 1;
+}
+
 /* Batch split overlay */
 
 .batch-split {
@@ -2051,22 +2064,6 @@
   gap: 16px;
 }
 
-.batch-split-profile {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  font-size: var(--t-xs);
-  color: var(--text-muted);
-}
-
-.batch-split-profile select {
-  padding: var(--space-sm) var(--space-sm);
-  background: var(--surface-2);
-  border: 0;
-  border-radius: var(--radius-xs);
-  font-size: var(--t-base);
-  color: var(--text);
-}
 
 .batch-split-reason {
   font-size: var(--t-xs);
@@ -2247,38 +2244,75 @@
   font-size: 12px;
 }
 
-/* Import footer: profile grouped with Add and split ------------------------- */
+/* Import panel: profile card picker ---------------------------------------- */
 
-.overlay-foot-split-group {
+.import-panel-profiles {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
-.overlay-foot-profile-select {
-  padding: 6px 26px 6px 10px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+.import-panel-profile-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  text-align: left;
   border-radius: var(--radius-sm);
-  font-size: var(--t-sm);
-  color: var(--text-2);
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23878c92' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-position: right 8px center;
-  background-repeat: no-repeat;
+  border: 1px solid var(--border-soft);
+  background: var(--surface-2);
   cursor: pointer;
-  height: 36px;
-  white-space: nowrap;
+  transition: border-color 100ms, background 100ms, box-shadow 100ms;
 }
 
-.overlay-foot-profile-select:focus {
+.import-panel-profile-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+
+.import-panel-profile-btn.is-selected {
+  border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
+  background: color-mix(in oklch, var(--accent) 5%, var(--surface));
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 15%, transparent);
+}
+
+.import-panel-profile-btn:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
-.overlay-foot-profile-select:disabled {
-  opacity: 0.4;
+.import-panel-profile-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
+}
+
+.import-panel-profile-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.import-panel-profile-btn.is-selected .import-panel-profile-name {
+  color: var(--accent);
+}
+
+.import-panel-profile-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.import-panel-profile-stems {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+  line-height: 1.4;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Mix workspace: inline profile picker in zero state ----------------------- */

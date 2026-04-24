@@ -4,6 +4,7 @@ import type { DragEvent } from 'react'
 import { discardRejection } from '../../async'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { filterImportableMediaFiles } from '../../importableMedia'
+import { stemLabel } from '../../stems'
 import { Spinner } from '../feedback/Spinner'
 import type {
   ConfirmImportDraftsInput,
@@ -552,6 +553,35 @@ function ImportPanelContent({
             ) : null}
           </div>
 
+          {/* ---- Profile picker ----------------------------------------- */}
+          {drafts.length > 0 && profiles.length > 1 ? (
+            <div className="import-panel-profiles" role="group" aria-label="Split profile">
+              {profiles.map((profile) => {
+                const isSelected = profile.key === profileKey
+                return (
+                  <button
+                    key={profile.key}
+                    type="button"
+                    className={`import-panel-profile-btn ${isSelected ? 'is-selected' : ''}`}
+                    aria-pressed={isSelected}
+                    disabled={confirming}
+                    onClick={() => setSelectedProfileKey(profile.key)}
+                  >
+                    <span className="import-panel-profile-name">{profile.label}</span>
+                    {profile.best_for ? (
+                      <span className="import-panel-profile-hint">{profile.best_for}</span>
+                    ) : null}
+                    {profile.stems.length > 0 ? (
+                      <span className="import-panel-profile-stems">
+                        {profile.stems.map((s) => stemLabel(s)).join(' · ')}
+                      </span>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
+
           {/* ---- Staged review ------------------------------------------ */}
           {drafts.length > 0 ? (
             <>
@@ -601,20 +631,7 @@ function ImportPanelContent({
               >
                 Add without splitting
               </button>
-              <div className="overlay-foot-split-group">
-                <select
-                  className="overlay-foot-profile-select"
-                  value={profileKey}
-                  onChange={(event) => setSelectedProfileKey(event.target.value)}
-                  disabled={!canConfirm}
-                  aria-label="Split profile"
-                >
-                  {profiles.map((profile) => (
-                    <option key={profile.key} value={profile.key}>
-                      {profile.label}
-                    </option>
-                  ))}
-                </select>
+              {profiles.length > 0 ? (
                 <button
                   type="button"
                   className="button-primary"
@@ -623,7 +640,7 @@ function ImportPanelContent({
                 >
                   {confirming ? <><Spinner /> Adding…</> : 'Add and split'}
                 </button>
-              </div>
+              ) : null}
             </div>
           </footer>
         ) : null}
