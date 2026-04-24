@@ -574,7 +574,7 @@ export function SongsPage({
             </button>
           ) : null}
           <button type="button" className="button-link" onClick={clearSelection}>
-            {allSelected ? 'Clear all' : 'Clear'}
+            {allSelected ? 'Deselect all' : 'Deselect'}
           </button>
           {splitEligible.length > 0 ? (
             <button type="button" className="button-primary" onClick={handleSplit}>

@@ -308,10 +308,9 @@
 }
 
 .library-filter.is-active {
-  color: var(--text);
-  background: var(--surface-hover);
+  color: var(--accent);
+  background: var(--accent-dim);
   font-weight: 600;
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 7%, transparent);
 }
 
 .library-filter-count {
@@ -323,11 +322,12 @@
   padding: 1px 5px;
   border-radius: 999px;
   line-height: 1.5;
+  transition: color 100ms, background 100ms;
 }
 
 .library-filter.is-active .library-filter-count {
-  color: var(--accent);
-  background: var(--accent-dim);
+  color: var(--accent-ink);
+  background: var(--accent);
 }
 
 .library-search {
@@ -354,6 +354,16 @@
   outline: none;
   border-color: var(--accent);
   background: var(--surface);
+}
+
+.library-search::-webkit-search-cancel-button {
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 100ms;
+}
+
+.library-search::-webkit-search-cancel-button:hover {
+  opacity: 0.75;
 }
 
 .library-sort-group {
@@ -441,6 +451,10 @@
 .song-row.is-active {
   background: var(--accent-dim);
   box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.song-row.is-active:hover {
+  background: color-mix(in oklch, var(--accent) 18%, var(--surface-hover));
 }
 
 .song-row.is-selected {
@@ -583,7 +597,7 @@
 }
 
 .track-wave rect {
-  fill: color-mix(in srgb, var(--text) 52%, transparent);
+  fill: color-mix(in srgb, var(--text) 62%, transparent);
 }
 
 .song-row.is-active .track-wave rect, .song-row.is-selected .track-wave rect {
@@ -1106,6 +1120,20 @@
   }
 }
 
+.mix-version-pill.is-keeper {
+  color: color-mix(in oklch, var(--ok) 85%, var(--text));
+  border-color: color-mix(in oklch, var(--ok) 32%, var(--border-soft));
+  background: color-mix(in oklch, var(--ok) 9%, var(--surface-2));
+}
+
+.mix-version-pill.is-keeper:hover,
+.mix-version-pill.is-keeper.is-open {
+  background: color-mix(in oklch, var(--ok) 16%, var(--surface-hover));
+  border-color: color-mix(in oklch, var(--ok) 55%, var(--border));
+  color: color-mix(in oklch, var(--ok) 95%, var(--text));
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 6%, transparent);
+}
+
 /* Presets --------------------------------------------------------------- */
 
 .mix-presets {
@@ -1278,7 +1306,7 @@
 }
 
 .stem-waveform-bar {
-  fill: color-mix(in srgb, var(--wave-color, var(--text)) 28%, transparent);
+  fill: color-mix(in srgb, var(--wave-color, var(--text)) 36%, transparent);
 }
 
 .stem-waveform-bar-past {
@@ -1483,13 +1511,20 @@
   color: var(--accent-ink);
   background: var(--accent);
   box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 45%, transparent);
-  transition: background 120ms, box-shadow 120ms;
+  transition: background 120ms, box-shadow 120ms, transform 100ms;
   cursor: pointer;
 }
 
 .mix-play:hover:not(:disabled) {
   background: var(--accent-press);
   box-shadow: 0 3px 12px color-mix(in oklch, var(--accent) 55%, transparent);
+  transform: scale(1.06);
+}
+
+.mix-play:active:not(:disabled) {
+  transform: scale(0.94);
+  box-shadow: 0 1px 4px color-mix(in oklch, var(--accent) 30%, transparent);
+  transition-duration: 60ms;
 }
 
 .mix-play:disabled {

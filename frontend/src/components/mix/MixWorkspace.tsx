@@ -513,6 +513,7 @@ function MixWorkspaceContent({
   const canExport = !!selectedRun && selectedRun.status === 'completed'
   const versionLabel = selectedRun ? versionSummary(selectedRun, track.keeper_run_id) : ''
   const activeSplit = selectedRun && isActiveRunStatus(selectedRun.status)
+  const selectedRunIsKeeper = !!selectedRun && selectedRun.id === track.keeper_run_id
   const progressPct = activeSplit ? Math.round(selectedRun.progress * 100) : null
 
   const mixRef = useRef<HTMLElement | null>(null)
@@ -569,7 +570,7 @@ function MixWorkspaceContent({
                 return (
                   <button
                     type="button"
-                    className={`mix-version-pill ${popover === 'versions' ? 'is-open' : ''}`}
+                    className={`mix-version-pill ${popover === 'versions' ? 'is-open' : ''} ${selectedRunIsKeeper ? 'is-keeper' : ''}`}
                     onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
                     aria-haspopup="dialog"
                     aria-expanded={popover === 'versions'}

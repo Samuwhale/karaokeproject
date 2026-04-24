@@ -153,6 +153,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
   const pendingLibraryCleanupTimerRef = useRef<number | null>(null)
   const selectedTrackRequestIdRef = useRef(0)
   const queueSizeRef = useRef(queueRuns.length)
+  const prevQueueRunsRef = useRef<QueueRunEntry[]>([])
 
   useEffect(() => {
     selectedTrackRef.current = selectedTrack
@@ -255,6 +256,22 @@ export function useDashboardData(selection: { trackId: string | null }) {
         listImportDrafts(),
         getActiveRuns(),
       ])
+      // Detect split completions/failures to surface a toast notification.
+      const prevActive = prevQueueRunsRef.current.filter((e) => isActiveRunStatus(e.run.status))
+      for (const entry of prevActive) {
+        const stillActive = nextQueue.some((q) => q.run.id === entry.run.id && isActiveRunStatus(q.run.status))
+        if (stillActive) continue
+        const track = nextTracks.find((t) => t.id === entry.track_id)
+        if (track?.latest_run?.id === entry.run.id) {
+          if (track.latest_run.status === 'completed') {
+            pushToast('success', `${entry.track_title} is ready to mix.`)
+          } else if (track.latest_run.status === 'failed') {
+            pushToast('error', `Split failed for ${entry.track_title}.`)
+          }
+        }
+      }
+      prevQueueRunsRef.current = nextQueue
+
       setDiagnostics(nextDiagnostics)
       setSettings(nextSettings)
       setStorageOverview(nextStorageOverview)
@@ -288,7 +305,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     } finally {
       inFlightRef.current = false
     }
-  }, [syncSelectedTrackDetail])
+  }, [pushToast, syncSelectedTrackDetail])
 
   const refreshCachedModels = useCallback(async () => {
     try {

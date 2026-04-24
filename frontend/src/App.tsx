@@ -86,6 +86,7 @@ function App() {
     handleBatchDeleteTracks,
   } = dashboard
 
+  const [lastVisitedTrackId, setLastVisitedTrackId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsView, setSettingsView] = useState<'preferences' | 'maintenance' | 'storage'>(
     'preferences',
@@ -133,6 +134,10 @@ function App() {
     const runId = options?.runId ?? track.keeper_run_id ?? track.latest_run?.id ?? null
     openMix(track.id, { runId })
   }
+
+  useEffect(() => {
+    if (mixTrackId) setLastVisitedTrackId(mixTrackId)
+  }, [mixTrackId])
 
   const revealImportPanel = useEffectEvent(() => {
     if (mixActive) openSongs()
@@ -327,7 +332,7 @@ function App() {
                 <SongsPage
                   view={songsView}
                   tracks={tracks}
-                  currentTrackId={mixTrackId}
+                  currentTrackId={lastVisitedTrackId}
                   stagedImportsCount={drafts.length}
                   queueRuns={queueRuns}
                   cancellingRunId={cancellingRunId}
