@@ -125,11 +125,10 @@
 }
 
 .library-queue-aggregate {
-  height: 3px;
+  height: 4px;
   background: color-mix(in srgb, var(--text) 8%, transparent);
   border-radius: 999px;
   overflow: hidden;
-  margin-top: -2px;
 }
 
 .library-queue-aggregate-fill {
@@ -172,7 +171,11 @@
 }
 
 .library-queue-item:hover {
-  color: var(--text);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.library-queue-item:hover .library-queue-item-title {
+  color: var(--accent);
 }
 
 .library-queue-item:focus-visible {
@@ -437,6 +440,7 @@
 
 .song-row.is-active {
   background: var(--accent-dim);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .song-row.is-selected {
@@ -495,9 +499,10 @@
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 15px;
-  color: var(--text-2);
+  color: color-mix(in oklch, var(--accent) 60%, var(--text-2));
   flex-shrink: 0;
   position: relative;
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 16%, var(--border-soft));
 }
 
 .song-row-art img {
@@ -578,7 +583,7 @@
 }
 
 .track-wave rect {
-  fill: color-mix(in srgb, var(--text) 42%, transparent);
+  fill: color-mix(in srgb, var(--text) 52%, transparent);
 }
 
 .song-row.is-active .track-wave rect, .song-row.is-selected .track-wave rect {
@@ -593,7 +598,7 @@
 .song-row-progress {
   display: block;
   width: 100%;
-  height: 4px;
+  height: 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--text) 8%, transparent);
   overflow: hidden;
@@ -675,8 +680,8 @@
   font-weight: 500;
   border-radius: var(--radius-sm);
   color: var(--accent);
-  background: color-mix(in oklch, var(--accent) 7%, transparent);
-  border: 1px solid color-mix(in oklch, var(--accent) 38%, var(--border-soft));
+  background: color-mix(in oklch, var(--accent) 11%, transparent);
+  border: 1px solid color-mix(in oklch, var(--accent) 45%, var(--border-soft));
   cursor: pointer;
   white-space: nowrap;
   transition: background 120ms, color 120ms, border-color 120ms;
@@ -1171,7 +1176,7 @@
   gap: 20px;
   padding: 6px 10px;
   border-radius: var(--radius-sm);
-  box-shadow: inset 0 -1px 0 var(--border-soft);
+  box-shadow: inset 0 -1px 0 var(--border);
   transition: background 120ms;
 }
 
@@ -1196,6 +1201,7 @@
   height: 10px;
   border-radius: 50%;
   background: var(--stem-color, var(--text-faint));
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--stem-color, var(--text-faint)) 18%, transparent);
   flex: none;
 }
 
@@ -1272,7 +1278,7 @@
 }
 
 .stem-waveform-bar {
-  fill: color-mix(in srgb, var(--wave-color, var(--text)) 22%, transparent);
+  fill: color-mix(in srgb, var(--wave-color, var(--text)) 28%, transparent);
 }
 
 .stem-waveform-bar-past {
@@ -1341,7 +1347,7 @@
   border-radius: 50%;
   background: var(--surface);
   box-shadow:
-    0 2px 4px color-mix(in srgb, var(--text) 24%, transparent),
+    0 2px 6px color-mix(in srgb, var(--text) 30%, transparent),
     0 0 0 2px var(--stem-color, var(--accent));
   margin-top: -7px;
   transition: transform 120ms;
@@ -1360,7 +1366,7 @@
   border-radius: 50%;
   background: var(--surface);
   box-shadow:
-    0 2px 4px color-mix(in srgb, var(--text) 24%, transparent),
+    0 2px 6px color-mix(in srgb, var(--text) 30%, transparent),
     0 0 0 2px var(--stem-color, var(--accent));
 }
 
@@ -1476,17 +1482,20 @@
   justify-content: center;
   color: var(--accent-ink);
   background: var(--accent);
-  transition: background 120ms;
+  box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 45%, transparent);
+  transition: background 120ms, box-shadow 120ms;
   cursor: pointer;
 }
 
 .mix-play:hover:not(:disabled) {
   background: var(--accent-press);
+  box-shadow: 0 3px 12px color-mix(in oklch, var(--accent) 55%, transparent);
 }
 
 .mix-play:disabled {
   background: var(--surface-2);
   color: var(--text-faint);
+  box-shadow: none;
   cursor: not-allowed;
 }
 
@@ -1520,7 +1529,7 @@
 
 .mix-seekbar {
   flex: 1;
-  height: 5px;
+  height: 6px;
   min-width: 0;
   appearance: none;
   background: linear-gradient(
@@ -1723,6 +1732,9 @@
   font-size: 15px;
   color: var(--text);
   padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .popover-list {
@@ -2174,7 +2186,7 @@
 .mix-profile-picker {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   width: min(100%, 380px);
 }
 
@@ -2263,6 +2275,7 @@
 .mix-play.is-loading {
   background: var(--surface-2);
   color: var(--text-muted);
+  box-shadow: none;
   cursor: default;
 }
 

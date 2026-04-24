@@ -485,7 +485,8 @@ function ImportPanelContent({
                 </span>
               ) : (
                 <span className="import-panel-drop-label">
-                  <span>Drop audio or video files, or click to browse</span>
+                  <strong>Drop files here</strong>
+                  <span>Audio or video · or click to browse</span>
                 </span>
               )}
             </div>

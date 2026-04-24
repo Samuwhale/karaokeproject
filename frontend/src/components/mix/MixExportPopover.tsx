@@ -187,7 +187,7 @@ export function MixExportPopover({
             checked={includeMix}
             onToggle={() => setIncludeMix((value) => !value)}
             label="Edited mix"
-            hint="One rendered file using your current balance."
+            hint="Rendered with your current stem levels."
             format={mixFmt}
             onFormatChange={setMixFmt}
           />
@@ -204,12 +204,12 @@ export function MixExportPopover({
 
         <div className="export-pop-status">
           {artifactList.length === 0
-            ? 'Pick at least one thing to include.'
+            ? 'Select at least one output to export.'
             : planError
               ? planError
             : plannedBytes !== null
               ? `Estimated ${formatBytes(plannedBytes)}.`
-              : 'Sizing…'}
+              : 'Estimating size…'}
         </div>
 
         <div className="popover-foot">

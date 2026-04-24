@@ -715,22 +715,33 @@ function MixWorkspaceContent({
             ) : (
               <>
                 <strong>No stems available</strong>
-                <p>This version completed without stem outputs. Open Versions to queue another split.</p>
+                <p>This version completed without stem outputs.</p>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => setPopover('versions')}
+                >
+                  Open Versions
+                </button>
               </>
             )
           ) : (
-            <InlineProfilePicker
-              profiles={profiles}
-              creatingRun={creatingRun}
-              onCreateRun={(processing) => {
-                discardRejection(async () => {
-                  const result = await onCreateRun(track.id, processing)
-                  if (result && typeof result === 'object' && 'run' in result) {
-                    onSelectRun((result as { run: { id: string } }).run.id)
-                  }
-                })
-              }}
-            />
+            <>
+              <strong>Split this track</strong>
+              <p>Choose a profile to separate this song into stems you can mix and export.</p>
+              <InlineProfilePicker
+                profiles={profiles}
+                creatingRun={creatingRun}
+                onCreateRun={(processing) => {
+                  discardRejection(async () => {
+                    const result = await onCreateRun(track.id, processing)
+                    if (result && typeof result === 'object' && 'run' in result) {
+                      onSelectRun((result as { run: { id: string } }).run.id)
+                    }
+                  })
+                }}
+              />
+            </>
           )}
         </div>
       )}
