@@ -30,9 +30,9 @@ type SplitPlanRow = {
 function planRow(track: TrackSummary): SplitPlanRow {
   const stage = trackStageSummary(track)
   if (stage.key === 'needs-split') return { track, eligible: true, reason: 'Will queue a split' }
-  if (stage.key === 'needs-attention') return { track, eligible: true, reason: 'Will queue a fresh split (previous failed)' }
-  if (stage.key === 'ready') return { track, eligible: true, reason: 'Will queue an additional split alongside the current version' }
-  if (stage.key === 'final') return { track, eligible: true, reason: 'Will queue an additional split (current final is kept)' }
+  if (stage.key === 'needs-attention') return { track, eligible: true, reason: 'Will retry with a fresh split' }
+  if (stage.key === 'ready') return { track, eligible: true, reason: 'Will add another version' }
+  if (stage.key === 'final') return { track, eligible: true, reason: 'Will add another version' }
   return { track, eligible: false, reason: 'Already splitting' }
 }
 

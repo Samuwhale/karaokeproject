@@ -167,7 +167,7 @@ export function MixExportPopover({
               Reveal
             </button>
             <button type="button" className="button-link" onClick={() => setResult(null)}>
-              Build another
+              Export again
             </button>
           </div>
         </div>

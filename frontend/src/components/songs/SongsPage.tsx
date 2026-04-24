@@ -14,12 +14,14 @@ type SongsPageProps = {
   stagedImportsCount: number
   queueRuns: QueueRunEntry[]
   cancellingRunId: string | null
+  retryingRunId: string | null
   onViewChange: (view: SongsView) => void
   onOpenTrack: (track: TrackSummary, options?: { runId?: string | null }) => void
   onSplitTrack: (trackId: string) => void
   onAddSongs: () => void
   onReviewImports: () => void
   onCancelRun: (runId: string) => Promise<void>
+  onRetryRun: (runId: string) => Promise<unknown>
   onBatchSplit: (trackIds: string[]) => void
   onBatchExport: (trackIds: string[]) => void
   onBatchDelete: (trackIds: string[]) => void
@@ -75,17 +77,21 @@ function QueueStrip({
   activeRuns,
   failedRuns,
   cancellingRunId,
+  retryingRunId,
   onReviewImports,
   onOpenRun,
   onCancelRun,
+  onRetryRun,
 }: {
   draftsCount: number
   activeRuns: QueueRunEntry[]
   failedRuns: QueueRunEntry[]
   cancellingRunId: string | null
+  retryingRunId: string | null
   onReviewImports: () => void
   onOpenRun: (entry: QueueRunEntry) => void
   onCancelRun: (runId: string) => Promise<void>
+  onRetryRun: (runId: string) => Promise<unknown>
 }) {
   const activeCount = activeRuns.length
   const failedCount = failedRuns.length
@@ -161,8 +167,9 @@ function QueueStrip({
           {failedRuns.map((entry) => {
             const reason = entry.run.error_message?.trim() || entry.run.status_message?.trim() || 'No detail recorded'
             const label = entry.run.status === 'cancelled' ? 'Cancelled' : 'Failed'
+            const retrying = retryingRunId === entry.run.id
             return (
-              <li key={entry.run.id}>
+              <li key={entry.run.id} className="library-queue-row">
                 <button type="button" className="library-queue-item is-failed" onClick={() => onOpenRun(entry)}>
                   <span className="library-queue-item-title" title={entry.track_title}>
                     {entry.track_title}
@@ -171,6 +178,15 @@ function QueueStrip({
                   <span className="library-queue-item-reason" title={reason}>
                     {reason}
                   </span>
+                </button>
+                <button
+                  type="button"
+                  className="library-queue-cancel"
+                  disabled={retrying}
+                  onClick={() => discardRejection(() => onRetryRun(entry.run.id))}
+                  aria-label={`Retry split for ${entry.track_title}`}
+                >
+                  {retrying ? 'Retrying…' : 'Retry'}
                 </button>
               </li>
             )
@@ -237,12 +253,14 @@ export function SongsPage({
   stagedImportsCount,
   queueRuns,
   cancellingRunId,
+  retryingRunId,
   onViewChange,
   onOpenTrack,
   onSplitTrack,
   onAddSongs,
   onReviewImports,
   onCancelRun,
+  onRetryRun,
   onBatchSplit,
   onBatchExport,
   onBatchDelete,
@@ -330,12 +348,14 @@ export function SongsPage({
           activeRuns={activeRuns}
           failedRuns={failedRuns}
           cancellingRunId={cancellingRunId}
+          retryingRunId={retryingRunId}
           onReviewImports={onReviewImports}
           onOpenRun={(entry) => {
             const track = tracks.find((item) => item.id === entry.track_id)
             if (track) onOpenTrack(track, { runId: entry.run.id })
           }}
           onCancelRun={onCancelRun}
+          onRetryRun={onRetryRun}
         />
       ) : null}
 

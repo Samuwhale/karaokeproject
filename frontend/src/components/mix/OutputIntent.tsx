@@ -81,7 +81,7 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
             className="mix-preset"
             onClick={() => discardRejection(applyReset)}
           >
-            Reset
+            All stems
           </button>
         ) : null}
       </div>

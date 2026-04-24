@@ -258,7 +258,7 @@ export function ExportBuilder({
             Reveal in Finder
           </button>
           <button type="button" className="button-secondary" onClick={() => setResult(null)}>
-            Build another export
+            Export again
           </button>
           {footerAction ? (
             <div className="export-result-extra-action" ref={doneButtonRef} tabIndex={-1}>
@@ -396,10 +396,10 @@ export function ExportBuilder({
           >
             {busy ? (
               <>
-                <Spinner /> Building
+                <Spinner /> Exporting…
               </>
             ) : (
-              'Build export'
+              'Export'
             )}
           </button>
         </div>

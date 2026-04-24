@@ -322,6 +322,7 @@ function App() {
                   stagedImportsCount={drafts.length}
                   queueRuns={queueRuns}
                   cancellingRunId={cancellingRunId}
+                  retryingRunId={retryingRunId}
                   onViewChange={(next) => navigate(buildSongsPath(next), { state: { songsView: next } })}
                   onOpenTrack={openTrackWorkspace}
                   onSplitTrack={(trackId) => {
@@ -330,6 +331,7 @@ function App() {
                   onAddSongs={() => setImportPanelOpen(true)}
                   onReviewImports={() => setImportPanelOpen(true)}
                   onCancelRun={handleCancelRun}
+                  onRetryRun={handleRetryRun}
                   onBatchSplit={(ids) => setBatchSplitIds(ids)}
                   onBatchExport={(ids) => setBatchExportIds(ids)}
                   onBatchDelete={handleBatchDeleteTracks}

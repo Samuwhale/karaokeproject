@@ -91,14 +91,14 @@
   gap: 12px;
   padding: 14px 20px;
   margin-bottom: 20px;
-  background: var(--surface-2);
+  background: color-mix(in oklch, var(--accent) 6%, var(--surface-2));
   border-radius: var(--radius-md);
-  border-left: 3px solid var(--accent);
+  border: 1px solid color-mix(in oklch, var(--accent) 18%, var(--border-soft));
 }
 
 .library-queue.is-attn {
-  background: color-mix(in srgb, var(--err) 8%, var(--surface-2));
-  border-left-color: var(--err);
+  background: color-mix(in oklch, var(--err) 6%, var(--surface-2));
+  border-color: color-mix(in oklch, var(--err) 22%, var(--border-soft));
 }
 
 .library-queue-head {
@@ -215,6 +215,11 @@
   background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
+.library-queue-cancel:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .library-queue-cancel:disabled {
   opacity: 0.6;
   cursor: default;
@@ -236,6 +241,7 @@
 }
 
 .library-queue-item-pct {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   color: var(--text-muted);
@@ -265,26 +271,32 @@
   flex: 1;
   padding: 10px 14px;
   background: var(--surface-2);
-  border: 0;
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   font-size: 14px;
   color: var(--text);
   min-width: 0;
+  transition: border-color 80ms ease, background 80ms ease;
 }
 
 .library-search::placeholder {
   color: var(--text-faint);
 }
 
+.library-search:hover {
+  border-color: var(--border);
+}
+
 .library-search:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
 }
 
 .library-sort {
   padding: 10px 28px 10px 12px;
   background: var(--surface-2);
-  border: 0;
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   font-size: 14px;
   color: var(--text);
@@ -293,6 +305,16 @@
   background-position: right 10px center;
   background-repeat: no-repeat;
   cursor: pointer;
+  transition: border-color 80ms ease;
+}
+
+.library-sort:hover {
+  border-color: var(--border);
+}
+
+.library-sort:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .library-list {
@@ -514,28 +536,31 @@
 .song-row-split-action {
   padding: 5px 12px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   border-radius: var(--radius-sm);
-  color: var(--accent-ink);
-  background: var(--accent);
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid color-mix(in oklch, var(--accent) 38%, var(--border-soft));
   cursor: pointer;
   white-space: nowrap;
-  transition: background 120ms, opacity 120ms;
-  opacity: 0;
+  transition: background 120ms, color 120ms, border-color 120ms;
 }
 
 .song-row:hover .song-row-split-action {
-  opacity: 1;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  font-weight: 600;
 }
 
 .song-row-split-action:hover {
   background: var(--accent-press);
+  border-color: var(--accent-press);
 }
 
 .song-row-split-action:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  opacity: 1;
 }
 
 /* Batch bar */
@@ -549,9 +574,11 @@
   gap: 12px;
   padding: 10px 14px 10px 18px;
   background: var(--surface);
-  border: 1px solid var(--border-soft);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  box-shadow: 0 8px 32px color-mix(in srgb, var(--text) 8%, transparent);
+  box-shadow:
+    0 2px 8px color-mix(in srgb, var(--text) 6%, transparent),
+    0 12px 40px color-mix(in srgb, var(--text) 10%, transparent);
   width: fit-content;
   max-width: 100%;
 }
@@ -856,15 +883,16 @@
   padding: 5px 10px;
   border-radius: var(--radius-xs);
   font-size: 12px;
-  color: var(--text-muted);
-  background: transparent;
+  font-weight: 500;
+  color: var(--text-2);
+  background: var(--surface-2);
   border: 1px solid var(--border-soft);
   white-space: nowrap;
   transition: background 100ms, border-color 100ms, color 100ms;
 }
 
 .mix-version-pill:hover, .mix-version-pill.is-open {
-  background: var(--surface-2);
+  background: var(--surface-hover);
   border-color: var(--border);
   color: var(--text);
 }
@@ -907,6 +935,7 @@
   gap: 4px;
   padding: 3px;
   background: var(--surface-2);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
 }
 
@@ -962,8 +991,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 8px 28px 12px;
-  gap: 8px;
+  padding: 6px 28px 10px;
+  gap: 6px;
   overflow-y: auto;
 }
 
@@ -1017,6 +1046,7 @@
 }
 
 .stem-row-label span {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   color: var(--text-muted);
@@ -1240,10 +1270,11 @@
   grid-row: 4;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   padding: 12px 28px;
   min-height: 60px;
   border-top: 1px solid var(--border-soft);
+  background: var(--bg);
 }
 
 .mix-play {
@@ -1275,6 +1306,7 @@
 }
 
 .mix-time {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 13px;
   color: var(--text);
@@ -1304,25 +1336,25 @@
 
 .mix-seekbar::-webkit-slider-thumb {
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 20%, transparent);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 24%, transparent);
   transition: transform 120ms;
 }
 
 .mix-seekbar::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
+  transform: scale(1.12);
 }
 
 .mix-seekbar::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border: 0;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 20%, transparent);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 24%, transparent);
 }
 
 .mix-seekbar:disabled {
@@ -1401,6 +1433,7 @@
 }
 
 .mix-progress-pct {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 18px;
   font-weight: 600;
