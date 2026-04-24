@@ -238,6 +238,18 @@ button.topbar-chip:focus-visible {
   gap: var(--space-xs);
 }
 
+.stepper-step {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--t-xs);
+  color: var(--text-faint);
+}
+
+.stepper-step-done .stepper-label { color: var(--ok); }
+.stepper-step-active .stepper-label { color: var(--accent); font-weight: 600; }
+.stepper-step-failed .stepper-label { color: var(--err); }
+
 .stepper-dot {
   width: 14px;
   height: 14px;

@@ -579,8 +579,15 @@ function MixWorkspaceContent({
           ) : null}
         </div>
         <div className="mix-top-title">
-          <strong title={track.title}>{track.title}</strong>
-          {track.artist ? <span className="mix-top-artist">{track.artist}</span> : null}
+          <span className="mix-top-art" aria-hidden>
+            {track.thumbnail_url
+              ? <img src={track.thumbnail_url} alt="" loading="lazy" />
+              : track.title.trim().slice(0, 1).toUpperCase() || 'S'}
+          </span>
+          <div className="mix-top-title-copy">
+            <strong title={track.title}>{track.title}</strong>
+            {track.artist ? <span className="mix-top-artist">{track.artist}</span> : null}
+          </div>
         </div>
         <div className="mix-top-actions">
           {selectedRun ? (
@@ -701,6 +708,12 @@ function MixWorkspaceContent({
                     <span className="mix-progress-pct">{Math.round(selectedRun.progress * 100)}%</span>
                   ) : null}
                 </div>
+                {(() => {
+                  const prof = profiles.find((p) => p.key === selectedRun.processing.profile_key)
+                  return prof?.best_for ? (
+                    <p className="mix-progress-hint">{prof.best_for}</p>
+                  ) : null
+                })()}
                 <div
                   className="mix-progress-bar"
                   role="progressbar"
