@@ -553,17 +553,17 @@ function ImportPanelContent({
               {hasPendingDraftActions
                 ? 'Saving…'
                 : unresolved > 0
-                  ? `${unresolved} duplicate decision${unresolved === 1 ? '' : 's'} left`
-                  : 'Ready to import'}
+                  ? `${unresolved} duplicate${unresolved === 1 ? '' : 's'} to resolve`
+                  : null}
             </div>
             <div className="overlay-foot-actions">
               <button
                 type="button"
-                className="button-secondary"
+                className="button-link"
                 disabled={!canConfirm}
                 onClick={() => discardRejection(() => confirm(false))}
               >
-                {confirming ? <><Spinner /> Importing…</> : 'Add to library'}
+                Add without splitting
               </button>
               <div className="overlay-foot-split-group">
                 <select
@@ -585,7 +585,7 @@ function ImportPanelContent({
                   disabled={!canConfirm}
                   onClick={() => discardRejection(() => confirm(true))}
                 >
-                  {confirming ? <><Spinner /> Queueing…</> : 'Add and split'}
+                  {confirming ? <><Spinner /> Adding…</> : 'Add and split'}
                 </button>
               </div>
             </div>

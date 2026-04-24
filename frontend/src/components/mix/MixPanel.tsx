@@ -355,6 +355,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
           onChange={(event) => mixer.seek(Number(event.target.value))}
           disabled={playDisabled}
           aria-label="Seek"
+          style={{ '--seek-pct': `${mixer.duration > 0 ? ((mixer.currentTime / mixer.duration) * 100).toFixed(1) : 0}%` } as React.CSSProperties}
         />
         <span className="mix-time">{formatTime(mixer.currentTime)}</span>
         <span className="mix-time-sep" aria-hidden>/</span>

@@ -92,7 +92,7 @@
   padding: 14px 20px;
   margin-bottom: 20px;
   background: color-mix(in oklch, var(--accent) 6%, var(--surface-2));
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   border: 1px solid color-mix(in oklch, var(--accent) 18%, var(--border-soft));
 }
 
@@ -522,6 +522,20 @@
   font-weight: 700;
 }
 
+.song-row-status.is-ready {
+  color: color-mix(in oklch, var(--ok) 65%, var(--text-muted));
+}
+
+.song-row-status.is-ready::before {
+  content: '';
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
 .song-row-status.is-processing {
   color: var(--accent);
 }
@@ -925,9 +939,10 @@
   grid-row: 2;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
-  padding: 4px 28px 8px;
+  padding: 6px 28px 10px;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .mix-preset-group {
@@ -957,29 +972,6 @@
   color: var(--accent-ink);
   background: var(--accent);
   font-weight: 600;
-}
-
-.mix-preset-reset {
-  font-size: var(--t-sm);
-  color: var(--text-muted);
-  padding: 6px 8px;
-  background: transparent;
-}
-
-.mix-preset-reset:hover:not(:disabled) {
-  color: var(--text);
-}
-
-.mix-preset-reset:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-/* Visually separate Reset from preset group when both are present */
-.mix-preset-group + .mix-preset-reset {
-  border-left: 1px solid var(--border);
-  margin-left: 4px;
-  padding-left: 12px;
 }
 
 /* Rows canvas ----------------------------------------------------------- */
@@ -1327,7 +1319,11 @@
   height: 4px;
   min-width: 0;
   appearance: none;
-  background: color-mix(in srgb, var(--text) 12%, transparent);
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--seek-pct, 0%),
+    color-mix(in srgb, var(--text) 12%, transparent) var(--seek-pct, 0%)
+  );
   border-radius: 999px;
   cursor: pointer;
   accent-color: var(--accent);
@@ -2027,7 +2023,21 @@
   color: var(--text-muted);
 }
 
-/* Save state: Saved indicator ---------------------------------------------- */
+/* Save state indicators ---------------------------------------------------- */
+
+.mix-save-state.is-saving {
+  color: var(--text-muted);
+  animation: mix-save-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes mix-save-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mix-save-state.is-saving { animation: none; }
+}
 
 .mix-save-state.is-saved {
   color: var(--ok);

@@ -35,7 +35,7 @@ function formatDuration(seconds: number | null) {
   return `${minutes}:${remaining}`
 }
 
-type RowStatus = { text: string | null; tone: 'processing' | 'attn' | 'final' | null }
+type RowStatus = { text: string | null; tone: 'processing' | 'attn' | 'final' | 'ready' | null }
 
 function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowStatus {
   if (stage.key === 'processing') {
@@ -53,6 +53,7 @@ function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowS
   }
   if (stage.key === 'needs-split') return { text: null, tone: null }
   if (stage.key === 'final') return { text: 'Final', tone: 'final' }
+  if (stage.key === 'ready') return { text: stage.label, tone: 'ready' }
   return { text: null, tone: null }
 }
 

@@ -394,16 +394,6 @@ button.topbar-chip:focus-visible {
   .topbar-dot-syncing, .topbar-dot-offline { animation: none; }
 }
 
-/* -------- Workspace grid --------------------------------------------- */
-
-.queue-list-panel .section-head {
-  padding: 0;
-  margin: 0 0 var(--space-md);
-  border-bottom: 0;
-  background: transparent;
-  position: static;
-}
-
 /* -------- Section (flat, bordered, no cards) -------------------------- */
 
 .section {
@@ -856,11 +846,6 @@ code {
   overflow-wrap: anywhere;
 }
 
-.output-intent-option.active {
-  border-color: color-mix(in oklch, var(--accent) 42%, var(--border-soft));
-  background: color-mix(in oklch, var(--accent) 8%, transparent);
-}
-
 .export-bitrate-field {
   margin-top: var(--space-sm);
   max-width: 140px;
@@ -999,15 +984,6 @@ code {
   font-size: var(--t-sm);
   color: var(--text-muted);
 }
-
-/* -------- Run chip actions (final / compare) ----------------------- */
-
-.run-chip-compare-toggle.active {
-  color: var(--accent);
-  background: var(--accent-dim);
-}
-
-/* -------- Waveform overlay (A/B) ------------------------------------ */
 
 /* -------- Segmented control buttons ---------------------------------- */
 
@@ -1209,8 +1185,13 @@ code {
   text-underline-offset: 2px;
 }
 
-.button-link:hover {
+.button-link:hover:not(:disabled) {
   color: var(--accent-press);
+}
+
+.button-link:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .button-link:focus-visible {
@@ -1255,12 +1236,6 @@ code {
   gap: var(--space-xs);
   flex-wrap: wrap;
   margin-top: var(--space-xs);
-}
-
-.mix-stem-toggle.active {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
 }
 
 .settings-cleanup-block {
