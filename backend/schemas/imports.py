@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.schemas.tracks import (
     ProcessingProfileResponse,
@@ -9,6 +9,7 @@ from backend.schemas.tracks import (
     RunProcessingConfigResponse,
     TrackSummaryResponse,
 )
+from backend.schemas.validation import normalize_unique_string_list
 
 
 class DraftSourceType(StrEnum):
@@ -37,8 +38,8 @@ class ExistingTrackDuplicateResponse(BaseModel):
 
 class ImportDraftResponse(BaseModel):
     id: str
-    source_type: str
-    status: str
+    source_type: DraftSourceType
+    status: DraftStatus
     created_at: datetime
     updated_at: datetime
 
@@ -58,13 +59,21 @@ class ImportDraftResponse(BaseModel):
     content_hash: str | None = None
     size_bytes: int | None = None
 
-    duplicate_action: str | None = None
+    duplicate_action: DraftDuplicateAction | None = None
     existing_track_id: str | None = None
-    duplicate_tracks: list[ExistingTrackDuplicateResponse] = []
+    duplicate_tracks: list[ExistingTrackDuplicateResponse] = Field(default_factory=list)
 
 
 class ResolveYouTubeImportRequest(BaseModel):
     source_url: str
+
+    @field_validator("source_url")
+    @classmethod
+    def validate_source_url(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Source URL cannot be blank.")
+        return cleaned
 
 
 class ResolveYouTubeImportResponse(BaseModel):
@@ -87,23 +96,42 @@ class UpdateImportDraftRequest(BaseModel):
     duplicate_action: DraftDuplicateAction | None = None
     existing_track_id: str | None = None
 
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Title cannot be empty.")
+        return cleaned
 
-class BatchUpdateImportDraftRequest(BaseModel):
-    draft_ids: list[str]
-    title: str | None = Field(default=None, min_length=1)
-    artist: str | None = None
-    duplicate_action: DraftDuplicateAction | None = None
+    @field_validator("artist")
+    @classmethod
+    def normalize_artist(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
-
-class BatchDiscardImportDraftRequest(BaseModel):
-    draft_ids: list[str]
+    @field_validator("existing_track_id")
+    @classmethod
+    def normalize_existing_track_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 class ConfirmImportDraftsRequest(BaseModel):
-    draft_ids: list[str]
+    draft_ids: list[str] = Field(min_length=1)
     queue: bool = False
     processing: RunProcessingConfigRequest | None = None
-    processing_overrides: dict[str, RunProcessingConfigRequest] = Field(default_factory=dict)
+
+    @field_validator("draft_ids")
+    @classmethod
+    def validate_draft_ids(cls, value: list[str]) -> list[str]:
+        return normalize_unique_string_list(value, label="Draft ids")
 
 
 class ConfirmImportDraftsResponse(BaseModel):

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import { discardRejection } from '../../async'
 import { createExportBundle, planExportBundle } from '../../api'
 import { Spinner } from '../feedback/Spinner'
 import type {
@@ -75,7 +76,11 @@ export function MixExportPopover({
   const [includeStems, setIncludeStems] = useState(false)
   const [mixFmt, setMixFmt] = useState<Format>('mp3')
   const [stemFmt, setStemFmt] = useState<Format>('wav')
-  const [plannedBytes, setPlannedBytes] = useState<number | null>(null)
+  const [planResult, setPlanResult] = useState<{
+    key: string
+    bytes: number | null
+    error: string | null
+  } | null>(null)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ExportBundleResponse | null>(null)
 
@@ -84,6 +89,12 @@ export function MixExportPopover({
     () => buildArtifactList(includeMix, effectiveIncludeStems, stems, mixFmt, stemFmt),
     [includeMix, effectiveIncludeStems, stems, mixFmt, stemFmt],
   )
+  const planKey = useMemo(
+    () => `${track.id}|${run.id}|${artifactList.slice().sort().join(',')}|${defaultBitrate}`,
+    [artifactList, defaultBitrate, run.id, track.id],
+  )
+  const plannedBytes = artifactList.length > 0 && planResult?.key === planKey ? planResult.bytes : null
+  const planError = artifactList.length > 0 && planResult?.key === planKey ? planResult.error : null
 
   useEffect(() => {
     if (result || artifactList.length === 0) return
@@ -97,16 +108,24 @@ export function MixExportPopover({
           mode: 'single-bundle',
           bitrate: defaultBitrate,
         })
-        if (!cancelled) setPlannedBytes(plan.total_bytes)
-      } catch {
-        if (!cancelled) setPlannedBytes(null)
+        if (!cancelled) {
+          setPlanResult({ key: planKey, bytes: plan.total_bytes, error: null })
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPlanResult({
+            key: planKey,
+            bytes: null,
+            error: error instanceof Error ? error.message : 'Could not estimate export size.',
+          })
+        }
       }
     }, 150)
     return () => {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [artifactList, defaultBitrate, result, run.id, track.id])
+  }, [artifactList, defaultBitrate, planKey, result, run.id, track.id])
 
   async function handleExport() {
     if (!artifactList.length) return
@@ -143,7 +162,7 @@ export function MixExportPopover({
             <button
               type="button"
               className="button-secondary"
-              onClick={() => void onReveal({ kind: 'bundle', job_id: result.job_id })}
+              onClick={() => discardRejection(() => onReveal({ kind: 'bundle', job_id: result.job_id }))}
             >
               Reveal
             </button>
@@ -186,6 +205,8 @@ export function MixExportPopover({
         <div className="export-pop-status">
           {artifactList.length === 0
             ? 'Pick at least one thing to include.'
+            : planError
+              ? planError
             : plannedBytes !== null
               ? `Estimated ${formatBytes(plannedBytes)}.`
               : 'Sizing…'}
@@ -196,7 +217,7 @@ export function MixExportPopover({
             type="button"
             className="button-primary"
             disabled={!canBuild}
-            onClick={() => void handleExport()}
+            onClick={() => discardRejection(handleExport)}
           >
             {busy ? (
               <>

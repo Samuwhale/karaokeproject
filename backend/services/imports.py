@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 import shutil
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO
 from uuid import uuid4
@@ -21,8 +22,6 @@ from backend.db.models import (
     Track,
 )
 from backend.schemas.imports import (
-    BatchDiscardImportDraftRequest,
-    BatchUpdateImportDraftRequest,
     ConfirmImportDraftsRequest,
     ConfirmImportDraftsResponse,
     ExistingTrackDuplicateResponse,
@@ -49,6 +48,7 @@ from backend.services.tracks import (
 
 _SESSION_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 _PENDING_ID_PATTERN = re.compile(r"^[0-9a-f]{32}\.[0-9a-z]{1,8}$")
+_UNSET = object()
 
 
 @dataclass(frozen=True)
@@ -56,6 +56,18 @@ class DuplicateLookup:
     by_video_id: dict[str, list[Track]]
     by_source_url: dict[str, list[Track]]
     by_content_hash: dict[str, list[Track]]
+
+
+@dataclass
+class ConfirmSideEffects:
+    rollback_actions: list[Callable[[], None]] = field(default_factory=list)
+    post_commit_actions: list[Callable[[], None]] = field(default_factory=list)
+
+
+@dataclass
+class DraftCommitResult:
+    track: Track
+    rollback_actions: list[Callable[[], None]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -207,51 +219,17 @@ def update_import_draft(
     payload: UpdateImportDraftRequest,
 ) -> ImportDraftResponse:
     draft = _get_pending_draft(session, draft_id)
+    fields = payload.model_fields_set
     _apply_draft_patch(
         draft,
-        title=payload.title,
-        artist=payload.artist,
-        duplicate_action=payload.duplicate_action,
-        existing_track_id=payload.existing_track_id,
+        title=payload.title if "title" in fields else _UNSET,
+        artist=payload.artist if "artist" in fields else _UNSET,
+        duplicate_action=payload.duplicate_action if "duplicate_action" in fields else _UNSET,
+        existing_track_id=payload.existing_track_id if "existing_track_id" in fields else _UNSET,
     )
     session.commit()
     session.refresh(draft)
     return serialize_draft(session, draft)
-
-
-def batch_update_import_drafts(
-    session: Session,
-    payload: BatchUpdateImportDraftRequest,
-) -> list[ImportDraftResponse]:
-    if not payload.draft_ids:
-        return []
-
-    drafts = _load_pending_drafts(session, payload.draft_ids)
-    for draft in drafts:
-        _apply_draft_patch(
-            draft,
-            title=payload.title,
-            artist=payload.artist,
-            duplicate_action=payload.duplicate_action,
-            existing_track_id=None,
-        )
-    session.commit()
-    for draft in drafts:
-        session.refresh(draft)
-    return [serialize_draft(session, draft) for draft in drafts]
-
-
-def batch_discard_import_drafts(
-    session: Session,
-    runtime_settings: RuntimeSettings,
-    payload: BatchDiscardImportDraftRequest,
-) -> None:
-    if not payload.draft_ids:
-        return
-    drafts = _load_pending_drafts(session, payload.draft_ids)
-    for draft in drafts:
-        _discard_draft(session, runtime_settings, draft)
-    session.commit()
 
 
 def discard_import_draft(
@@ -274,31 +252,15 @@ def confirm_import_drafts(
     runtime_settings: RuntimeSettings,
     payload: ConfirmImportDraftsRequest,
 ) -> ConfirmImportDraftsResponse:
-    if not payload.draft_ids:
-        raise ValueError("Select at least one draft to confirm.")
-
     drafts = _load_pending_drafts(session, payload.draft_ids)
     _validate_ready_for_confirm(drafts)
 
-    processing_by_draft_id: dict[str, dict[str, str]] = {}
+    queued_processing: dict[str, str] | None = None
+    if payload.processing is not None and not payload.queue:
+        raise ValueError("Processing can only be set when queueing imports.")
     if payload.queue:
         application_settings = get_or_create_settings(session, runtime_settings)
-        batch_processing = build_processing_from_request(payload.processing, application_settings)
-        override_ids = set(payload.processing_overrides.keys())
-        draft_ids = {draft.id for draft in drafts}
-        unknown_override_ids = sorted(override_ids - draft_ids)
-        if unknown_override_ids:
-            raise ValueError(
-                "Processing overrides were provided for unknown drafts: "
-                + ", ".join(unknown_override_ids)
-            )
-        for draft in drafts:
-            override = payload.processing_overrides.get(draft.id)
-            processing_by_draft_id[draft.id] = (
-                build_processing_from_request(override, application_settings)
-                if override is not None
-                else batch_processing
-            )
+        queued_processing = build_processing_from_request(payload.processing, application_settings)
 
     adapter = YtDlpAdapter(runtime_settings)
 
@@ -307,26 +269,45 @@ def confirm_import_drafts(
     reused = 0
     skipped = 0
     queued = 0
+    side_effects = ConfirmSideEffects()
 
     try:
         for draft in drafts:
             action = draft.duplicate_action
 
             if action == DraftDuplicateAction.skip.value:
-                _discard_draft(session, runtime_settings, draft)
+                _schedule_pending_file_cleanup(
+                    side_effects,
+                    session,
+                    runtime_settings,
+                    draft,
+                )
+                draft.status = DraftStatus.discarded.value
                 skipped += 1
                 continue
 
             if action == DraftDuplicateAction.reuse_existing.value:
                 track = _resolve_reuse_target(session, draft)
-                _cleanup_pending_file(session, runtime_settings, draft)
+                _schedule_pending_file_cleanup(
+                    side_effects,
+                    session,
+                    runtime_settings,
+                    draft,
+                )
                 reused += 1
             else:
-                track = _commit_draft_as_new_track(session, runtime_settings, adapter, draft)
+                commit_result = _commit_draft_as_new_track(
+                    session,
+                    runtime_settings,
+                    adapter,
+                    draft,
+                )
+                track = commit_result.track
+                side_effects.rollback_actions.extend(commit_result.rollback_actions)
                 created += 1
 
-            if payload.queue:
-                create_run(track, processing_by_draft_id[draft.id])
+            if queued_processing is not None:
+                create_run(track, queued_processing.copy())
                 queued += 1
 
             draft.status = DraftStatus.confirmed.value
@@ -335,7 +316,10 @@ def confirm_import_drafts(
         session.commit()
     except Exception:
         session.rollback()
+        _run_cleanup_actions(side_effects.rollback_actions)
         raise
+
+    _run_cleanup_actions(side_effects.post_commit_actions)
 
     for track in affected_tracks:
         session.refresh(track)
@@ -363,30 +347,46 @@ def _default_duplicate_action(matches: list[Track]) -> str | None:
 def _apply_draft_patch(
     draft: ImportDraft,
     *,
-    title: str | None,
-    artist: str | None,
-    duplicate_action: DraftDuplicateAction | None,
-    existing_track_id: str | None,
+    title: str | None | object,
+    artist: str | None | object,
+    duplicate_action: DraftDuplicateAction | None | object,
+    existing_track_id: str | None | object,
 ) -> None:
-    if title is not None:
+    if title is not _UNSET:
+        if title is None:
+            raise ValueError("Title cannot be empty.")
         cleaned = title.strip()
         if not cleaned:
             raise ValueError("Title cannot be empty.")
         draft.title = cleaned
-    if artist is not None:
-        cleaned_artist = artist.strip()
+    if artist is not _UNSET:
+        cleaned_artist = artist.strip() if artist is not None else ""
         draft.artist = cleaned_artist or None
-    if duplicate_action is not None:
-        if duplicate_action in (DraftDuplicateAction.reuse_existing, DraftDuplicateAction.skip):
-            if not draft.duplicate_track_ids:
-                raise ValueError(
-                    f"Draft '{draft.title}' has no duplicate matches; "
-                    f"'{duplicate_action.value}' is not allowed."
-                )
-        draft.duplicate_action = duplicate_action.value
-        if duplicate_action != DraftDuplicateAction.reuse_existing:
+    if duplicate_action is not _UNSET:
+        if duplicate_action is None:
+            draft.duplicate_action = None
             draft.existing_track_id = None
-    if existing_track_id is not None:
+        else:
+            if duplicate_action in (DraftDuplicateAction.reuse_existing, DraftDuplicateAction.skip):
+                if not draft.duplicate_track_ids:
+                    raise ValueError(
+                        f"Draft '{draft.title}' has no duplicate matches; "
+                        f"'{duplicate_action.value}' is not allowed."
+                    )
+            draft.duplicate_action = duplicate_action.value
+            if (
+                duplicate_action == DraftDuplicateAction.reuse_existing
+                and len(draft.duplicate_track_ids or []) == 1
+            ):
+                draft.existing_track_id = draft.duplicate_track_ids[0]
+            elif duplicate_action != DraftDuplicateAction.reuse_existing:
+                draft.existing_track_id = None
+    if existing_track_id is not _UNSET:
+        if existing_track_id is None:
+            draft.existing_track_id = None
+            return
+        if draft.duplicate_action != DraftDuplicateAction.reuse_existing.value:
+            raise ValueError("Choose 'Use an existing song' before selecting a duplicate.")
         if existing_track_id not in (draft.duplicate_track_ids or []):
             raise ValueError("Chosen track is not among the detected duplicates.")
         draft.existing_track_id = existing_track_id
@@ -430,7 +430,7 @@ def _commit_draft_as_new_track(
     runtime_settings: RuntimeSettings,
     adapter: YtDlpAdapter,
     draft: ImportDraft,
-) -> Track:
+) -> DraftCommitResult:
     if draft.source_type == DraftSourceType.youtube.value:
         downloaded = adapter.download(
             source_url=draft.source_url or "",
@@ -440,19 +440,28 @@ def _commit_draft_as_new_track(
             ).uploads_dir,
             filename_prefix=uuid4().hex,
         )
-        return create_track(
-            session,
-            source_path=downloaded.source_path,
-            source_filename=downloaded.source_filename,
-            title=draft.title,
-            artist=draft.artist,
-            source_metadata={
-                "source_type": "youtube",
-                "source_url": draft.canonical_source_url or "",
-                "video_id": draft.video_id or "",
-                "thumbnail_url": draft.thumbnail_url or "",
-                "source_playlist_url": draft.playlist_source_url or "",
-            },
+        rollback = lambda path=downloaded.source_path: path.unlink(missing_ok=True)
+        try:
+            track = create_track(
+                session,
+                source_path=downloaded.source_path,
+                source_filename=downloaded.source_filename,
+                title=draft.title,
+                artist=draft.artist,
+                source_metadata={
+                    "source_type": "youtube",
+                    "source_url": draft.canonical_source_url or "",
+                    "video_id": draft.video_id or "",
+                    "thumbnail_url": draft.thumbnail_url or "",
+                    "source_playlist_url": draft.playlist_source_url or "",
+                },
+            )
+        except Exception:
+            rollback()
+            raise
+        return DraftCommitResult(
+            track=track,
+            rollback_actions=[rollback],
         )
 
     if draft.source_type == DraftSourceType.local.value:
@@ -463,17 +472,30 @@ def _commit_draft_as_new_track(
             )
         settings = get_or_create_settings(session, runtime_settings)
         destination = resolve_storage_paths(runtime_settings, settings).uploads_dir / pending_path.name
+        if destination.exists():
+            raise ValueError(
+                f"Prepared destination already exists for '{draft.title}'. Re-add the source."
+            )
         shutil.move(str(pending_path), destination)
-        return create_track(
-            session,
-            source_path=destination,
-            source_filename=draft.original_filename or pending_path.name,
-            title=draft.title,
-            artist=draft.artist,
-            source_metadata={
-                "source_type": "file",
-                "content_hash": draft.content_hash or "",
-            },
+        rollback = lambda source=destination, target=pending_path: _restore_pending_file(source, target)
+        try:
+            track = create_track(
+                session,
+                source_path=destination,
+                source_filename=draft.original_filename or pending_path.name,
+                title=draft.title,
+                artist=draft.artist,
+                source_metadata={
+                    "source_type": "file",
+                    "content_hash": draft.content_hash or "",
+                },
+            )
+        except Exception:
+            rollback()
+            raise
+        return DraftCommitResult(
+            track=track,
+            rollback_actions=[rollback],
         )
 
     raise ValueError(f"Unknown source type '{draft.source_type}'.")
@@ -499,10 +521,48 @@ def _cleanup_pending_file(
         pending_path = _pending_path_for_draft(session, runtime_settings, draft)
     except ValueError:
         return
+    _cleanup_pending_path(pending_path)
+
+
+def _cleanup_pending_path(pending_path: Path) -> None:
     pending_path.unlink(missing_ok=True)
     session_dir = pending_path.parent
     if session_dir.is_dir() and not any(session_dir.iterdir()):
         session_dir.rmdir()
+
+
+def _restore_pending_file(source_path: Path, target_path: Path) -> None:
+    if not source_path.exists():
+        return
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    if target_path.exists():
+        target_path.unlink()
+    shutil.move(str(source_path), target_path)
+
+
+def _schedule_pending_file_cleanup(
+    side_effects: ConfirmSideEffects,
+    session: Session,
+    runtime_settings: RuntimeSettings,
+    draft: ImportDraft,
+) -> None:
+    if draft.source_type != DraftSourceType.local.value:
+        return
+    try:
+        pending_path = _pending_path_for_draft(session, runtime_settings, draft)
+    except ValueError:
+        return
+    side_effects.post_commit_actions.append(
+        lambda path=pending_path: _cleanup_pending_path(path)
+    )
+
+
+def _run_cleanup_actions(actions: list[Callable[[], None]]) -> None:
+    for action in reversed(actions):
+        try:
+            action()
+        except Exception:
+            continue
 
 
 def _pending_path_for_draft(

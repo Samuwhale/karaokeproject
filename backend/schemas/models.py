@@ -8,5 +8,4 @@ class CachedModelResponse(BaseModel):
 
 
 class CachedModelsResponse(BaseModel):
-    directory: str
     items: list[CachedModelResponse]

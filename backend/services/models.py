@@ -2,13 +2,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlalchemy.orm import Session
+
 from backend.core.config import RuntimeSettings
 from backend.core.constants import MODEL_FILENAME_SUFFIXES, PROFILE_DEFINITIONS
 from backend.schemas.models import CachedModelResponse, CachedModelsResponse
+from backend.services.settings import get_or_create_settings
+from backend.services.storage import resolve_storage_paths
 
 
-def list_cached_models(runtime_settings: RuntimeSettings) -> CachedModelsResponse:
-    directory = Path(runtime_settings.model_cache_dir)
+def list_cached_models(
+    session: Session,
+    runtime_settings: RuntimeSettings,
+) -> CachedModelsResponse:
+    settings = get_or_create_settings(session, runtime_settings)
+    directory = Path(resolve_storage_paths(runtime_settings, settings).model_cache_dir)
     profile_filenames = {profile.model_filename for profile in PROFILE_DEFINITIONS}
 
     items: list[CachedModelResponse] = []
@@ -27,4 +35,4 @@ def list_cached_models(runtime_settings: RuntimeSettings) -> CachedModelsRespons
             )
 
     items.sort(key=lambda item: item.filename.lower())
-    return CachedModelsResponse(directory=str(directory), items=items)
+    return CachedModelsResponse(items=items)

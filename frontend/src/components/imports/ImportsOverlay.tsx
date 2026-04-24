@@ -1,30 +1,27 @@
-import { useRef, useState } from 'react'
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 
+import { discardRejection } from '../../async'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { Spinner } from '../feedback/Spinner'
 import type {
+  ConfirmImportDraftsInput,
   DraftDuplicateAction,
   ExistingTrackDuplicate,
+  ImportDraft,
   ProcessingProfile,
-  RunProcessingConfigInput,
-  StagedImport,
   UpdateImportDraftInput,
 } from '../../types'
 
 type ImportsOverlayProps = {
   open: boolean
-  drafts: StagedImport[]
+  drafts: ImportDraft[]
   profiles: ProcessingProfile[]
   defaultProfileKey: string
   confirming: boolean
   onClose: () => void
   onUpdateDraft: (draftId: string, payload: UpdateImportDraftInput) => Promise<void>
   onDiscardDraft: (draftId: string) => Promise<void>
-  onConfirm: (payload: {
-    draft_ids: string[]
-    queue: boolean
-    processing?: RunProcessingConfigInput
-  }) => Promise<unknown>
+  onConfirm: (payload: ConfirmImportDraftsInput) => Promise<unknown>
 }
 
 function formatDuration(seconds: number | null) {
@@ -41,12 +38,12 @@ function formatSize(bytes: number | null) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
 
-function sourceLabel(item: StagedImport) {
+function sourceLabel(item: ImportDraft) {
   if (item.source_type === 'youtube') return item.playlist_source_url ? 'YouTube playlist' : 'YouTube'
   return item.original_filename ?? 'Local file'
 }
 
-function needsDuplicateDecision(item: StagedImport) {
+function needsDuplicateDecision(item: ImportDraft) {
   if (item.duplicate_tracks.length === 0) return false
   if (item.duplicate_action === null) return true
   return (
@@ -56,7 +53,7 @@ function needsDuplicateDecision(item: StagedImport) {
   )
 }
 
-function duplicateHint(item: StagedImport) {
+function duplicateHint(item: ImportDraft) {
   if (item.duplicate_tracks.length === 0) return null
   if (item.duplicate_action === null) return 'Duplicate found — choose an action.'
   if (item.duplicate_action === 'skip') return 'Will be skipped.'
@@ -70,37 +67,83 @@ function duplicateHint(item: StagedImport) {
   return null
 }
 
-function countAction(items: StagedImport[], action: DraftDuplicateAction) {
+function countAction(items: ImportDraft[], action: DraftDuplicateAction) {
   return items.filter((item) => item.duplicate_action === action).length
 }
 
 type ImportRowProps = {
-  draft: StagedImport
-  profileCount: number
-  onUpdate: (payload: UpdateImportDraftInput) => void
+  draft: ImportDraft
+  busy: boolean
+  onUpdate: (payload: UpdateImportDraftInput) => Promise<void>
   onDiscard: () => void
 }
 
-function ImportRow({ draft, onUpdate, onDiscard }: ImportRowProps) {
-  const [title, setTitle] = useState(draft.title)
-  const [artist, setArtist] = useState(draft.artist ?? '')
+type ImportRowHandle = {
+  flushPendingEdits: () => Promise<void>
+}
+
+const ImportRow = forwardRef<ImportRowHandle, ImportRowProps>(function ImportRow(
+  { draft, busy, onUpdate, onDiscard }: ImportRowProps,
+  ref,
+) {
+  const [title, setTitle] = useState<string | null>(null)
+  const [artist, setArtist] = useState<string | null>(null)
+  const flushPromiseRef = useRef<Promise<void> | null>(null)
   const needsDecision = needsDuplicateDecision(draft)
   const hint = duplicateHint(draft)
 
-  function commitTitle() {
-    const next = title.trim()
-    if (next === draft.title.trim()) return
-    onUpdate({ title: next || draft.suggested_title })
+  function buildPendingPatch(): UpdateImportDraftInput | null {
+    const patch: UpdateImportDraftInput = {}
+
+    if (title !== null) {
+      const nextTitle = title.trim() || draft.suggested_title
+      if (nextTitle !== draft.title.trim()) {
+        patch.title = nextTitle
+      }
+    }
+
+    if (artist !== null) {
+      const nextArtist = artist.trim() || null
+      if (nextArtist !== (draft.artist?.trim() || null)) {
+        patch.artist = nextArtist
+      }
+    }
+
+    return Object.keys(patch).length > 0 ? patch : null
   }
 
-  function commitArtist() {
-    const next = artist.trim()
-    if ((next || null) === (draft.artist?.trim() || null)) return
-    onUpdate({ artist: next || null })
+  async function flushPendingEdits() {
+    if (flushPromiseRef.current) {
+      await flushPromiseRef.current
+      return
+    }
+
+    const promise = (async () => {
+      const patch = buildPendingPatch()
+      if (!patch) {
+        setTitle(null)
+        setArtist(null)
+        return
+      }
+      await onUpdate(patch)
+      setTitle(null)
+      setArtist(null)
+    })()
+
+    flushPromiseRef.current = promise
+    try {
+      await promise
+    } finally {
+      flushPromiseRef.current = null
+    }
   }
+
+  useImperativeHandle(ref, () => ({
+    flushPendingEdits,
+  }))
 
   return (
-    <article className={`import-row ${needsDecision ? 'needs-decision' : ''}`}>
+    <article className={`import-row ${needsDecision ? 'needs-decision' : ''}`} aria-busy={busy}>
       <div className="import-row-head">
         <div className="import-row-title">
           <strong>{draft.title || 'Untitled'}</strong>
@@ -109,7 +152,7 @@ function ImportRow({ draft, onUpdate, onDiscard }: ImportRowProps) {
             {formatSize(draft.size_bytes) ? ` · ${formatSize(draft.size_bytes)}` : ''}
           </span>
         </div>
-        <button type="button" className="import-row-remove" onClick={onDiscard}>
+        <button type="button" className="import-row-remove" disabled={busy} onClick={onDiscard}>
           Remove
         </button>
       </div>
@@ -117,19 +160,21 @@ function ImportRow({ draft, onUpdate, onDiscard }: ImportRowProps) {
       <div className="import-row-fields">
         <input
           type="text"
-          value={title}
+          value={title ?? draft.title}
           onChange={(event) => setTitle(event.target.value)}
-          onBlur={commitTitle}
+          onBlur={() => discardRejection(flushPendingEdits)}
           placeholder="Title"
           aria-label="Title"
+          disabled={busy}
         />
         <input
           type="text"
-          value={artist}
+          value={artist ?? (draft.artist ?? '')}
           onChange={(event) => setArtist(event.target.value)}
-          onBlur={commitArtist}
+          onBlur={() => discardRejection(flushPendingEdits)}
           placeholder="Artist"
           aria-label="Artist"
+          disabled={busy}
         />
       </div>
 
@@ -145,11 +190,12 @@ function ImportRow({ draft, onUpdate, onDiscard }: ImportRowProps) {
                   : action === 'reuse-existing'
                     ? draft.existing_track_id
                     : null
-              onUpdate({
-                duplicate_action: action ?? undefined,
+              discardRejection(() => onUpdate({
+                duplicate_action: action,
                 existing_track_id: nextExisting,
-              })
+              }))
             }}
+            disabled={busy}
           >
             <option value="">Choose an action…</option>
             <option value="create-new">Keep as a new song</option>
@@ -159,12 +205,13 @@ function ImportRow({ draft, onUpdate, onDiscard }: ImportRowProps) {
           {draft.duplicate_action === 'reuse-existing' && draft.duplicate_tracks.length > 1 ? (
             <select
               value={draft.existing_track_id ?? ''}
-              onChange={(event) =>
-                onUpdate({
+              onChange={(event) => {
+                discardRejection(() => onUpdate({
                   duplicate_action: 'reuse-existing',
                   existing_track_id: event.target.value || null,
-                })
-              }
+                }))
+              }}
+              disabled={busy}
             >
               <option value="">Choose a track…</option>
               {draft.duplicate_tracks.map((match: ExistingTrackDuplicate) => (
@@ -180,7 +227,7 @@ function ImportRow({ draft, onUpdate, onDiscard }: ImportRowProps) {
       ) : null}
     </article>
   )
-}
+})
 
 export function ImportsOverlay(props: ImportsOverlayProps) {
   if (!props.open) return null
@@ -204,13 +251,20 @@ function ImportsOverlayContent({
   const activeProfile = profiles.some((profile) => profile.key === defaultProfileKey)
     ? defaultProfileKey
     : profiles[0]?.key ?? defaultProfileKey
-  const [profileKey, setProfileKey] = useState(activeProfile)
+  const [selectedProfileKey, setSelectedProfileKey] = useState<string | null>(null)
+  const [pendingDraftActions, setPendingDraftActions] = useState<Record<string, number>>({})
+  const rowRefs = useRef<Record<string, ImportRowHandle | null>>({})
+  const profileKey =
+    selectedProfileKey && profiles.some((profile) => profile.key === selectedProfileKey)
+      ? selectedProfileKey
+      : activeProfile
+  const hasPendingDraftActions = Object.keys(pendingDraftActions).length > 0
 
   const unresolved = drafts.filter(needsDuplicateDecision).length
   const createNew = countAction(drafts, 'create-new')
   const reuse = countAction(drafts, 'reuse-existing')
   const skip = countAction(drafts, 'skip')
-  const canConfirm = drafts.length > 0 && unresolved === 0 && !confirming
+  const canConfirm = drafts.length > 0 && unresolved === 0 && !confirming && !hasPendingDraftActions
 
   const ordered = [...drafts].sort((a, b) => {
     const aNeeds = needsDuplicateDecision(a) ? 1 : 0
@@ -219,8 +273,42 @@ function ImportsOverlayContent({
     return a.title.localeCompare(b.title)
   })
 
+  function setDraftActionPending(draftId: string, active: boolean) {
+    setPendingDraftActions((current) => {
+      const currentCount = current[draftId] ?? 0
+      const nextCount = active ? currentCount + 1 : Math.max(0, currentCount - 1)
+      if (nextCount === currentCount) return current
+      if (nextCount === 0) {
+        const next = { ...current }
+        delete next[draftId]
+        return next
+      }
+      return { ...current, [draftId]: nextCount }
+    })
+  }
+
+  async function runDraftAction(draftId: string, action: () => Promise<void>) {
+    setDraftActionPending(draftId, true)
+    try {
+      await action()
+    } finally {
+      setDraftActionPending(draftId, false)
+    }
+  }
+
+  async function flushDraftEdits(draftId: string) {
+    await rowRefs.current[draftId]?.flushPendingEdits()
+  }
+
+  async function flushAllDraftEdits() {
+    for (const draft of drafts) {
+      await flushDraftEdits(draft.id)
+    }
+  }
+
   async function confirm(queue: boolean) {
     if (!canConfirm) return
+    await flushAllDraftEdits()
     await onConfirm({
       draft_ids: drafts.map((item) => item.id),
       queue,
@@ -265,10 +353,18 @@ function ImportsOverlayContent({
               {ordered.map((draft) => (
                 <ImportRow
                   key={draft.id}
+                  ref={(value) => {
+                    rowRefs.current[draft.id] = value
+                  }}
                   draft={draft}
-                  profileCount={profiles.length}
-                  onUpdate={(payload) => void onUpdateDraft(draft.id, payload)}
-                  onDiscard={() => void onDiscardDraft(draft.id)}
+                  busy={confirming || !!pendingDraftActions[draft.id]}
+                  onUpdate={(payload) => runDraftAction(draft.id, () => onUpdateDraft(draft.id, payload))}
+                  onDiscard={() =>
+                    discardRejection(async () => {
+                      await flushDraftEdits(draft.id)
+                      await runDraftAction(draft.id, () => onDiscardDraft(draft.id))
+                    })
+                  }
                 />
               ))}
             </>
@@ -278,7 +374,9 @@ function ImportsOverlayContent({
         {drafts.length > 0 ? (
           <footer className="overlay-foot">
             <div className="overlay-foot-copy">
-              {unresolved > 0
+              {hasPendingDraftActions
+                ? 'Saving import changes…'
+                : unresolved > 0
                 ? `${unresolved} duplicate decision${unresolved === 1 ? '' : 's'} left.`
                 : 'Ready to import.'}
             </div>
@@ -286,8 +384,8 @@ function ImportsOverlayContent({
               <select
                 className="library-sort"
                 value={profileKey}
-                onChange={(event) => setProfileKey(event.target.value)}
-                disabled={!canConfirm || confirming}
+                onChange={(event) => setSelectedProfileKey(event.target.value)}
+                disabled={!canConfirm}
                 aria-label="Split profile"
               >
                 {profiles.map((profile) => (
@@ -300,7 +398,7 @@ function ImportsOverlayContent({
                 type="button"
                 className="button-secondary"
                 disabled={!canConfirm}
-                onClick={() => void confirm(false)}
+                onClick={() => discardRejection(() => confirm(false))}
               >
                 {confirming ? (
                   <>
@@ -314,7 +412,7 @@ function ImportsOverlayContent({
                 type="button"
                 className="button-primary"
                 disabled={!canConfirm}
-                onClick={() => void confirm(true)}
+                onClick={() => discardRejection(() => confirm(true))}
               >
                 {confirming ? (
                   <>

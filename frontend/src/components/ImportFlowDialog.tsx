@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 
+import { discardRejection } from '../async'
 import { useDialogFocus } from '../hooks/useDialogFocus'
-import type { StagedImport } from '../types'
+import type { ImportDraft } from '../types'
 import { filterImportableMediaFiles } from '../importableMedia'
 import { Spinner } from './feedback/Spinner'
 
 type ImportFlowDialogProps = {
   open: boolean
-  stagedImports: StagedImport[]
+  stagedImports: ImportDraft[]
   resolvingYoutubeImport: boolean
   resolvingLocalImport: boolean
   onClose: () => void
@@ -168,7 +169,7 @@ function ImportFlowDialogContent({
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter' || !youtubeUrl.trim() || busy) return
                     event.preventDefault()
-                    void resolveUrl()
+                    discardRejection(resolveUrl)
                   }}
                   disabled={busy}
                 />
@@ -179,7 +180,7 @@ function ImportFlowDialogContent({
                   type="button"
                   className="button-primary"
                   disabled={!youtubeUrl.trim() || busy}
-                  onClick={() => void resolveUrl()}
+                  onClick={() => discardRejection(resolveUrl)}
                 >
                   {resolvingYoutubeImport ? (
                     <>
@@ -266,7 +267,7 @@ function ImportFlowDialogContent({
                   type="button"
                   className="button-primary"
                   disabled={localFiles.length === 0 || busy}
-                  onClick={() => void resolveFiles()}
+                  onClick={() => discardRejection(resolveFiles)}
                 >
                   {resolvingLocalImport ? (
                     <>

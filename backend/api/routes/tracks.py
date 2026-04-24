@@ -20,7 +20,7 @@ from backend.schemas.tracks import (
     UpdateTrackRequest,
 )
 from sqlalchemy import select
-from backend.services.metrics import backfill_artifact_metrics, populate_run_metrics
+from backend.services.metrics import backfill_artifact_metrics
 from backend.services.processing import build_processing_from_request
 from backend.services.settings import get_or_create_settings
 from backend.services.tracks import (
@@ -67,15 +67,11 @@ def update_track_endpoint(
     if "artist" in payload.model_fields_set:
         update_fields["artist"] = payload.artist
     try:
-        update_track(session, track_id, **update_fields)
+        track = update_track(session, track_id, **update_fields)
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-
-    track = get_track(session, track_id)
-    if track is None:
-        raise HTTPException(status_code=404, detail="Track not found.")
     return serialize_track_detail(track)
 
 
@@ -190,15 +186,11 @@ def set_track_keeper(
     session: Session = Depends(get_db_session),
 ) -> TrackDetailResponse:
     try:
-        set_keeper_run(session, track_id, payload.run_id)
+        track = set_keeper_run(session, track_id, payload.run_id)
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-
-    track = get_track(session, track_id)
-    if track is None:
-        raise HTTPException(status_code=404, detail="Track not found.")
     return serialize_track_detail(track)
 
 
@@ -264,20 +256,6 @@ def batch_delete_tracks(
         except ValueError:
             skipped.append(track_id)
     return BatchDeleteResponse(deleted_track_count=deleted, skipped_track_ids=skipped)
-
-
-@router.post("/runs/{run_id}/measure", response_model=RunDetailResponse)
-def measure_run_endpoint(
-    run_id: str,
-    session: Session = Depends(get_db_session),
-    runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
-) -> RunDetailResponse:
-    run = session.get(Run, run_id, options=[selectinload(Run.artifacts)])
-    if run is None:
-        raise HTTPException(status_code=404, detail="Run not found.")
-    populate_run_metrics(session, runtime_settings, run)
-    session.refresh(run)
-    return serialize_run_detail(run)
 
 
 @router.post("/admin/backfill-metrics", response_model=BackfillMetricsResponse)

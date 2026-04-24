@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 
+import { discardRejection } from '../../async'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { Spinner } from '../feedback/Spinner'
 import { trackStageSummary } from '../trackListView'
@@ -53,11 +54,14 @@ function BatchSplitOverlayContent({
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
   useDialogFocus(true, { containerRef: panelRef, initialFocusRef: closeButtonRef })
 
-  const initialProfileKey = useMemo(() => {
-    if (profiles.some((profile) => profile.key === defaultProfileKey)) return defaultProfileKey
-    return profiles[0]?.key ?? defaultProfileKey
-  }, [defaultProfileKey, profiles])
-  const [profileKey, setProfileKey] = useState(initialProfileKey)
+  const fallbackProfileKey = profiles.some((profile) => profile.key === defaultProfileKey)
+    ? defaultProfileKey
+    : profiles[0]?.key ?? defaultProfileKey
+  const [selectedProfileKey, setSelectedProfileKey] = useState<string | null>(null)
+  const profileKey =
+    selectedProfileKey && profiles.some((profile) => profile.key === selectedProfileKey)
+      ? selectedProfileKey
+      : fallbackProfileKey
 
   const rows = useMemo<SplitPlanRow[]>(() => {
     const idSet = new Set(selectedTrackIds)
@@ -101,7 +105,7 @@ function BatchSplitOverlayContent({
                 <span>Profile</span>
                 <select
                   value={profileKey}
-                  onChange={(event) => setProfileKey(event.target.value)}
+                  onChange={(event) => setSelectedProfileKey(event.target.value)}
                   disabled={busy || !eligibleRows.length}
                 >
                   {profiles.map((profile) => (
@@ -138,7 +142,7 @@ function BatchSplitOverlayContent({
                   type="button"
                   className="button-primary"
                   disabled={busy || eligibleRows.length === 0}
-                  onClick={() => void handleConfirm()}
+                  onClick={() => discardRejection(handleConfirm)}
                 >
                   {busy ? (
                     <>

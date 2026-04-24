@@ -15,7 +15,6 @@ export type CachedModel = {
 }
 
 export type CachedModelsResponse = {
-  directory: string
   items: CachedModel[]
 }
 
@@ -219,8 +218,6 @@ export type ImportDraft = {
   duplicate_tracks: ExistingTrackDuplicate[]
 }
 
-export type StagedImport = ImportDraft
-
 export type ResolveYouTubeImportResponse = {
   source_kind: string
   source_title: string
@@ -238,7 +235,7 @@ export type ResolveLocalImportResponse = {
 export type UpdateImportDraftInput = {
   title?: string
   artist?: string | null
-  duplicate_action?: DraftDuplicateAction
+  duplicate_action?: DraftDuplicateAction | null
   existing_track_id?: string | null
 }
 
@@ -246,7 +243,6 @@ export type ConfirmImportDraftsInput = {
   draft_ids: string[]
   queue: boolean
   processing?: RunProcessingConfigInput
-  processing_overrides?: Record<string, RunProcessingConfigInput>
 }
 
 export type ConfirmImportDraftsResponse = {

@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from backend.schemas.validation import normalize_unique_string_list
 
 MIX_GAIN_DB_MIN = -24.0
 MIX_GAIN_DB_MAX = 12.0
@@ -20,6 +22,22 @@ class ProcessingProfileResponse(BaseModel):
 class RunProcessingConfigRequest(BaseModel):
     profile_key: str
     model_filename: str | None = None
+
+    @field_validator("profile_key")
+    @classmethod
+    def validate_profile_key(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Profile key cannot be blank.")
+        return cleaned
+
+    @field_validator("model_filename")
+    @classmethod
+    def normalize_model_filename(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 class RunProcessingConfigResponse(BaseModel):
@@ -135,10 +153,36 @@ class CreateRunResponse(BaseModel):
 class SetKeeperRequest(BaseModel):
     run_id: str | None = None
 
+    @field_validator("run_id")
+    @classmethod
+    def normalize_run_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
 
 class UpdateTrackRequest(BaseModel):
     title: str | None = None
     artist: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Title cannot be empty.")
+        return cleaned
+
+    @field_validator("artist")
+    @classmethod
+    def normalize_artist(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 class BackfillMetricsResponse(BaseModel):
@@ -154,6 +198,11 @@ class QueueRunResponse(BaseModel):
 
 class BatchTrackIdsRequest(BaseModel):
     track_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("track_ids")
+    @classmethod
+    def validate_track_ids(cls, value: list[str]) -> list[str]:
+        return normalize_unique_string_list(value, label="Track ids")
 
 
 class BatchDeleteResponse(BaseModel):

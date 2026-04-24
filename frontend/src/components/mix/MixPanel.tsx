@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 
+import { discardRejection } from '../../async'
 import type { RunArtifact, RunDetail, RunMixStemEntry } from '../../types'
 import { MIX_GAIN_DB_MAX, MIX_GAIN_DB_MIN } from '../../types'
 import { compareStemKinds, isStemKind, stemColorFromKind } from '../../stems'
@@ -141,7 +142,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
       }
       const pendingPayload = pendingSavePayloadRef.current
       if (pendingTimer !== null && pendingPayload) {
-        void onSave(pendingPayload)
+        discardRejection(() => onSave(pendingPayload))
       }
     }
   }, [onSave])
@@ -200,7 +201,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
     setSaveError(null)
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null
-      void persistMix(payload)
+      discardRejection(() => persistMix(payload))
     }, SAVE_DEBOUNCE_MS)
   }
 
@@ -348,7 +349,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                 <button
                   type="button"
                   className="button-link"
-                  onClick={() => void persistMix(retryPayload)}
+                  onClick={() => discardRejection(() => persistMix(retryPayload))}
                 >
                   Retry
                 </button>

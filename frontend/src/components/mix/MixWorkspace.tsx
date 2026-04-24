@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
+import { discardRejection } from '../../async'
 import { ConfirmInline } from '../feedback/ConfirmInline'
 import { RunStepper } from '../feedback/RunStepper'
 import { Spinner } from '../feedback/Spinner'
@@ -242,8 +243,8 @@ function VersionsPopover({
                         disabled={disabled}
                         onClick={() => {
                           setArmedKey(null)
-                          if (isRetry && run) void retry(run)
-                          else void generate(profile.key)
+                          if (isRetry && run) discardRejection(() => retry(run))
+                          else discardRejection(() => generate(profile.key))
                         }}
                       >
                         {isRetry ? 'Retry' : 'Generate'}
@@ -297,7 +298,9 @@ function VersionsPopover({
               type="button"
               className="button-secondary"
               disabled={settingKeeper}
-              onClick={() => void onSetKeeper(selectedIsKeeper ? null : selectedRun.id)}
+              onClick={() =>
+                discardRejection(() => onSetKeeper(selectedIsKeeper ? null : selectedRun.id))
+              }
             >
               {selectedIsKeeper ? 'Clear final' : 'Mark as final'}
             </button>
@@ -369,7 +372,7 @@ function OverflowMenu({ track, updatingTrack, onClose, onReveal, onUpdateTrack, 
                 type="button"
                 className="button-primary"
                 disabled={updatingTrack || !title.trim()}
-                onClick={() => void saveEdits()}
+                onClick={() => discardRejection(saveEdits)}
               >
                 {updatingTrack ? <Spinner /> : 'Save'}
               </button>
@@ -384,7 +387,7 @@ function OverflowMenu({ track, updatingTrack, onClose, onReveal, onUpdateTrack, 
               type="button"
               className="menu-item"
               onClick={() => {
-                void onReveal()
+                discardRejection(onReveal)
                 onClose()
               }}
             >
@@ -546,6 +549,7 @@ function MixWorkspaceContent({
             </button>
             {popover === 'menu' ? (
               <OverflowMenu
+                key={track.id}
                 track={track}
                 updatingTrack={updatingTrack}
                 onClose={() => setPopover(null)}
@@ -612,7 +616,7 @@ function MixWorkspaceContent({
                 <button
                   type="button"
                   className="button-primary"
-                  onClick={() => void onRetryRun(selectedRun.id)}
+                  onClick={() => discardRejection(() => onRetryRun(selectedRun.id))}
                 >
                   {retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry split'}
                 </button>

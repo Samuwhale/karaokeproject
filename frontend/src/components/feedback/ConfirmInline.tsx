@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+import { discardRejection } from '../../async'
+
 type ConfirmInlineProps = {
   label: string
   pendingLabel: string
@@ -56,9 +58,10 @@ export function ConfirmInline({
       <button
         type="button"
         className="button-secondary confirm-inline-confirm"
+        disabled={disabled || pending}
         onClick={() => {
           setArmed(false)
-          void onConfirm()
+          discardRejection(onConfirm)
         }}
       >
         {confirmLabel}

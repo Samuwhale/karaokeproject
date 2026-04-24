@@ -7,6 +7,7 @@ from backend.core.stems import (
     EXPORT_STEM_WAV_PREFIX,
     STEM_NAME_PATTERN,
 )
+from backend.schemas.validation import normalize_string_mapping, normalize_unique_string_list
 
 
 STATIC_ARTIFACT_KINDS: frozenset[str] = frozenset({
@@ -18,18 +19,18 @@ STATIC_ARTIFACT_KINDS: frozenset[str] = frozenset({
 
 
 def validate_export_artifact_kind(value: str) -> str:
-    if value in STATIC_ARTIFACT_KINDS:
-        return value
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("Artifact kinds cannot be blank.")
+    if cleaned in STATIC_ARTIFACT_KINDS:
+        return cleaned
     for prefix in (EXPORT_STEM_WAV_PREFIX, EXPORT_STEM_MP3_PREFIX):
-        if value.startswith(prefix):
-            stem_name = value[len(prefix):]
+        if cleaned.startswith(prefix):
+            stem_name = cleaned[len(prefix):]
             if not STEM_NAME_PATTERN.match(stem_name):
-                raise ValueError(f"Invalid stem name in export artifact kind: {value!r}")
-            return value
-    raise ValueError(f"Unsupported export artifact kind: {value!r}")
-
-
-ExportArtifactKind = str
+                raise ValueError(f"Invalid stem name in export artifact kind: {cleaned!r}")
+            return cleaned
+    raise ValueError(f"Unsupported export artifact kind: {cleaned!r}")
 
 
 class ExportOutputMode(StrEnum):
@@ -56,7 +57,22 @@ class ExportBundleRequest(BaseModel):
     @field_validator("artifacts")
     @classmethod
     def _validate_artifacts(cls, value: list[str]) -> list[str]:
-        return [validate_export_artifact_kind(item) for item in value]
+        validated = [validate_export_artifact_kind(item) for item in value]
+        return normalize_unique_string_list(validated, label="Artifact kinds")
+
+    @field_validator("track_ids")
+    @classmethod
+    def _validate_track_ids(cls, value: list[str]) -> list[str]:
+        return normalize_unique_string_list(value, label="Track ids")
+
+    @field_validator("run_ids")
+    @classmethod
+    def _validate_run_ids(cls, value: dict[str, str]) -> dict[str, str]:
+        return normalize_string_mapping(
+            value,
+            key_label="Run override track ids",
+            value_label="Run ids",
+        )
 
     @field_validator("bitrate")
     @classmethod
@@ -76,7 +92,7 @@ class ExportBundleResponse(BaseModel):
     filename: str
     byte_count: int
     included_track_count: int
-    skipped: list[ExportBundleSkip] = []
+    skipped: list[ExportBundleSkip] = Field(default_factory=list)
 
 
 class ExportPlanRequest(BaseModel):
@@ -89,7 +105,22 @@ class ExportPlanRequest(BaseModel):
     @field_validator("artifacts")
     @classmethod
     def _validate_artifacts(cls, value: list[str]) -> list[str]:
-        return [validate_export_artifact_kind(item) for item in value]
+        validated = [validate_export_artifact_kind(item) for item in value]
+        return normalize_unique_string_list(validated, label="Artifact kinds")
+
+    @field_validator("track_ids")
+    @classmethod
+    def _validate_track_ids(cls, value: list[str]) -> list[str]:
+        return normalize_unique_string_list(value, label="Track ids")
+
+    @field_validator("run_ids")
+    @classmethod
+    def _validate_run_ids(cls, value: dict[str, str]) -> dict[str, str]:
+        return normalize_string_mapping(
+            value,
+            key_label="Run override track ids",
+            value_label="Run ids",
+        )
 
     @field_validator("bitrate")
     @classmethod
@@ -122,6 +153,20 @@ class ExportPlanResponse(BaseModel):
 class ExportStemsRequest(BaseModel):
     track_ids: list[str] = Field(min_length=1)
     run_ids: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("track_ids")
+    @classmethod
+    def _validate_track_ids(cls, value: list[str]) -> list[str]:
+        return normalize_unique_string_list(value, label="Track ids")
+
+    @field_validator("run_ids")
+    @classmethod
+    def _validate_run_ids(cls, value: dict[str, str]) -> dict[str, str]:
+        return normalize_string_mapping(
+            value,
+            key_label="Run override track ids",
+            value_label="Run ids",
+        )
 
 
 class ExportStemOption(BaseModel):

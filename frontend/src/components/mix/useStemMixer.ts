@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { discardRejection } from '../../async'
+
 export type MixerStemInput = {
   artifact_id: string
   url: string
@@ -127,7 +129,7 @@ export function useStemMixer(stems: MixerStemInput[]) {
       }
     }
 
-    void loadAll()
+    discardRejection(loadAll)
     return () => {
       cancelled = true
     }
@@ -166,8 +168,9 @@ export function useStemMixer(stems: MixerStemInput[]) {
   useEffect(() => {
     return () => {
       teardown()
-      if (ctxRef.current) {
-        void ctxRef.current.close().catch(() => undefined)
+      const ctx = ctxRef.current
+      if (ctx) {
+        discardRejection(() => ctx.close())
         ctxRef.current = null
       }
     }
@@ -225,7 +228,7 @@ export function useStemMixer(stems: MixerStemInput[]) {
   function play(fromSeconds?: number) {
     const ctx = ctxRef.current
     if (!ctx || resolvedLoadState !== 'ready') return
-    if (ctx.state === 'suspended') void ctx.resume().catch(() => undefined)
+    if (ctx.state === 'suspended') discardRejection(() => ctx.resume())
 
     stopSources()
     const offset = Math.max(0, Math.min(resolvedDuration, fromSeconds ?? currentTime))

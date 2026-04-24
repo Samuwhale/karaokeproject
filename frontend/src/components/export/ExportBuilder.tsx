@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 
+import { discardRejection } from '../../async'
 import { createExportBundle, listExportStems, planExportBundle } from '../../api'
 import type {
   ExportArtifactKind,
@@ -65,6 +66,7 @@ export function ExportBuilder({
   const [loadedStemOptions, setLoadedStemOptions] = useState<{
     key: string
     stems: ExportStemOption[]
+    error: string | null
   } | null>(null)
 
   const [includeMix, setIncludeMix] = useState(true)
@@ -79,6 +81,7 @@ export function ExportBuilder({
   const [plannedResponse, setPlannedResponse] = useState<{
     key: string
     plan: ExportPlanResponse | null
+    error: string | null
   } | null>(null)
   const doneButtonRef = useRef<HTMLDivElement | null>(null)
 
@@ -100,6 +103,7 @@ export function ExportBuilder({
     () => (loadedStemOptions?.key === stemOptionsKey ? loadedStemOptions.stems : []),
     [loadedStemOptions, stemOptionsKey],
   )
+  const stemLookupError = loadedStemOptions?.key === stemOptionsKey ? loadedStemOptions.error : null
   const stemsLoading = selectedTrackIds.length > 0 && loadedStemOptions?.key !== stemOptionsKey
   const hasStems = stemOptions.length > 0
 
@@ -110,12 +114,16 @@ export function ExportBuilder({
     listExportStems({ track_ids: selectedTrackIds, run_ids: resolvedRunIds })
       .then((response) => {
         if (!cancelled) {
-          setLoadedStemOptions({ key: stemOptionsKey, stems: response.stems })
+          setLoadedStemOptions({ key: stemOptionsKey, stems: response.stems, error: null })
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
-          setLoadedStemOptions({ key: stemOptionsKey, stems: [] })
+          setLoadedStemOptions({
+            key: stemOptionsKey,
+            stems: [],
+            error: error instanceof Error ? error.message : 'Could not load stem availability.',
+          })
         }
       })
 
@@ -137,6 +145,7 @@ export function ExportBuilder({
   }, [selectedTrackIdsKey, runIdsKey, artifactList, mode, bitrate])
   const canPlan = !!selectedTrackIds.length && !!artifactList.length && (!mp3Requested || bitrateValid)
   const plan = canPlan && plannedResponse?.key === planKey ? plannedResponse.plan : null
+  const planError = canPlan && plannedResponse?.key === planKey ? plannedResponse.error : null
   const planLoading = canPlan && plannedResponse?.key !== planKey
 
   useEffect(() => {
@@ -152,12 +161,15 @@ export function ExportBuilder({
           bitrate,
         })
         if (!cancelled) {
-          setPlannedResponse({ key: planKey, plan: response })
+          setPlannedResponse({ key: planKey, plan: response, error: null })
         }
       } catch (error) {
         if (!cancelled) {
-          setPlannedResponse({ key: planKey, plan: null })
-          onError(error instanceof Error ? error.message : 'Could not plan export.')
+          setPlannedResponse({
+            key: planKey,
+            plan: null,
+            error: error instanceof Error ? error.message : 'Could not check export availability.',
+          })
         }
       }
     }, 150)
@@ -197,8 +209,10 @@ export function ExportBuilder({
     ? 'Choose at least one track to export.'
     : mp3Requested && !bitrateValid
       ? BITRATE_HINT
-      : !artifactList.length
-        ? 'Pick at least one thing to include.'
+    : !artifactList.length
+      ? 'Pick at least one thing to include.'
+      : planError
+        ? planError
         : plan && includedCount === 0
           ? 'None of the selected tracks have the files required for this export.'
           : null
@@ -230,7 +244,7 @@ export function ExportBuilder({
           <button
             type="button"
             className="button-secondary"
-            onClick={() => void onReveal({ kind: 'bundle', job_id: result.job_id })}
+            onClick={() => discardRejection(() => onReveal({ kind: 'bundle', job_id: result.job_id }))}
           >
             Reveal in Finder
           </button>
@@ -266,6 +280,8 @@ export function ExportBuilder({
           hint={
             stemsLoading
               ? 'Looking up available stems…'
+              : stemLookupError
+                ? 'Could not load stem availability.'
               : hasStems
                 ? 'Separated tracks, untouched.'
                 : 'No separated stems available for this selection.'
@@ -329,6 +345,8 @@ export function ExportBuilder({
         </div>
         {plan ? (
           <ExportManifest plan={plan} artifactList={artifactList} stemOptions={stemOptions} />
+        ) : planError ? (
+          <p className="inline-hint">{planError}</p>
         ) : planLoading ? (
           <p className="inline-hint">
             <Spinner /> Checking which artifacts are available…
@@ -349,10 +367,10 @@ export function ExportBuilder({
               busy ||
               !artifactList.length ||
               !selectedTrackIds.length ||
-              includedCount === 0 ||
+              (plan !== null && includedCount === 0) ||
               (mp3Requested && !bitrateValid)
             }
-            onClick={() => void handleExport()}
+            onClick={() => discardRejection(handleExport)}
           >
             {busy ? (
               <>

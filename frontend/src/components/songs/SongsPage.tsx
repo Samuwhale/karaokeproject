@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 
+import { discardRejection } from '../../async'
 import { describeRun, isActiveRunStatus, RUN_STATUS_LABELS } from '../runStatus'
 import { SONG_BROWSE_SORT_OPTIONS, applySongBrowse, trackStageSummary } from '../trackListView'
 import type { SongsView } from '../../routes'
@@ -145,7 +146,7 @@ function QueueStrip({
                     type="button"
                     className="library-queue-cancel"
                     disabled={cancelling}
-                    onClick={() => void onCancelRun(entry.run.id)}
+                    onClick={() => discardRejection(() => onCancelRun(entry.run.id))}
                     aria-label={`Cancel split for ${entry.track_title}`}
                   >
                     {cancelling ? 'Cancelling…' : 'Cancel'}

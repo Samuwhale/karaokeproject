@@ -30,14 +30,38 @@ import type {
   TrackSummary,
   UpdateImportDraftInput,
 } from './types'
+import { discardRejection } from './async'
 
 async function parseErrorBody(response: Response): Promise<string | null> {
   const contentType = response.headers.get('content-type') ?? ''
   if (contentType.includes('application/json')) {
     try {
       const payload = (await response.json()) as { detail?: unknown } | null
-      if (payload && typeof payload.detail === 'string' && payload.detail.trim()) {
-        return payload.detail
+      if (payload) {
+        const detail = payload.detail
+        if (typeof detail === 'string' && detail.trim()) {
+          return detail
+        }
+        if (Array.isArray(detail)) {
+          const messages = detail
+            .map((item) => {
+              if (!item || typeof item !== 'object') return null
+              const entry = item as { loc?: unknown; msg?: unknown }
+              const message = typeof entry.msg === 'string' ? entry.msg.trim() : ''
+              if (!message) return null
+              const location = Array.isArray(entry.loc)
+                ? entry.loc
+                    .filter((part) => typeof part === 'string' || typeof part === 'number')
+                    .slice(1)
+                    .join('.')
+                : ''
+              return location ? `${location}: ${message}` : message
+            })
+            .filter((message): message is string => !!message)
+          if (messages.length) {
+            return messages.slice(0, 3).join(' · ')
+          }
+        }
       }
     } catch {
       return null
@@ -122,7 +146,7 @@ function postKeepalive(url: string, body?: unknown) {
     init.headers = { 'Content-Type': 'application/json' }
     init.body = JSON.stringify(body)
   }
-  void fetch(url, init).catch(() => undefined)
+  discardRejection(fetch(url, init))
 }
 
 export function getDiagnostics() {

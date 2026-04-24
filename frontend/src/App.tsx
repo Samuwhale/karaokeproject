@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useMatch, useNavigate } from 'rea
 
 import './App.css'
 import './redesign.css'
+import { discardRejection } from './async'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ImportFlowDialog } from './components/ImportFlowDialog'
 import { ImportsOverlay } from './components/imports/ImportsOverlay'
@@ -192,11 +193,10 @@ function App() {
       setDragOverlayActive(false)
       const files = filterImportableMediaFiles(event.dataTransfer?.files ?? [])
       if (files.length) {
-        handleResolveLocalImport(files)
-          .then(() => {
-            revealImportReview()
-          })
-          .catch(() => undefined)
+        discardRejection(async () => {
+          await handleResolveLocalImport(files)
+          revealImportReview()
+        })
         return
       }
       pushToast('error', 'Drop audio or video files to import them.')
@@ -227,11 +227,10 @@ function App() {
       const text = event.clipboardData?.getData('text/plain').trim() ?? ''
       if (!text || !/^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\b/i.test(text)) return
       event.preventDefault()
-      handleResolveYouTube(text)
-        .then(() => {
-          revealImportReview()
-        })
-        .catch(() => undefined)
+      discardRejection(async () => {
+        await handleResolveYouTube(text)
+        revealImportReview()
+      })
     }
 
     document.addEventListener('paste', onPaste)
@@ -253,7 +252,7 @@ function App() {
     onNavigatePrev: () => selectAdjacentTrack(-1),
     onRerun: () => {
       if (!mixActive || !selectedTrack || creatingRun) return
-      void handleCreateRun(selectedTrack.id, defaultProcessing)
+      discardRejection(() => handleCreateRun(selectedTrack.id, defaultProcessing))
     },
     onSelectRunByIndex: (index) => {
       if (!mixActive || !selectedTrack) return

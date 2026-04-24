@@ -4,8 +4,6 @@ from sqlalchemy.orm import Session
 from backend.api.dependencies import get_db_session, get_settings_dependency
 from backend.core.config import RuntimeSettings
 from backend.schemas.imports import (
-    BatchDiscardImportDraftRequest,
-    BatchUpdateImportDraftRequest,
     ConfirmImportDraftsRequest,
     ConfirmImportDraftsResponse,
     ImportDraftResponse,
@@ -16,8 +14,6 @@ from backend.schemas.imports import (
 )
 from backend.services.imports import (
     ConfirmValidationError,
-    batch_discard_import_drafts,
-    batch_update_import_drafts,
     confirm_import_drafts,
     discard_import_draft,
     list_import_drafts,
@@ -85,34 +81,6 @@ def discard_draft_endpoint(
 ) -> dict[str, bool]:
     try:
         discard_import_draft(session, runtime_settings, draft_id)
-    except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return {"ok": True}
-
-
-@router.post("/imports/drafts/batch", response_model=list[ImportDraftResponse])
-def batch_update_drafts_endpoint(
-    payload: BatchUpdateImportDraftRequest,
-    session: Session = Depends(get_db_session),
-) -> list[ImportDraftResponse]:
-    try:
-        return batch_update_import_drafts(session, payload)
-    except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@router.post("/imports/drafts/batch/discard")
-def batch_discard_drafts_endpoint(
-    payload: BatchDiscardImportDraftRequest,
-    session: Session = Depends(get_db_session),
-    runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
-) -> dict[str, bool]:
-    try:
-        batch_discard_import_drafts(session, runtime_settings, payload)
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:

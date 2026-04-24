@@ -1,3 +1,4 @@
+import { discardRejection } from '../async'
 import type { Diagnostics } from '../types'
 import { Skeleton } from './feedback/Skeleton'
 import { Spinner } from './feedback/Spinner'
@@ -124,7 +125,7 @@ export function DiagnosticsPanel({
           type="button"
           className="button-secondary"
           disabled={backfillingMetrics}
-          onClick={() => void onBackfillMetrics()}
+          onClick={() => discardRejection(onBackfillMetrics)}
         >
           {backfillingMetrics ? <><Spinner /> Backfilling…</> : 'Backfill quality metrics'}
         </button>

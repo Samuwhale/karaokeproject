@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 
+import { discardRejection } from '../../async'
 import type { RunDetail, RunMixStemEntry } from '../../types'
 import { isStemKind } from '../../stems'
 import {
@@ -69,7 +70,7 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
                 type="button"
                 className={`mix-preset ${active ? 'is-active' : ''}`}
                 aria-pressed={active}
-                onClick={() => void applyIntent(spec.value)}
+                onClick={() => discardRejection(() => applyIntent(spec.value))}
               >
                 {spec.label}
               </button>
@@ -81,7 +82,7 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
         type="button"
         className="mix-preset-reset"
         disabled={atRest}
-        onClick={() => void applyReset()}
+        onClick={() => discardRejection(applyReset)}
       >
         Reset
       </button>

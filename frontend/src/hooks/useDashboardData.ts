@@ -34,6 +34,7 @@ import {
   updateSettings,
   updateTrack,
 } from '../api'
+import { discardRejection } from '../async'
 import type { Toast, ToastAction, ToastTone } from '../components/feedback/ToastStack'
 import { isActiveRunStatus } from '../components/runStatus'
 import type {
@@ -302,8 +303,8 @@ export function useDashboardData(selection: { trackId: string | null }) {
     let disposed = false
 
     const initialLoadId = window.setTimeout(() => {
-      void refreshDashboard()
-      void refreshCachedModels()
+      discardRejection(refreshDashboard)
+      discardRejection(refreshCachedModels)
     }, 0)
 
     function tick() {
@@ -311,13 +312,13 @@ export function useDashboardData(selection: { trackId: string | null }) {
       if (document.hidden) return
       const sinceLast = Date.now() - lastPollAtRef.current
       if (sinceLast < refreshIntervalMsRef.current) return
-      void refreshDashboard()
+      discardRejection(refreshDashboard)
     }
 
     const intervalId = window.setInterval(tick, 500)
 
     function handleVisibility() {
-      if (!document.hidden) void refreshDashboard()
+      if (!document.hidden) discardRejection(refreshDashboard)
     }
 
     function flushPendingDestructive() {
@@ -344,7 +345,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
 
   useEffect(() => {
     const id = window.setTimeout(() => {
-      void syncSelectedTrackDetail(selection.trackId)
+      discardRejection(() => syncSelectedTrackDetail(selection.trackId))
     }, 0)
     return () => window.clearTimeout(id)
   }, [selection.trackId, syncSelectedTrackDetail])
@@ -646,7 +647,9 @@ export function useDashboardData(selection: { trackId: string | null }) {
     if (pendingDeleteTimerRef.current !== null) {
       const previous = Array.from(pendingDeleteIdsRef.current)
       clearTimer(pendingDeleteTimerRef)
-      if (previous.length) void commitTrackDelete(previous)
+      if (previous.length) {
+        discardRejection(() => commitTrackDelete(previous))
+      }
     }
     const scheduled = [...trackIds]
     setPendingDeleteIdsImmediate(new Set(scheduled))
@@ -663,7 +666,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     )
     pendingDeleteTimerRef.current = window.setTimeout(() => {
       pendingDeleteTimerRef.current = null
-      void commitTrackDelete(scheduled)
+      discardRejection(() => commitTrackDelete(scheduled))
     }, DELETE_UNDO_MS)
   }
 
@@ -671,6 +674,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     setSavingSettings(true)
     try {
       await updateSettings(payload)
+      await refreshCachedModels()
       pushToast('success', 'Settings saved.')
       await refreshDashboard()
     } catch (error) {
@@ -747,7 +751,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
   function handleCleanupLibraryRuns() {
     if (pendingLibraryCleanupTimerRef.current !== null) {
       clearTimer(pendingLibraryCleanupTimerRef)
-      void commitLibraryCleanup()
+      discardRejection(commitLibraryCleanup)
       return
     }
     setCleaningLibraryRuns(true)
@@ -764,7 +768,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     )
     pendingLibraryCleanupTimerRef.current = window.setTimeout(() => {
       pendingLibraryCleanupTimerRef.current = null
-      void commitLibraryCleanup()
+      discardRejection(commitLibraryCleanup)
     }, PURGE_UNDO_MS)
   }
 
