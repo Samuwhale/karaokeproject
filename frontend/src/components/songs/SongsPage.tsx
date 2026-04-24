@@ -539,13 +539,13 @@ export function SongsPage({
           <strong>No songs match</strong>
           {view.filter !== 'all' ? (
             <>
-              <p>No songs in this filter.</p>
+              <p>No songs match this filter.</p>
               <button
                 type="button"
                 className="button-secondary"
                 onClick={() => onViewChange({ ...view, filter: 'all' })}
               >
-                Show all songs
+                Clear filter
               </button>
             </>
           ) : (
@@ -576,19 +576,19 @@ export function SongsPage({
           <button type="button" className="button-link" onClick={clearSelection}>
             {allSelected ? 'Clear all' : 'Clear'}
           </button>
-          <button type="button" className="button-danger" onClick={handleDelete}>
-            Delete {selectedCount}
-          </button>
-          {exportEligible.length > 0 ? (
-            <button type="button" className="button-secondary" onClick={handleExport}>
-              Export {exportEligible.length}
-            </button>
-          ) : null}
           {splitEligible.length > 0 ? (
             <button type="button" className="button-primary" onClick={handleSplit}>
               Split {splitEligible.length}
             </button>
           ) : null}
+          {exportEligible.length > 0 ? (
+            <button type="button" className="button-secondary" onClick={handleExport}>
+              Export {exportEligible.length}
+            </button>
+          ) : null}
+          <button type="button" className="button-danger" onClick={handleDelete}>
+            Delete {selectedCount}
+          </button>
         </div>
       ) : null}
     </section>

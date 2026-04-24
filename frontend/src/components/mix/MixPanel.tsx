@@ -328,7 +328,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                   onKeyDown={(event) => handleFaderKey(index, stem.gain_db, event)}
                   onDoubleClick={() => updateStem(index, { gain_db: 0 })}
                   aria-label={`${stem.label} gain`}
-                  title="Double-click to reset to 0 dB · Arrow keys to step · Shift: fine · Alt: coarse"
+                  title="Double-click to reset · ← → step · Shift: fine · Alt: coarse"
                 />
               </label>
             </div>

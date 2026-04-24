@@ -187,14 +187,6 @@
   font-weight: 500;
 }
 
-.library-queue-item-profile {
-  color: var(--text-muted);
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .library-queue-item-stage {
   color: var(--text-muted);
   font-size: 12px;
@@ -275,7 +267,7 @@
 
 .library-count {
   font-size: 13px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   flex-shrink: 0;
@@ -496,7 +488,7 @@
   width: 40px;
   height: 40px;
   border-radius: 6px;
-  background: var(--surface-hover);
+  background: color-mix(in oklch, var(--accent) 8%, var(--surface-2));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -555,9 +547,10 @@
 }
 
 .song-row-title {
+  font-family: var(--font-display);
   font-weight: 600;
   font-size: 14px;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.01em;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1027,8 +1020,8 @@
 .mix-top-title strong {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 16px;
-  letter-spacing: -0.015em;
+  font-size: 18px;
+  letter-spacing: -0.02em;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1130,7 +1123,7 @@
 }
 
 .mix-preset {
-  padding: 5px 12px;
+  padding: 7px 14px;
   border-radius: var(--radius-xs);
   font-size: 13px;
   color: var(--text-muted);
@@ -1150,6 +1143,11 @@
   font-weight: 600;
 }
 
+.mix-preset:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Rows canvas ----------------------------------------------------------- */
 /*  Each stem row fills an equal share of the available height. Waveforms
     stretch to fill both axes — this is the primary visual. */
@@ -1159,7 +1157,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 4px 24px 8px;
+  padding: 8px 24px 8px;
   gap: 0;
   overflow-y: auto;
 }
@@ -1212,6 +1210,7 @@
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 14px;
+  letter-spacing: -0.01em;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1450,6 +1449,11 @@
   color: var(--accent-ink);
 }
 
+.stem-toggle:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Transport ------------------------------------------------------------- */
 
 .mix-transport {
@@ -1484,6 +1488,11 @@
   background: var(--surface-2);
   color: var(--text-faint);
   cursor: not-allowed;
+}
+
+.mix-play:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .mix-play svg {
@@ -1566,7 +1575,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 0 24px 10px;
+  padding: 4px 24px 12px;
   font-size: 12px;
 }
 
@@ -1579,6 +1588,10 @@
 
 .mix-save-state.is-error {
   color: var(--err);
+}
+
+.mix-save-state.is-saved {
+  color: var(--ok);
 }
 
 .mix-errors {
@@ -2163,7 +2176,6 @@
   flex-direction: column;
   gap: 4px;
   width: min(100%, 380px);
-  margin-top: 4px;
 }
 
 .mix-profile-option {

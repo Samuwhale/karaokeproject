@@ -61,7 +61,6 @@ type InlineProfilePickerProps = {
 function InlineProfilePicker({ profiles, creatingRun, onCreateRun }: InlineProfilePickerProps) {
   return (
     <>
-      <strong>Split this track</strong>
       {profiles.length > 0 ? (
         <div className="mix-profile-picker">
           {profiles.map((profile) => (
@@ -704,7 +703,7 @@ function MixWorkspaceContent({
             ) : RETRYABLE_STATUSES.has(selectedRun.status) ? (
               <>
                 <strong>This split didn't complete</strong>
-                <p>{selectedRun.error_message || 'Retry this version or queue another one.'}</p>
+                <p>{selectedRun.error_message || 'Retry this version or open Versions to try a different profile.'}</p>
                 <button
                   type="button"
                   className="button-primary"
@@ -715,8 +714,8 @@ function MixWorkspaceContent({
               </>
             ) : (
               <>
-                <strong>No mixable stems</strong>
-                <p>This version finished without stems. Queue another split from Versions.</p>
+                <strong>No stems available</strong>
+                <p>This version completed without stem outputs. Open Versions to queue another split.</p>
               </>
             )
           ) : (
