@@ -408,51 +408,55 @@ export function SongsPage({
         />
       ) : null}
 
-      <div className="library-toolbar">
-        <input
-          type="search"
-          className="library-search"
-          placeholder="Search title or artist"
-          aria-label="Search songs"
-          value={view.search}
-          onChange={(event) => onViewChange({ ...view, search: event.target.value })}
-        />
-        <div className="library-sort-group" role="group" aria-label="Sort songs">
-          {SONG_BROWSE_SORT_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={`library-sort-btn ${view.sort === option.value ? 'is-active' : ''}`}
-              aria-pressed={view.sort === option.value}
-              onClick={() => onViewChange({ ...view, sort: option.value })}
-            >
-              {option.shortLabel}
-            </button>
-          ))}
-        </div>
-        {countLabel ? (
-          <span className="library-count" aria-live="polite">{countLabel}</span>
-        ) : null}
-      </div>
+      {tracks.length > 0 ? (
+        <>
+          <div className="library-toolbar">
+            <input
+              type="search"
+              className="library-search"
+              placeholder="Search title or artist"
+              aria-label="Search songs"
+              value={view.search}
+              onChange={(event) => onViewChange({ ...view, search: event.target.value })}
+            />
+            <div className="library-sort-group" role="group" aria-label="Sort songs">
+              {SONG_BROWSE_SORT_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`library-sort-btn ${view.sort === option.value ? 'is-active' : ''}`}
+                  aria-pressed={view.sort === option.value}
+                  onClick={() => onViewChange({ ...view, sort: option.value })}
+                >
+                  {option.shortLabel}
+                </button>
+              ))}
+            </div>
+            {countLabel ? (
+              <span className="library-count" aria-live="polite">{countLabel}</span>
+            ) : null}
+          </div>
 
-      {showFilterTabs ? (
-        <div className="library-filters" role="tablist" aria-label="Filter songs">
-          {filterTabs.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              role="tab"
-              aria-selected={view.filter === tab.value}
-              className={`library-filter ${view.filter === tab.value ? 'is-active' : ''}`}
-              onClick={() => onViewChange({ ...view, filter: tab.value })}
-            >
-              {tab.label}
-              {tab.value !== 'all' ? (
-                <span className="library-filter-count">{tab.count}</span>
-              ) : null}
-            </button>
-          ))}
-        </div>
+          {showFilterTabs ? (
+            <div className="library-filters" role="tablist" aria-label="Filter songs">
+              {filterTabs.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={view.filter === tab.value}
+                  className={`library-filter ${view.filter === tab.value ? 'is-active' : ''}`}
+                  onClick={() => onViewChange({ ...view, filter: tab.value })}
+                >
+                  {tab.label}
+                  {tab.value !== 'all' ? (
+                    <span className="library-filter-count">{tab.count}</span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {browseTracks.length > 0 ? (
@@ -463,7 +467,7 @@ export function SongsPage({
             const isActive = currentTrackId === track.id
             const isSelected = selected.has(track.id)
             const initials = track.title.trim().slice(0, 1).toUpperCase() || 'S'
-            const meta = [track.artist ?? 'Unknown artist', formatDuration(track.duration_seconds)]
+            const meta = [track.artist, formatDuration(track.duration_seconds)]
               .filter(Boolean)
               .join(' · ')
 

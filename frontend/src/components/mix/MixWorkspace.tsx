@@ -267,7 +267,7 @@ function VersionsPopover({
   return (
     <>
       <div className="popover-backdrop" onClick={onClose} aria-hidden />
-      <div className="popover popover-center popover-wide" role="dialog" aria-label="Versions">
+      <div className="popover popover-right popover-wide" role="dialog" aria-label="Versions">
         <div className="popover-title">Versions</div>
         {rows.length === 0 ? (
           <p className="popover-empty">No profiles configured.</p>
@@ -559,23 +559,31 @@ function MixWorkspaceContent({
           ) : null}
         </div>
         <div className="mix-top-title">
-          <div className="mix-top-title-lines">
-            <strong title={track.title}>{track.title}</strong>
-            <span className="mix-top-artist">{track.artist ?? 'Unknown artist'}</span>
-          </div>
+          <strong title={track.title}>{track.title}</strong>
+          {track.artist ? <span className="mix-top-artist">{track.artist}</span> : null}
+        </div>
+        <div className="mix-top-actions">
           {selectedRun ? (
-            <span className="popover-anchor mix-top-version">
-              <button
-                type="button"
-                className={`mix-version-pill ${popover === 'versions' ? 'is-open' : ''}`}
-                onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
-                aria-haspopup="dialog"
-                aria-expanded={popover === 'versions'}
-              >
-                {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
-                <span>{progressPct !== null ? `${progressPct}%` : versionLabel}</span>
-                <Chevron />
-              </button>
+            <span className="popover-anchor">
+              {(() => {
+                const completedCount = track.runs.filter((r) => r.status === 'completed').length
+                return (
+                  <button
+                    type="button"
+                    className={`mix-version-pill ${popover === 'versions' ? 'is-open' : ''}`}
+                    onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
+                    aria-haspopup="dialog"
+                    aria-expanded={popover === 'versions'}
+                  >
+                    {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
+                    <span>{progressPct !== null ? `${progressPct}%` : versionLabel}</span>
+                    {progressPct === null && completedCount > 1 ? (
+                      <span className="mix-version-count" aria-label={`${completedCount} versions`}>·{completedCount}</span>
+                    ) : null}
+                    <Chevron />
+                  </button>
+                )
+              })()}
               {popover === 'versions' ? (
                 <VersionsPopover
                   track={track}
@@ -597,8 +605,6 @@ function MixWorkspaceContent({
               ) : null}
             </span>
           ) : null}
-        </div>
-        <div className="mix-top-actions">
           <span className="popover-anchor">
             <button
               type="button"
