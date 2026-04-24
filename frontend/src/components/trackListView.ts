@@ -11,11 +11,11 @@ export type TrackStageSummary = {
   actionLabel: string
 }
 
-export const SONG_BROWSE_SORT_OPTIONS: { value: SongBrowseSort; label: string }[] = [
-  { value: 'recent', label: 'Recently updated' },
-  { value: 'created', label: 'Recently added' },
-  { value: 'title', label: 'Title A-Z' },
-  { value: 'runs', label: 'Most versions' },
+export const SONG_BROWSE_SORT_OPTIONS: { value: SongBrowseSort; label: string; shortLabel: string }[] = [
+  { value: 'recent', label: 'Recently updated', shortLabel: 'Recent' },
+  { value: 'created', label: 'Recently added', shortLabel: 'Added' },
+  { value: 'title', label: 'Title A–Z', shortLabel: 'A–Z' },
+  { value: 'runs', label: 'Most versions', shortLabel: 'Versions' },
 ]
 
 export function trackStageSummary(track: TrackSummary): TrackStageSummary {

@@ -100,6 +100,15 @@ function App() {
     () => applySongBrowse(tracks, { search: songsView.search, sort: songsView.sort }),
     [songsView.search, songsView.sort, tracks],
   )
+  const currentBrowseIndex = useMemo(
+    () => (mixActive && mixTrackId ? browseTracks.findIndex((t) => t.id === mixTrackId) : -1),
+    [mixActive, mixTrackId, browseTracks],
+  )
+  const hasPrevTrack = currentBrowseIndex > 0
+  const hasNextTrack = currentBrowseIndex >= 0 && currentBrowseIndex < browseTracks.length - 1
+  const trackPosition = currentBrowseIndex >= 0 && browseTracks.length > 0
+    ? { index: currentBrowseIndex, total: browseTracks.length }
+    : null
   const defaultProcessing: RunProcessingConfigInput = {
     profile_key: settings?.default_profile ?? 'standard',
   }
@@ -353,7 +362,12 @@ function App() {
                   settingKeeper={settingKeeper}
                   savingMixRunId={savingMixRunId}
                   updatingTrack={updatingTrack}
+                  hasPrevTrack={hasPrevTrack}
+                  hasNextTrack={hasNextTrack}
+                  trackPosition={trackPosition}
                   onBackToSongs={() => openSongs()}
+                  onNavigatePrev={() => selectAdjacentTrack(-1)}
+                  onNavigateNext={() => selectAdjacentTrack(1)}
                   onSelectRun={(runId) => {
                     if (!selectedTrack) return
                     openMix(selectedTrack.id, { runId })

@@ -408,18 +408,19 @@ export function SongsPage({
           value={view.search}
           onChange={(event) => onViewChange({ ...view, search: event.target.value })}
         />
-        <select
-          className="library-sort"
-          aria-label="Sort songs"
-          value={view.sort}
-          onChange={(event) => onViewChange({ ...view, sort: event.target.value as SongsView['sort'] })}
-        >
+        <div className="library-sort-group" role="group" aria-label="Sort songs">
           {SONG_BROWSE_SORT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
+            <button
+              key={option.value}
+              type="button"
+              className={`library-sort-btn ${view.sort === option.value ? 'is-active' : ''}`}
+              aria-pressed={view.sort === option.value}
+              onClick={() => onViewChange({ ...view, sort: option.value })}
+            >
+              {option.shortLabel}
+            </button>
           ))}
-        </select>
+        </div>
         {countLabel ? (
           <span className="library-count" aria-live="polite">{countLabel}</span>
         ) : null}

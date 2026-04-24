@@ -31,7 +31,12 @@ type MixWorkspaceProps = {
   settingKeeper: boolean
   savingMixRunId: string | null
   updatingTrack: boolean
+  hasPrevTrack: boolean
+  hasNextTrack: boolean
+  trackPosition: { index: number; total: number } | null
   onBackToSongs: () => void
+  onNavigatePrev: () => void
+  onNavigateNext: () => void
   onSelectRun: (runId: string) => void
   onCreateRun: (trackId: string, processing: RunProcessingConfigInput) => Promise<unknown>
   onCancelRun: (runId: string) => Promise<void>
@@ -131,6 +136,22 @@ function BackArrow() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
       <path d="M8.5 3L4.5 7L8.5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function ChevronUp() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path d="M3 9L7 5L11 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function ChevronDown() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path d="M3 5L7 9L11 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -473,7 +494,12 @@ function MixWorkspaceContent({
   settingKeeper,
   savingMixRunId,
   updatingTrack,
+  hasPrevTrack,
+  hasNextTrack,
+  trackPosition,
   onBackToSongs,
+  onNavigatePrev,
+  onNavigateNext,
   onSelectRun,
   onCreateRun,
   onCancelRun,
@@ -506,10 +532,36 @@ function MixWorkspaceContent({
   return (
     <section className="mix" ref={mixRef}>
       <header className="mix-top">
-        <button type="button" className="mix-back" onClick={onBackToSongs}>
-          <BackArrow />
-          Library
-        </button>
+        <div className="mix-top-nav">
+          <button type="button" className="mix-back" onClick={onBackToSongs}>
+            <BackArrow />
+            Library
+          </button>
+          <span className="mix-nav-sep" aria-hidden />
+          <button
+            type="button"
+            className="icon-button mix-nav-btn"
+            onClick={onNavigatePrev}
+            disabled={!hasPrevTrack}
+            aria-label="Previous track"
+            title="Previous track (k)"
+          >
+            <ChevronUp />
+          </button>
+          <button
+            type="button"
+            className="icon-button mix-nav-btn"
+            onClick={onNavigateNext}
+            disabled={!hasNextTrack}
+            aria-label="Next track"
+            title="Next track (j)"
+          >
+            <ChevronDown />
+          </button>
+          {trackPosition && trackPosition.total > 1 ? (
+            <span className="mix-nav-position">{trackPosition.index + 1}/{trackPosition.total}</span>
+          ) : null}
+        </div>
         <div className="mix-top-title">
           <div className="mix-top-title-lines">
             <strong title={track.title}>{track.title}</strong>
