@@ -66,8 +66,7 @@ def _backfill_settings(settings: AppSettings, runtime_settings: RuntimeSettings)
         if getattr(settings, field_name) is None:
             setattr(settings, field_name, value)
             changed = True
-    # Migrate default_profile out of any dropped profile key into the nearest
-    # surviving one. Today vocal-focus folds into high.
+    # Keep settings pinned to the current canonical split keys.
     if settings.default_profile not in PROFILE_LOOKUP:
         settings.default_profile = DEFAULT_PROFILE_KEY
         changed = True

@@ -52,5 +52,6 @@ def cleanup_export_bundles_endpoint(
 @router.post("/storage/cleanup/non-keeper-runs", response_model=NonKeeperCleanupResponse)
 def cleanup_non_keeper_runs_endpoint(
     session: Session = Depends(get_db_session),
+    runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
 ) -> NonKeeperCleanupResponse:
-    return cleanup_non_keeper_runs_library(session)
+    return cleanup_non_keeper_runs_library(session, runtime_settings)

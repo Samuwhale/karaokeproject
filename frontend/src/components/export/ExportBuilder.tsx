@@ -5,7 +5,8 @@ import { createExportBundle, listExportStems, planExportBundle } from '../../api
 import type {
   ExportArtifactKind,
   ExportBundleResponse,
-  ExportOutputMode,
+  ExportDeliveryKind,
+  ExportPackagingMode,
   ExportPlanResponse,
   ExportPlanTrack,
   ExportStemOption,
@@ -24,11 +25,6 @@ type ExportBuilderProps = {
   onError: (message: string) => void
   onReveal: (payload: RevealFolderInput) => void | Promise<void>
   footerAction?: React.ReactNode
-  /**
-   * 'full' (default) shows the per-track manifest and Included header bar.
-   * 'compact' hides the manifest (useful when there's only one track and
-   * the summary line is enough).
-   */
   variant?: 'full' | 'compact'
 }
 
@@ -60,6 +56,17 @@ function stemAvailabilityHint(option: ExportStemOption, totalTracks: number): st
   return `Available in ${option.track_count} of ${totalTracks} tracks.`
 }
 
+function deliverySummary(delivery: ExportDeliveryKind): string {
+  if (delivery === 'direct-file') return 'Downloads as a single file.'
+  if (delivery === 'flat-zip') return 'Downloads as one zip with all files at the top level.'
+  return 'Downloads as one zip with one folder per song.'
+}
+
+function packagingSummary(packaging: ExportPackagingMode): string {
+  if (packaging === 'flat') return 'All exported files go into one flat folder in the zip.'
+  return 'Each song gets its own folder in the zip.'
+}
+
 export function ExportBuilder({
   selectedTrackIds,
   defaultBitrate,
@@ -75,13 +82,12 @@ export function ExportBuilder({
     stems: ExportStemOption[]
     error: string | null
   } | null>(null)
-
   const [includeMix, setIncludeMix] = useState(true)
   const [selectedStems, setSelectedStems] = useState<Set<string>>(() => new Set())
   const [includeSource, setIncludeSource] = useState(false)
   const [mixFmt, setMixFmt] = useState<Format>('mp3')
   const [stemFmt, setStemFmt] = useState<Format>('wav')
-  const [mode, setMode] = useState<ExportOutputMode>('single-bundle')
+  const [packaging, setPackaging] = useState<ExportPackagingMode>('per-song-folders')
   const [bitrate, setBitrate] = useState(defaultBitrate)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ExportBundleResponse | null>(null)
@@ -113,6 +119,8 @@ export function ExportBuilder({
   const stemLookupError = loadedStemOptions?.key === stemOptionsKey ? loadedStemOptions.error : null
   const stemsLoading = selectedTrackIds.length > 0 && loadedStemOptions?.key !== stemOptionsKey
   const hasStems = stemOptions.length > 0
+  const multiTrack = selectedTrackIds.length > 1
+  const effectivePackaging: ExportPackagingMode = multiTrack ? packaging : 'auto'
 
   useEffect(() => {
     if (!selectedTrackIds.length) return
@@ -151,8 +159,8 @@ export function ExportBuilder({
   const bitrateValid = BITRATE_PATTERN.test(bitrate)
   const mp3Requested = (includeMix && mixFmt === 'mp3') || (hasSelectedStems && stemFmt === 'mp3')
   const planKey = useMemo(() => {
-    return `${selectedTrackIdsKey}|${runIdsKey}|${artifactList.slice().sort().join(',')}|${mode}|${bitrate}`
-  }, [selectedTrackIdsKey, runIdsKey, artifactList, mode, bitrate])
+    return `${selectedTrackIdsKey}|${runIdsKey}|${artifactList.slice().sort().join(',')}|${effectivePackaging}|${bitrate}`
+  }, [selectedTrackIdsKey, runIdsKey, artifactList, effectivePackaging, bitrate])
   const canPlan = !!selectedTrackIds.length && !!artifactList.length && (!mp3Requested || bitrateValid)
   const plan = canPlan && plannedResponse?.key === planKey ? plannedResponse.plan : null
   const planError = canPlan && plannedResponse?.key === planKey ? plannedResponse.error : null
@@ -167,7 +175,7 @@ export function ExportBuilder({
           track_ids: selectedTrackIds,
           run_ids: resolvedRunIds,
           artifacts: artifactList,
-          mode,
+          packaging: effectivePackaging,
           bitrate,
         })
         if (!cancelled) {
@@ -188,7 +196,7 @@ export function ExportBuilder({
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [artifactList, bitrate, canPlan, mode, onError, planKey, resolvedRunIds, result, selectedTrackIds])
+  }, [artifactList, bitrate, canPlan, effectivePackaging, planKey, resolvedRunIds, result, selectedTrackIds])
 
   async function handleExport() {
     if (!artifactList.length) return
@@ -199,7 +207,7 @@ export function ExportBuilder({
         track_ids: selectedTrackIds,
         run_ids: resolvedRunIds,
         artifacts: artifactList,
-        mode,
+        packaging: effectivePackaging,
         bitrate,
       })
       setResult(response)
@@ -213,7 +221,6 @@ export function ExportBuilder({
   const includedCount = plan?.included_track_count ?? 0
   const skippedCount = plan?.skipped_track_count ?? 0
   const totalBytes = plan?.total_bytes ?? 0
-  const showPackaging = selectedTrackIds.length > 1
 
   const blockingReason = !selectedTrackIds.length
     ? 'Choose at least one track to export.'
@@ -233,7 +240,7 @@ export function ExportBuilder({
         <strong>Built {result.filename}</strong>
         <p>
           {result.included_track_count} track{result.included_track_count === 1 ? '' : 's'} included ·{' '}
-          {formatSize(result.byte_count)}
+          {formatSize(result.byte_count)} · {deliverySummary(result.delivery)}
         </p>
         {result.skipped.length ? (
           <details className="export-result-skipped">
@@ -249,7 +256,7 @@ export function ExportBuilder({
         ) : null}
         <div className="export-result-actions">
           <a className="button-primary" href={result.download_url} download={result.filename}>
-            Download export
+            {result.delivery === 'direct-file' ? 'Download file' : 'Download zip'}
           </a>
           <button
             type="button"
@@ -333,25 +340,26 @@ export function ExportBuilder({
         </label>
       ) : null}
 
-      {showPackaging ? (
+      {multiTrack ? (
         <div className="export-pack">
           <span>Packaging</span>
           <div className="import-source-toggle">
             <button
               type="button"
-              className={`segmented ${mode === 'single-bundle' ? 'segmented-active' : ''}`}
-              onClick={() => setMode('single-bundle')}
+              className={`segmented ${packaging === 'per-song-folders' ? 'segmented-active' : ''}`}
+              onClick={() => setPackaging('per-song-folders')}
             >
-              All in one zip
+              Per song folders
             </button>
             <button
               type="button"
-              className={`segmented ${mode === 'zip-per-track' ? 'segmented-active' : ''}`}
-              onClick={() => setMode('zip-per-track')}
+              className={`segmented ${packaging === 'flat' ? 'segmented-active' : ''}`}
+              onClick={() => setPackaging('flat')}
             >
-              Zip per track
+              One flat folder
             </button>
           </div>
+          <p className="inline-hint">{packagingSummary(packaging)} Every file still includes the song name.</p>
         </div>
       ) : null}
 
@@ -367,6 +375,8 @@ export function ExportBuilder({
                   : ''}
             </span>
           </div>
+          {plan?.delivery ? <p className="inline-hint">{deliverySummary(plan.delivery)}</p> : null}
+          {plan?.filename ? <p className="inline-hint">Download name: {plan.filename}</p> : null}
           {plan ? (
             <ExportManifest plan={plan} artifactList={artifactList} stemOptions={stemOptions} />
           ) : planError ? (
@@ -388,13 +398,13 @@ export function ExportBuilder({
               : planError
                 ? planError
                 : plan
-                  ? `Estimated ${formatSize(totalBytes)}`
+                  ? `Estimated ${formatSize(totalBytes)}${plan.delivery ? ` · ${deliverySummary(plan.delivery)}` : ''}`
                   : ''}
         </p>
       )}
 
       <div className="import-footer">
-        <span>{blockingReason ?? (busy ? 'Building bundle…' : '')}</span>
+        <span>{blockingReason ?? (busy ? 'Building export…' : '')}</span>
         <div className="export-builder-actions">
           {footerAction}
           <button
@@ -518,6 +528,7 @@ const ManifestRow = memo(function ManifestRow({ track, artifactList, stemOptions
     <li className={`export-manifest-row ${track.skip_reason ? 'export-manifest-row-skipped' : ''}`}>
       <div className="export-manifest-head">
         <strong>{track.track_title}</strong>
+        {track.split_label ? <span>{track.split_label}</span> : null}
       </div>
       {track.skip_reason ? (
         <div className="export-manifest-skip">{track.skip_reason}</div>

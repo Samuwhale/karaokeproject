@@ -366,9 +366,9 @@ function VersionsPopover({
           <ConfirmInline
             label="Cancel split"
             pendingLabel="Cancelling…"
-            confirmLabel="Cancel split"
+            confirmLabel="Stop"
             cancelLabel="Keep running"
-            prompt="Cancel this split?"
+            prompt="Stop this split?"
             pending={cancellingRunId === selectedRun.id}
             onConfirm={() => onCancelRun(selectedRun.id)}
           />
@@ -706,7 +706,7 @@ function MixWorkspaceContent({
                     ) : completedCount > 1 ? (
                       <span className="mix-version-count mix-version-count-badge" aria-label={`${completedCount} split types`}>{completedCount}</span>
                     ) : null}
-                    <Chevron />
+                    <span className="mix-version-chevron"><Chevron /></span>
                   </button>
                 )
               })()}
@@ -807,12 +807,6 @@ function MixWorkspaceContent({
                     <span className="mix-progress-pct">{Math.round(selectedRun.progress * 100)}%</span>
                   ) : null}
                 </div>
-                {(() => {
-                  const prof = profiles.find((p) => p.key === selectedRun.processing.profile_key)
-                  return prof?.best_for ? (
-                    <p className="mix-progress-hint">{prof.best_for}</p>
-                  ) : null
-                })()}
                 <div
                   className="mix-progress-bar"
                   role="progressbar"
@@ -829,7 +823,7 @@ function MixWorkspaceContent({
                 <ConfirmInline
                   label="Cancel split"
                   pendingLabel="Cancelling…"
-                  confirmLabel="Cancel split"
+                  confirmLabel="Stop"
                   cancelLabel="Keep running"
                   prompt="Stop this split?"
                   pending={cancellingRunId === selectedRun.id}

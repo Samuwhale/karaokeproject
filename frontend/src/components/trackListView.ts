@@ -15,7 +15,7 @@ export const SONG_BROWSE_SORT_OPTIONS: { value: SongBrowseSort; label: string; s
   { value: 'recent', label: 'Recently updated', shortLabel: 'Recent' },
   { value: 'created', label: 'Recently added', shortLabel: 'Added' },
   { value: 'title', label: 'Title A–Z', shortLabel: 'A–Z' },
-  { value: 'runs', label: 'Most versions', shortLabel: 'Versions' },
+  { value: 'runs', label: 'Most splits', shortLabel: 'Splits' },
 ]
 
 export function trackStageSummary(track: TrackSummary): TrackStageSummary {
@@ -25,7 +25,7 @@ export function trackStageSummary(track: TrackSummary): TrackStageSummary {
     return {
       key: 'final',
       label: 'Ready',
-      description: track.has_custom_mix ? 'Saved custom mix on the preferred version.' : 'Preferred version ready to export.',
+      description: track.has_custom_mix ? 'Saved custom mix on the preferred split.' : 'Preferred split ready to export.',
       actionLabel: 'Open mix',
     }
   }

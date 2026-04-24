@@ -14,7 +14,7 @@ from backend.schemas.system import (
     RevealFolderResponse,
 )
 from backend.services.diagnostics import collect_diagnostics
-from backend.services.exports import bundle_path
+from backend.services.exports import export_job_path
 from backend.services.settings import get_or_create_settings
 from backend.services.storage import resolve_storage_paths
 from backend.services.tracks import get_track
@@ -49,9 +49,9 @@ def _resolve_reveal_target(
         return storage_paths.outputs_dir, False
     if payload.kind == RevealFolderKind.bundle:
         if not payload.job_id:
-            raise HTTPException(status_code=400, detail="job_id is required to reveal a bundle.")
+            raise HTTPException(status_code=400, detail="job_id is required to reveal an export download.")
         try:
-            return bundle_path(session, runtime_settings, payload.job_id), True
+            return export_job_path(session, runtime_settings, payload.job_id), True
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
 

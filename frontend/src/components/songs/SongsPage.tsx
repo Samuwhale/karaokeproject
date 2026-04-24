@@ -38,8 +38,11 @@ type RowStatus = {
 function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowStatus {
   if (stage.key === 'processing') {
     const run = track.latest_run
+    // Show % once the run has meaningful progress — clearer than the stage label
+    if (run && run.status !== 'queued' && run.progress > 0) {
+      return { text: `${Math.round(run.progress * 100)}%`, tone: 'processing', count: null, preferred: false }
+    }
     const stageLabel = run ? (RUN_STATUS_LABELS[run.status] ?? 'Splitting') : 'Splitting'
-    // The progress bar in the wave cell already shows percentage — don't duplicate it
     return { text: stageLabel, tone: 'processing', count: null, preferred: false }
   }
   if (stage.key === 'needs-attention') {
@@ -313,28 +316,18 @@ export function SongsPage({
   onBatchDelete,
 }: SongsPageProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [deleteArmed, setDeleteArmed] = useState(false)
+  const [deleteArmedSelectionKey, setDeleteArmedSelectionKey] = useState<string | null>(null)
 
   useEffect(() => {
     if (selected.size === 0) return
     function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setSelected(new Set())
+      if (event.key !== 'Escape') return
+      setSelected(new Set())
+      setDeleteArmedSelectionKey(null)
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [selected.size])
-
-  // Disarm delete when selection changes or clears
-  useEffect(() => {
-    setDeleteArmed(false)
-  }, [selected.size])
-
-  // Auto-disarm delete after 4 seconds
-  useEffect(() => {
-    if (!deleteArmed) return
-    const id = window.setTimeout(() => setDeleteArmed(false), 4000)
-    return () => window.clearTimeout(id)
-  }, [deleteArmed])
 
   const browseTracks = useMemo(
     () => applySongBrowse(tracks, { search: view.search, sort: view.sort, filter: view.filter }),
@@ -398,10 +391,19 @@ export function SongsPage({
       exportEligible: ids.filter((id) => exportableIds.has(id)),
     }
   }, [browseTrackIds, selected, splittableIds, exportableIds])
+  const selectionKey = useMemo(() => selectedIds.slice().sort().join('|'), [selectedIds])
+  const deleteArmed = selectionKey.length > 0 && deleteArmedSelectionKey === selectionKey
   const selectedCount = selectedIds.length
   const allSelected = browseTracks.length > 0 && browseTracks.every((track) => selectedIds.includes(track.id))
 
+  useEffect(() => {
+    if (!deleteArmed) return
+    const id = window.setTimeout(() => setDeleteArmedSelectionKey(null), 4000)
+    return () => window.clearTimeout(id)
+  }, [deleteArmed])
+
   function toggleSelect(trackId: string) {
+    setDeleteArmedSelectionKey(null)
     setSelected((current) => {
       const next = new Set(current)
       if (next.has(trackId)) next.delete(trackId)
@@ -411,22 +413,26 @@ export function SongsPage({
   }
 
   function toggleAll() {
+    setDeleteArmedSelectionKey(null)
     if (allSelected) setSelected(new Set())
     else setSelected(new Set(browseTracks.map((track) => track.id)))
   }
 
   function clearSelection() {
+    setDeleteArmedSelectionKey(null)
     setSelected(new Set())
   }
 
   function handleSplit() {
     if (!splitEligible.length) return
+    setDeleteArmedSelectionKey(null)
     onBatchSplit(splitEligible)
     setSelected(new Set())
   }
 
   function handleExport() {
     if (!exportEligible.length) return
+    setDeleteArmedSelectionKey(null)
     onBatchExport(exportEligible)
     setSelected(new Set())
   }
@@ -434,10 +440,10 @@ export function SongsPage({
   function handleDelete() {
     if (!selectedCount) return
     if (!deleteArmed) {
-      setDeleteArmed(true)
+      setDeleteArmedSelectionKey(selectionKey)
       return
     }
-    setDeleteArmed(false)
+    setDeleteArmedSelectionKey(null)
     onBatchDelete(selectedIds)
     setSelected(new Set())
   }
@@ -453,87 +459,90 @@ export function SongsPage({
 
   return (
     <section className="library">
-      {showQueue ? (
-        <QueueStrip
-          draftsCount={stagedImportsCount}
-          activeRuns={activeRuns}
-          failedRuns={failedRuns}
-          cancellingRunId={cancellingRunId}
-          retryingRunId={retryingRunId}
-          onReviewImports={onReviewImports}
-          onOpenRun={(entry) => {
-            const track = tracks.find((item) => item.id === entry.track_id)
-            if (track) onOpenTrack(track, { runId: entry.run.id })
-          }}
-          onCancelRun={onCancelRun}
-          onRetryRun={onRetryRun}
-        />
-      ) : null}
+      <div className="library-header">
+        {showQueue ? (
+          <QueueStrip
+            draftsCount={stagedImportsCount}
+            activeRuns={activeRuns}
+            failedRuns={failedRuns}
+            cancellingRunId={cancellingRunId}
+            retryingRunId={retryingRunId}
+            onReviewImports={onReviewImports}
+            onOpenRun={(entry) => {
+              const track = tracks.find((item) => item.id === entry.track_id)
+              if (track) onOpenTrack(track, { runId: entry.run.id })
+            }}
+            onCancelRun={onCancelRun}
+            onRetryRun={onRetryRun}
+          />
+        ) : null}
 
-      {tracks.length > 0 ? (
-        <div className="library-controls">
-          <div className="library-toolbar">
-            <div className="library-search-wrap">
-              <input
-                type="search"
-                className="library-search"
-                placeholder="Search"
-                aria-label="Search songs"
-                value={view.search}
-                onChange={(event) => onViewChange({ ...view, search: event.target.value })}
-              />
-              {view.search ? (
-                <button
-                  type="button"
-                  className="library-search-clear"
-                  onClick={() => onViewChange({ ...view, search: '' })}
-                  aria-label="Clear search"
-                >
-                  <ClearIcon />
-                </button>
+        {tracks.length > 0 ? (
+          <div className="library-controls">
+            <div className="library-toolbar">
+              <div className="library-search-wrap">
+                <input
+                  type="search"
+                  className="library-search"
+                  placeholder="Search"
+                  aria-label="Search songs"
+                  value={view.search}
+                  onChange={(event) => onViewChange({ ...view, search: event.target.value })}
+                />
+                {view.search ? (
+                  <button
+                    type="button"
+                    className="library-search-clear"
+                    onClick={() => onViewChange({ ...view, search: '' })}
+                    aria-label="Clear search"
+                  >
+                    <ClearIcon />
+                  </button>
+                ) : null}
+              </div>
+              <div className="library-sort-group" role="group" aria-label="Sort songs">
+                {SONG_BROWSE_SORT_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`library-sort-btn ${view.sort === option.value ? 'is-active' : ''}`}
+                    aria-pressed={view.sort === option.value}
+                    title={option.label}
+                    onClick={() => onViewChange({ ...view, sort: option.value })}
+                  >
+                    {option.shortLabel}
+                  </button>
+                ))}
+              </div>
+              {countLabel ? (
+                <span className="library-count" aria-live="polite">{countLabel}</span>
               ) : null}
             </div>
-            <div className="library-sort-group" role="group" aria-label="Sort songs">
-              {SONG_BROWSE_SORT_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`library-sort-btn ${view.sort === option.value ? 'is-active' : ''}`}
-                  aria-pressed={view.sort === option.value}
-                  title={option.label}
-                  onClick={() => onViewChange({ ...view, sort: option.value })}
-                >
-                  {option.shortLabel}
-                </button>
-              ))}
-            </div>
-            {countLabel ? (
-              <span className="library-count" aria-live="polite">{countLabel}</span>
+
+            {showFilterTabs ? (
+              <div className="library-filters" role="tablist" aria-label="Filter songs">
+                {filterTabs.map((tab) => (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={view.filter === tab.value}
+                    className={`library-filter ${view.filter === tab.value ? 'is-active' : ''}`}
+                    onClick={() => onViewChange({ ...view, filter: tab.value })}
+                  >
+                    {tab.label}
+                    {tab.value !== 'all' ? (
+                      <span className="library-filter-count">{tab.count}</span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
             ) : null}
           </div>
+        ) : null}
+      </div>
 
-          {showFilterTabs ? (
-            <div className="library-filters" role="tablist" aria-label="Filter songs">
-              {filterTabs.map((tab) => (
-                <button
-                  key={tab.value}
-                  type="button"
-                  role="tab"
-                  aria-selected={view.filter === tab.value}
-                  className={`library-filter ${view.filter === tab.value ? 'is-active' : ''}`}
-                  onClick={() => onViewChange({ ...view, filter: tab.value })}
-                >
-                  {tab.label}
-                  {tab.value !== 'all' ? (
-                    <span className="library-filter-count">{tab.count}</span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
+      <div className="library-body">
       {browseTracks.length > 0 ? (
         <div className="library-list" role="list">
           {browseTracks.map((track) => {
@@ -612,11 +621,11 @@ export function SongsPage({
                     return (
                       <span className={`song-row-status ${status.tone ? `is-${status.tone}` : ''} ${status.preferred ? 'is-preferred' : ''}`}>
                         {status.preferred ? (
-                          <span className="song-row-status-star" aria-label="Preferred version" title="Preferred version">★</span>
+                          <span className="song-row-status-star" aria-label="Preferred split" title="Preferred split">★</span>
                         ) : null}
                         {showText ? status.text : null}
                         {status.count ? (
-                          <span className="song-row-status-count" aria-label={`${status.count} versions`}>
+                          <span className="song-row-status-count" aria-label={`${status.count} splits`}>
                             {showText ? `· ${status.count}` : status.count}
                           </span>
                         ) : null}
@@ -702,13 +711,14 @@ export function SongsPage({
               <button type="button" className="button-danger" onClick={handleDelete}>
                 Delete
               </button>
-              <button type="button" className="button-link" onClick={() => setDeleteArmed(false)}>
+              <button type="button" className="button-link" onClick={() => setDeleteArmedSelectionKey(null)}>
                 Cancel
               </button>
             </>
           )}
         </div>
       ) : null}
+      </div>
     </section>
   )
 }

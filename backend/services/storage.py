@@ -92,11 +92,21 @@ def entry_count(path: Path) -> int:
     return sum(1 for _ in path.rglob("*"))
 
 
-def _iter_export_bundle_files(paths: StoragePaths) -> list[Path]:
-    bundle_dir = paths.export_bundles_dir
-    if bundle_dir.is_dir():
-        return sorted(path for path in bundle_dir.iterdir() if path.is_file() and path.suffix == ".zip")
-    return []
+def _iter_export_download_entries(paths: StoragePaths) -> list[Path]:
+    if not paths.exports_dir.is_dir():
+        return []
+
+    entries: list[Path] = []
+    for child in sorted(paths.exports_dir.iterdir()):
+        if child == paths.export_bundles_dir:
+            if child.is_dir():
+                entries.extend(
+                    sorted(path for path in child.iterdir() if path.is_file() or path.is_dir())
+                )
+            continue
+        if child.is_file() or child.is_dir():
+            entries.append(child)
+    return entries
 
 
 def _delete_path(path: Path) -> tuple[int, int]:
@@ -108,6 +118,72 @@ def _delete_path(path: Path) -> tuple[int, int]:
         shutil.rmtree(path, ignore_errors=True)
     else:
         path.unlink(missing_ok=True)
+    return deleted, reclaimed
+
+
+def _live_output_directories(session: Session) -> set[Path]:
+    live: set[Path] = set()
+    for track in list_tracks(session):
+        for run in track.runs:
+            if not run.output_directory:
+                continue
+            live.add(Path(run.output_directory).resolve())
+    return live
+
+
+def _iter_orphaned_output_entries(
+    session: Session,
+    paths: StoragePaths,
+) -> list[Path]:
+    if not paths.outputs_dir.is_dir():
+        return []
+
+    live_output_dirs = _live_output_directories(session)
+    orphans: list[Path] = []
+    for track_dir in sorted(paths.outputs_dir.iterdir()):
+        if not track_dir.is_dir():
+            orphans.append(track_dir)
+            continue
+
+        live_children = 0
+        for child in sorted(track_dir.iterdir()):
+            if child.resolve() in live_output_dirs:
+                live_children += 1
+                continue
+            orphans.append(child)
+
+        if live_children == 0 and not any(child.resolve() in live_output_dirs for child in [track_dir]):
+            if not any(path.parent == track_dir.resolve() for path in live_output_dirs):
+                orphans.append(track_dir)
+
+    # A parent may have been queued after its children; delete children first.
+    unique = {path.resolve(): path for path in orphans}
+    return sorted(unique.values(), key=lambda path: len(path.parts), reverse=True)
+
+
+def orphaned_output_bytes(
+    session: Session,
+    paths: StoragePaths,
+) -> int:
+    return sum(directory_size(path) for path in _iter_orphaned_output_entries(session, paths))
+
+
+def cleanup_orphaned_output_artifacts(
+    session: Session,
+    runtime_settings: RuntimeSettings,
+) -> tuple[int, int]:
+    from backend.services.settings import get_or_create_settings
+
+    settings = get_or_create_settings(session, runtime_settings)
+    paths = resolve_storage_paths(runtime_settings, settings)
+    deleted = 0
+    reclaimed = 0
+
+    for path in _iter_orphaned_output_entries(session, paths):
+        child_deleted, child_reclaimed = _delete_path(path)
+        deleted += child_deleted
+        reclaimed += child_reclaimed
+
     return deleted, reclaimed
 
 
@@ -142,7 +218,7 @@ def cleanup_export_bundles(
     reclaimed = 0
     cutoff = datetime.utcnow() - older_than if older_than is not None else None
 
-    for path in _iter_export_bundle_files(paths):
+    for path in _iter_export_download_entries(paths):
         if cutoff is not None:
             try:
                 modified_at = datetime.utcfromtimestamp(path.stat().st_mtime)
@@ -150,8 +226,8 @@ def cleanup_export_bundles(
                 continue
             if modified_at > cutoff:
                 continue
-        reclaimed += file_size(path)
-        path.unlink(missing_ok=True)
+        _, child_reclaimed = _delete_path(path)
+        reclaimed += child_reclaimed
         deleted += 1
 
     return ExportBundleCleanupResponse(deleted_bundle_count=deleted, bytes_reclaimed=reclaimed)
@@ -162,6 +238,7 @@ def apply_storage_retention(session: Session, runtime_settings: RuntimeSettings)
 
     settings = get_or_create_settings(session, runtime_settings)
     paths = resolve_storage_paths(runtime_settings, settings)
+    cleanup_orphaned_output_artifacts(session, runtime_settings)
     cleanup_temp_storage(paths, older_than=timedelta(hours=settings.temp_max_age_hours or 24))
     cleanup_export_bundles(
         paths,
@@ -207,14 +284,9 @@ def collect_storage_overview(
     library_tracks = list_tracks(session)
 
     upload_paths = {Path(track.source_path) for track in library_tracks if track.source_path}
-    output_paths = {
-        Path(run.output_directory)
-        for track in library_tracks
-        for run in track.runs
-        if run.output_directory
-    }
     non_keeper_reclaimable = sum(_non_keeper_reclaimable_bytes(track) for track in library_tracks)
-    export_bundle_paths = set(_iter_export_bundle_files(paths))
+    orphan_outputs_reclaimable = orphaned_output_bytes(session, paths)
+    export_download_bytes = directory_size(paths.exports_dir)
 
     items = [
         StorageBucketResponse(
@@ -235,15 +307,15 @@ def collect_storage_overview(
             key=StorageBucketKey.outputs,
             label="Run outputs",
             path=str(paths.outputs_dir),
-            total_bytes=_sum_unique_paths(output_paths),
-            reclaimable_bytes=non_keeper_reclaimable,
+            total_bytes=directory_size(paths.outputs_dir),
+            reclaimable_bytes=non_keeper_reclaimable + orphan_outputs_reclaimable,
         ),
         StorageBucketResponse(
             key=StorageBucketKey.export_bundles,
-            label="Export bundles",
-            path=str(paths.export_bundles_dir),
-            total_bytes=_sum_unique_paths(export_bundle_paths),
-            reclaimable_bytes=_sum_unique_paths(export_bundle_paths),
+            label="Export downloads",
+            path=str(paths.exports_dir),
+            total_bytes=export_download_bytes,
+            reclaimable_bytes=export_download_bytes,
         ),
         StorageBucketResponse(
             key=StorageBucketKey.temp,
@@ -264,7 +336,10 @@ def collect_storage_overview(
     return StorageOverviewResponse(items=items, total_bytes=total_bytes)
 
 
-def cleanup_non_keeper_runs_library(session: Session) -> NonKeeperCleanupResponse:
+def cleanup_non_keeper_runs_library(
+    session: Session,
+    runtime_settings: RuntimeSettings,
+) -> NonKeeperCleanupResponse:
     deleted_run_count = 0
     bytes_reclaimed = 0
     purged_track_count = 0
@@ -279,6 +354,9 @@ def cleanup_non_keeper_runs_library(session: Session) -> NonKeeperCleanupRespons
             purged_track_count += 1
             deleted_run_count += deleted
             bytes_reclaimed += reclaimed
+
+    _, orphan_bytes_reclaimed = cleanup_orphaned_output_artifacts(session, runtime_settings)
+    bytes_reclaimed += orphan_bytes_reclaimed
 
     return NonKeeperCleanupResponse(
         purged_track_count=purged_track_count,

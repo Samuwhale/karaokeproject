@@ -33,9 +33,16 @@ def validate_export_artifact_kind(value: str) -> str:
     raise ValueError(f"Unsupported export artifact kind: {cleaned!r}")
 
 
-class ExportOutputMode(StrEnum):
-    single_bundle = "single-bundle"
-    zip_per_track = "zip-per-track"
+class ExportPackagingMode(StrEnum):
+    auto = "auto"
+    flat = "flat"
+    per_song_folders = "per-song-folders"
+
+
+class ExportDeliveryKind(StrEnum):
+    direct_file = "direct-file"
+    flat_zip = "flat-zip"
+    folder_zip = "folder-zip"
 
 
 def _validate_bitrate(value: str) -> str:
@@ -47,11 +54,9 @@ def _validate_bitrate(value: str) -> str:
 
 class ExportBundleRequest(BaseModel):
     track_ids: list[str] = Field(min_length=1)
-    # Optional map {track_id: run_id} to override per-track run selection.
-    # Tracks not in the map use their latest completed run.
     run_ids: dict[str, str] = Field(default_factory=dict)
     artifacts: list[str] = Field(min_length=1)
-    mode: ExportOutputMode = ExportOutputMode.single_bundle
+    packaging: ExportPackagingMode = ExportPackagingMode.auto
     bitrate: str = "320k"
 
     @field_validator("artifacts")
@@ -90,6 +95,7 @@ class ExportBundleResponse(BaseModel):
     job_id: str
     download_url: str
     filename: str
+    delivery: ExportDeliveryKind
     byte_count: int
     included_track_count: int
     skipped: list[ExportBundleSkip] = Field(default_factory=list)
@@ -99,7 +105,7 @@ class ExportPlanRequest(BaseModel):
     track_ids: list[str] = Field(min_length=1)
     run_ids: dict[str, str] = Field(default_factory=dict)
     artifacts: list[str] = Field(min_length=1)
-    mode: ExportOutputMode = ExportOutputMode.single_bundle
+    packaging: ExportPackagingMode = ExportPackagingMode.auto
     bitrate: str = "320k"
 
     @field_validator("artifacts")
@@ -139,12 +145,15 @@ class ExportPlanTrack(BaseModel):
     track_id: str
     track_title: str
     run_id: str | None
+    split_label: str | None = None
     artifacts: list[ExportPlanArtifact]
     skip_reason: str | None = None
 
 
 class ExportPlanResponse(BaseModel):
     tracks: list[ExportPlanTrack]
+    delivery: ExportDeliveryKind | None = None
+    filename: str | None = None
     included_track_count: int
     total_bytes: int
     skipped_track_count: int

@@ -26,6 +26,7 @@ from backend.services.tracks import (
     assign_run_metadata,
     is_cancellation_requested,
     mark_run_cancelled,
+    replace_terminal_runs_for_completed_profile,
     set_run_state,
     write_metadata_file,
 )
@@ -326,6 +327,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             status_message="",
             error_message=None,
         )
+        replace_terminal_runs_for_completed_profile(session, run)
         session.commit()
         apply_storage_retention(session, runtime_settings)
 

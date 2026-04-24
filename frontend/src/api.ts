@@ -1,7 +1,6 @@
 import type {
   BatchDeleteResponse,
   BatchTrackIdsInput,
-  CachedModelsResponse,
   ConfirmImportDraftsInput,
   ConfirmImportDraftsResponse,
   Diagnostics,
@@ -163,10 +162,6 @@ export function updateSettings(settings: Omit<Settings, 'profiles'>) {
 
 export function getStorageOverview() {
   return fetchJson<StorageOverview>('/api/storage')
-}
-
-export function getCachedModels() {
-  return fetchJson<CachedModelsResponse>('/api/models/cached')
 }
 
 export function cleanupTempStorage() {

@@ -15,13 +15,11 @@ class ProcessingProfileResponse(BaseModel):
     strength: str
     best_for: str
     tradeoff: str
-    model_filename: str
     stems: list[str] = Field(default_factory=list)
 
 
 class RunProcessingConfigRequest(BaseModel):
     profile_key: str
-    model_filename: str | None = None
 
     @field_validator("profile_key")
     @classmethod
@@ -31,19 +29,10 @@ class RunProcessingConfigRequest(BaseModel):
             raise ValueError("Profile key cannot be blank.")
         return cleaned
 
-    @field_validator("model_filename")
-    @classmethod
-    def normalize_model_filename(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        cleaned = value.strip()
-        return cleaned or None
-
 
 class RunProcessingConfigResponse(BaseModel):
     profile_key: str
     profile_label: str
-    model_filename: str
 
 
 class ArtifactMetricsResponse(BaseModel):

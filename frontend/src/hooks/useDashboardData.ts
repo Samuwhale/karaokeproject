@@ -16,7 +16,6 @@ import {
   flushPendingLibraryCleanup,
   flushPendingTrackDeletes,
   getActiveRuns,
-  getCachedModels,
   getDiagnostics,
   getSettings,
   getStorageOverview,
@@ -38,7 +37,6 @@ import { discardRejection } from '../async'
 import type { Toast, ToastAction, ToastTone } from '../components/feedback/ToastStack'
 import { isActiveRunStatus } from '../components/runStatus'
 import type {
-  CachedModel,
   ConfirmImportDraftsInput,
   Diagnostics,
   ExportBundleCleanupResponse,
@@ -120,7 +118,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
   const [tracks, setTracks] = useState<TrackSummary[]>([])
   const [drafts, setDrafts] = useState<ImportDraft[]>([])
   const [queueRuns, setQueueRuns] = useState<QueueRunEntry[]>([])
-  const [cachedModels, setCachedModels] = useState<CachedModel[]>([])
 
   const [selectedTrack, setSelectedTrack] = useState<TrackDetail | null>(null)
 
@@ -307,21 +304,11 @@ export function useDashboardData(selection: { trackId: string | null }) {
     }
   }, [pushToast, syncSelectedTrackDetail])
 
-  const refreshCachedModels = useCallback(async () => {
-    try {
-      const result = await getCachedModels()
-      setCachedModels(result.items)
-    } catch {
-      // Non-critical: a missing cache directory just means the list stays empty.
-    }
-  }, [])
-
   useEffect(() => {
     let disposed = false
 
     const initialLoadId = window.setTimeout(() => {
       discardRejection(refreshDashboard)
-      discardRejection(refreshCachedModels)
     }, 0)
 
     function tick() {
@@ -358,7 +345,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('beforeunload', flushPendingDestructive)
     }
-  }, [refreshCachedModels, refreshDashboard])
+  }, [refreshDashboard])
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -552,7 +539,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     setDeletingRunId(runId)
     try {
       await deleteRun(runId)
-      pushToast('success', 'Deleted version.')
+      pushToast('success', 'Deleted split.')
       await refreshDashboard()
     } catch (error) {
       pushToast('error', getErrorMessage(error))
@@ -566,7 +553,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     setSettingKeeper(true)
     try {
       await setKeeperRun(trackId, runId)
-      pushToast('success', runId ? 'Marked as preferred version.' : 'Cleared preferred version.')
+      pushToast('success', runId ? 'Marked as preferred split.' : 'Cleared preferred split.')
       await refreshDashboard()
     } catch (error) {
       pushToast('error', getErrorMessage(error))
@@ -691,7 +678,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
     setSavingSettings(true)
     try {
       await updateSettings(payload)
-      await refreshCachedModels()
       pushToast('success', 'Settings saved.')
       await refreshDashboard()
     } catch (error) {
@@ -729,7 +715,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
       const result: ExportBundleCleanupResponse = await cleanupExportBundles()
       pushToast(
         'success',
-        `Deleted ${result.deleted_bundle_count} export bundle${result.deleted_bundle_count === 1 ? '' : 's'} · ${formatReclaimed(result.bytes_reclaimed)} reclaimed.`,
+        `Deleted ${result.deleted_bundle_count} export download${result.deleted_bundle_count === 1 ? '' : 's'} · ${formatReclaimed(result.bytes_reclaimed)} reclaimed.`,
       )
       await refreshDashboard()
     } catch (error) {
@@ -801,7 +787,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
     tracks: visibleTracks,
     drafts,
     queueRuns,
-    cachedModels,
     selectedTrack,
     toasts,
     dismissToast,

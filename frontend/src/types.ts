@@ -4,31 +4,16 @@ export type ProcessingProfile = {
   strength: string
   best_for: string
   tradeoff: string
-  model_filename: string
   stems: string[]
 }
-
-export type CachedModel = {
-  filename: string
-  size_bytes: number
-  is_profile: boolean
-}
-
-export type CachedModelsResponse = {
-  items: CachedModel[]
-}
-
-export const CUSTOM_PROFILE_KEY = 'custom'
 
 export type RunProcessingConfig = {
   profile_key: string
   profile_label: string
-  model_filename: string
 }
 
 export type RunProcessingConfigInput = {
   profile_key: string
-  model_filename?: string | null
 }
 
 export type Settings = {
@@ -286,7 +271,8 @@ export type NonKeeperCleanupResponse = {
   bytes_reclaimed: number
 }
 
-export type ExportOutputMode = 'single-bundle' | 'zip-per-track'
+export type ExportPackagingMode = 'auto' | 'flat' | 'per-song-folders'
+export type ExportDeliveryKind = 'direct-file' | 'flat-zip' | 'folder-zip'
 export type StaticExportArtifactKind = 'source' | 'metadata' | 'mix-wav' | 'mix-mp3'
 export type StemExportArtifactKind = `stem-wav:${string}` | `stem-mp3:${string}`
 export type ExportArtifactKind = StaticExportArtifactKind | StemExportArtifactKind
@@ -310,7 +296,7 @@ export type ExportBundleInput = {
   track_ids: string[]
   run_ids?: Record<string, string>
   artifacts: ExportArtifactKind[]
-  mode: ExportOutputMode
+  packaging: ExportPackagingMode
   bitrate: string
 }
 
@@ -324,6 +310,7 @@ export type ExportBundleResponse = {
   job_id: string
   download_url: string
   filename: string
+  delivery: ExportDeliveryKind
   byte_count: number
   included_track_count: number
   skipped: ExportBundleSkip[]
@@ -333,7 +320,7 @@ export type ExportPlanInput = {
   track_ids: string[]
   run_ids?: Record<string, string>
   artifacts: ExportArtifactKind[]
-  mode: ExportOutputMode
+  packaging: ExportPackagingMode
   bitrate: string
 }
 
@@ -348,12 +335,15 @@ export type ExportPlanTrack = {
   track_id: string
   track_title: string
   run_id: string | null
+  split_label: string | null
   artifacts: ExportPlanArtifact[]
   skip_reason: string | null
 }
 
 export type ExportPlanResponse = {
   tracks: ExportPlanTrack[]
+  delivery: ExportDeliveryKind | null
+  filename: string | null
   included_track_count: number
   total_bytes: number
   skipped_track_count: number

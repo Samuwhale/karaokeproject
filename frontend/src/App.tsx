@@ -86,7 +86,6 @@ function App() {
     handleBatchDeleteTracks,
   } = dashboard
 
-  const [lastVisitedTrackId, setLastVisitedTrackId] = useState<string | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsView, setSettingsView] = useState<'preferences' | 'maintenance' | 'storage'>(
@@ -97,6 +96,7 @@ function App() {
   const [batchSplitIds, setBatchSplitIds] = useState<string[] | null>(null)
   const [dragOverlayActive, setDragOverlayActive] = useState(false)
   const dragCounterRef = useRef(0)
+  const lastVisitedTrackIdRef = useRef<string | null>(mixTrackId)
 
   const browseTracks = useMemo(
     () => applySongBrowse(tracks, { search: songsView.search, sort: songsView.sort }),
@@ -112,7 +112,7 @@ function App() {
     ? { index: currentBrowseIndex, total: browseTracks.length }
     : null
   const defaultProcessing: RunProcessingConfigInput = {
-    profile_key: settings?.default_profile ?? 'standard',
+    profile_key: settings?.default_profile ?? 'karaoke',
   }
   const defaultBitrate = settings?.export_mp3_bitrate ?? '320k'
   const hasFirstSync = connection.lastSyncAt > 0
@@ -128,6 +128,7 @@ function App() {
   }
 
   function openMix(trackId: string, options?: { runId?: string | null }) {
+    lastVisitedTrackIdRef.current = trackId
     navigate(buildMixPath(trackId, { runId: options?.runId ?? null }), { state: { songsView } })
   }
 
@@ -135,10 +136,6 @@ function App() {
     const runId = options?.runId ?? track.keeper_run_id ?? track.latest_run?.id ?? null
     openMix(track.id, { runId })
   }
-
-  useEffect(() => {
-    if (mixTrackId) setLastVisitedTrackId(mixTrackId)
-  }, [mixTrackId])
 
   const revealImportPanel = useEffectEvent(() => {
     if (mixActive) openSongs()
@@ -351,7 +348,7 @@ function App() {
                 <SongsPage
                   view={songsView}
                   tracks={tracks}
-                  currentTrackId={lastVisitedTrackId}
+                  currentTrackId={mixTrackId ?? lastVisitedTrackIdRef.current}
                   stagedImportsCount={drafts.length}
                   queueRuns={queueRuns}
                   cancellingRunId={cancellingRunId}
@@ -502,9 +499,9 @@ type ShortcutEntry = { key: string; desc: string; note?: string }
 const SHORTCUT_ENTRIES: ShortcutEntry[] = [
   { key: 'j / ↓', desc: 'Next track' },
   { key: 'k / ↑', desc: 'Previous track' },
-  { key: 'r', desc: 'Re-split with default profile', note: 'Mix workspace' },
-  { key: '1 – 9', desc: 'Switch to version by index', note: 'Mix workspace' },
-  { key: 'v', desc: 'Open Versions panel', note: 'Mix workspace' },
+  { key: 'r', desc: 'Re-split with default split type', note: 'Mix workspace' },
+  { key: '1 – 9', desc: 'Switch to split by index', note: 'Mix workspace' },
+  { key: 'v', desc: 'Open split picker', note: 'Mix workspace' },
   { key: 'e', desc: 'Open Export panel', note: 'Mix workspace' },
   { key: 'Space', desc: 'Play / Pause', note: 'Mix workspace' },
   { key: '← →', desc: 'Adjust fader', note: '0.5 dB step' },

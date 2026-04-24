@@ -3,6 +3,7 @@ import json
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
+from backend.core.constants import PROFILE_KEY_ALIASES
 from backend.core.config import get_runtime_settings
 
 
@@ -32,24 +33,17 @@ _COLUMN_ADDITIONS: tuple[tuple[str, str, str], ...] = (
 )
 
 
-_PROFILE_KEY_RENAMES: dict[str, str] = {
-    "fast-preview": "preview",
-    "balanced": "standard",
-    "clean-instrumental": "high",
-    "maximum": "high",
-    # "vocal-focus" was dropped in favour of "high"; existing runs keep their
-    # original label in metadata but their key migrates so lookups still work.
-    "vocal-focus": "high",
-    "karaoke-stems": "vocal-split",
-}
-
 _PROFILE_LABEL_RENAMES: dict[str, str] = {
-    "Fast Preview": "Preview",
-    "Balanced": "Standard",
-    "Clean Instrumental": "High",
-    "Maximum": "High",
-    "Vocal focus": "High",
-    "Karaoke stems": "Vocal split",
+    "Fast Preview": "Karaoke",
+    "Preview": "Karaoke",
+    "Balanced": "Karaoke",
+    "Standard": "Karaoke",
+    "Clean Instrumental": "Karaoke",
+    "High": "Karaoke",
+    "Maximum": "Karaoke",
+    "Vocal focus": "Karaoke",
+    "Vocal split": "Lead vocal split",
+    "Karaoke stems": "Lead vocal split",
 }
 
 
@@ -68,7 +62,7 @@ def _apply_schema_migrations(engine: Engine) -> None:
 
 def _migrate_profile_keys(engine: Engine) -> None:
     with engine.begin() as connection:
-        for legacy, current in _PROFILE_KEY_RENAMES.items():
+        for legacy, current in PROFILE_KEY_ALIASES.items():
             connection.execute(
                 text("UPDATE runs SET preset = :current WHERE preset = :legacy"),
                 {"current": current, "legacy": legacy},
@@ -95,8 +89,8 @@ def _migrate_profile_keys(engine: Engine) -> None:
                 continue
             changed = False
             legacy_key = processing.get("profile_key")
-            if isinstance(legacy_key, str) and legacy_key in _PROFILE_KEY_RENAMES:
-                processing["profile_key"] = _PROFILE_KEY_RENAMES[legacy_key]
+            if isinstance(legacy_key, str) and legacy_key in PROFILE_KEY_ALIASES:
+                processing["profile_key"] = PROFILE_KEY_ALIASES[legacy_key]
                 changed = True
             legacy_label = processing.get("profile_label")
             if isinstance(legacy_label, str) and legacy_label in _PROFILE_LABEL_RENAMES:

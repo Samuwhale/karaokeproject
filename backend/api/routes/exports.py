@@ -14,7 +14,7 @@ from backend.schemas.exports import (
 )
 from backend.services.exports import (
     build_export_bundle,
-    bundle_path,
+    export_job_path,
     list_export_stems,
     plan_export_bundle,
 )
@@ -57,11 +57,11 @@ def download_export_bundle(
     runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
 ) -> FileResponse:
     try:
-        path = bundle_path(session, runtime_settings, job_id)
+        path = export_job_path(session, runtime_settings, job_id)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     if not path.is_file():
-        raise HTTPException(status_code=404, detail="Export bundle is no longer available.")
+        raise HTTPException(status_code=404, detail="Export download is no longer available.")
     return FileResponse(
         path=path,
         filename=path.name,

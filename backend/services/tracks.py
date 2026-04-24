@@ -154,6 +154,30 @@ def _run_has_mixable_stems(run: Run) -> bool:
     return bool(mixable_artifacts(run))
 
 
+def _run_profile_key(run: Run) -> str:
+    return str(resolve_run_processing(run)["profile_key"])
+
+
+def _profile_runs(track: Track, profile_key: str, *, exclude_run_id: str | None = None) -> list[Run]:
+    return [
+        run
+        for run in track.runs
+        if run.id != exclude_run_id and _run_profile_key(run) == profile_key
+    ]
+
+
+def _pick_terminal_run_to_keep(runs: list[Run], keeper_run_id: str | None) -> Run:
+    keeper = next((run for run in runs if run.id == keeper_run_id), None)
+    if keeper is not None:
+        return keeper
+
+    completed_runs = [run for run in runs if run.status == RunStatus.completed.value]
+    if completed_runs:
+        return max(completed_runs, key=lambda run: run.updated_at)
+
+    return max(runs, key=lambda run: run.updated_at)
+
+
 def _is_default_stem(entry: dict[str, Any] | RunMixStemEntry) -> bool:
     gain = getattr(entry, "gain_db", None)
     muted = getattr(entry, "muted", None)
@@ -367,19 +391,31 @@ def create_track(
     return track
 
 
-def create_run(track: Track, processing: dict[str, str]) -> Run:
+def create_run(track: Track, processing: dict[str, Any]) -> Run:
     session = object_session(track)
     if session is not None:
         prune_terminal_runs_without_stems(session, track)
+        deduplicate_terminal_runs_by_profile(session, track)
+
+    active_same_profile = next(
+        (
+            run
+            for run in _profile_runs(track, str(processing["profile_key"]))
+            if run.status == RunStatus.queued.value or run.status in IN_PROGRESS_RUN_STATUSES
+        ),
+        None,
+    )
+    if active_same_profile is not None:
+        raise ValueError(f"{processing['profile_label']} is already queued or running for this song.")
 
     _touch_track(track)
     run = Run(
         track_id=track.id,
-        profile_key=processing["profile_key"],
+        profile_key=str(processing["profile_key"]),
         status=RunStatus.queued.value,
         progress=0.0,
         status_message="",
-        metadata_json={"processing": processing},
+        metadata_json={"processing": {"profile_key": str(processing["profile_key"])}},
     )
     run.artifacts.append(
         RunArtifact(
@@ -539,7 +575,7 @@ def delete_run(session: Session, run_id: str) -> None:
     if run.status not in TERMINAL_RUN_STATUSES:
         raise ValueError("Only completed, failed, or cancelled runs can be deleted.")
     if run.track and run.track.keeper_run_id == run.id:
-        raise ValueError("Clear the final version before deleting this run.")
+        raise ValueError("Clear the preferred split before deleting this run.")
 
     if run.track is not None:
         _touch_track(run.track)
@@ -554,17 +590,13 @@ def retry_run(session: Session, run_id: str) -> Run:
     if source_run is None:
         raise LookupError(f"Run '{run_id}' does not exist.")
 
-    stored_processing = (source_run.metadata_json or {}).get("processing")
-    if not isinstance(stored_processing, dict) or "profile_key" not in stored_processing:
-        raise ValueError("This run does not have a stored processing config to retry from.")
-
     # Drop the failed/cancelled source run from the queue view so it doesn't
     # sit next to the retry that replaces it.
     if source_run.status in TERMINAL_RUN_STATUSES and source_run.dismissed_at is None:
         source_run.dismissed_at = datetime.utcnow()
 
     track = source_run.track
-    processing: dict[str, str] = {str(key): str(value) for key, value in stored_processing.items()}
+    processing = resolve_run_processing(source_run)
     new_run = create_run(track, processing)
     session.commit()
     session.refresh(new_run)
@@ -585,6 +617,68 @@ def prune_terminal_runs_without_stems(session: Session, track: Track) -> int:
         session.delete(run)
         deleted += 1
 
+    return deleted
+
+
+def deduplicate_terminal_runs_by_profile(session: Session, track: Track) -> int:
+    deleted = 0
+    profile_keys = {_run_profile_key(run) for run in track.runs}
+
+    for profile_key in profile_keys:
+        matching_runs = _profile_runs(track, profile_key)
+        if any(run.status == RunStatus.queued.value or run.status in IN_PROGRESS_RUN_STATUSES for run in matching_runs):
+            continue
+
+        terminal_runs = [run for run in matching_runs if run.status in TERMINAL_RUN_STATUSES]
+        if len(terminal_runs) < 2:
+            continue
+
+        keep_run = _pick_terminal_run_to_keep(terminal_runs, track.keeper_run_id)
+        for run in terminal_runs:
+            if run.id == keep_run.id:
+                continue
+            _delete_run_files(run, include_source=False)
+            session.delete(run)
+            deleted += 1
+
+    if deleted:
+        _touch_track(track)
+    return deleted
+
+
+def replace_terminal_runs_for_completed_profile(session: Session, completed_run: Run) -> int:
+    track = session.get(
+        Track,
+        completed_run.track_id,
+        options=[selectinload(Track.runs).selectinload(Run.artifacts)],
+    )
+    if track is None:
+        return 0
+
+    replaced_keeper = False
+    deleted = 0
+    for run in _profile_runs(track, _run_profile_key(completed_run), exclude_run_id=completed_run.id):
+        if run.status not in TERMINAL_RUN_STATUSES:
+            continue
+        if track.keeper_run_id == run.id:
+            replaced_keeper = True
+        _delete_run_files(run, include_source=False)
+        session.delete(run)
+        deleted += 1
+
+    if replaced_keeper:
+        track.keeper_run_id = completed_run.id
+    if deleted or replaced_keeper:
+        _touch_track(track)
+    return deleted
+
+
+def backfill_split_run_deduplication(session: Session) -> int:
+    deleted = 0
+    for track in list_tracks(session):
+        deleted += deduplicate_terminal_runs_by_profile(session, track)
+    if deleted:
+        session.commit()
     return deleted
 
 

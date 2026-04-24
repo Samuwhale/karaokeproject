@@ -42,9 +42,6 @@ class ProfileDefinition:
     followup: FollowupDefinition | None = None
 
 
-CUSTOM_PROFILE_KEY = "custom"
-
-
 _VOCAL_INSTRUMENTAL_STEMS: tuple[str, ...] = ("vocals", "instrumental")
 _FOUR_STEM_STEMS: tuple[str, ...] = ("vocals", "drums", "bass", "other")
 _VOCAL_SPLIT_STEMS: tuple[str, ...] = ("lead_vocals", "backing_vocals", "instrumental")
@@ -52,51 +49,33 @@ _VOCAL_SPLIT_STEMS: tuple[str, ...] = ("lead_vocals", "backing_vocals", "instrum
 
 PROFILE_DEFINITIONS: tuple[ProfileDefinition, ...] = (
     ProfileDefinition(
-        key="preview",
-        label="Preview",
-        strength="Fastest",
-        best_for="Quick triage — is this track worth a full render?",
-        tradeoff="Vocal bleed and artefacts are expected.",
-        model_filename="UVR_MDXNET_KARA_2.onnx",
-        stems=_VOCAL_INSTRUMENTAL_STEMS,
-    ),
-    ProfileDefinition(
-        key="standard",
-        label="Standard",
-        strength="Balanced default",
-        best_for="Most pop, rock, and electronic tracks.",
-        tradeoff="Not always clean on dense mixes with heavy vocal layering.",
-        model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt",
-        stems=_VOCAL_INSTRUMENTAL_STEMS,
-    ),
-    ProfileDefinition(
-        key="high",
-        label="High",
-        strength="Cleaner split",
-        best_for="Busy mixes where Standard leaves vocals bleeding.",
-        tradeoff="Noticeably slower.",
+        key="karaoke",
+        label="Karaoke",
+        strength="Vocals + instrumental",
+        best_for="Clean vocal removal when you want a straight karaoke or instrumental mix.",
+        tradeoff="Use Full stems if you need separate drums, bass, or other instruments.",
         model_filename="model_bs_roformer_ep_368_sdr_12.9628.ckpt",
         stems=_VOCAL_INSTRUMENTAL_STEMS,
     ),
     ProfileDefinition(
         key="full-stems",
         label="Full stems",
-        strength="Four-stem split",
-        best_for="Isolating or turning down drums, bass, or other instruments.",
-        tradeoff="Vocals are slightly less clean than a dedicated vocal model.",
+        strength="Vocals + drums + bass + other",
+        best_for="Turning specific instruments up or down without collapsing everything into one instrumental stem.",
+        tradeoff="Vocals are usually less isolated than Karaoke because the split is more granular.",
         model_filename="htdemucs_ft.yaml",
         stems=_FOUR_STEM_STEMS,
     ),
     ProfileDefinition(
         key="vocal-split",
-        label="Vocal split",
-        strength="Lead + backing vocals split",
-        best_for="Keeping backing vocals in the mix, or isolating just the lead.",
-        tradeoff="Runs two models back-to-back — roughly twice as slow as Standard.",
-        # Chained pipeline: Standard (bs_roformer) isolates vocals from the
+        label="Lead vocal split",
+        strength="Lead + backing vocals + instrumental",
+        best_for="Keeping backing vocals in while reducing or removing only the lead vocal.",
+        tradeoff="Runs a second vocal-only split after Karaoke, so it is the slowest option.",
+        # Chained pipeline: Karaoke (bs_roformer) isolates vocals from the
         # mix, then UVR-BVE-4B splits that vocal stem into lead + backing.
-        # Final output: {instrumental (from Standard), lead_vocals, backing_vocals}.
-        model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+        # Final output: {instrumental (from Karaoke), lead_vocals, backing_vocals}.
+        model_filename="model_bs_roformer_ep_368_sdr_12.9628.ckpt",
         stems=_VOCAL_SPLIT_STEMS,
         followup=FollowupDefinition(
             input_stem="vocals",
@@ -111,10 +90,24 @@ PROFILE_LOOKUP: dict[str, ProfileDefinition] = {
 }
 
 
-# Standard is the default because its quality/speed balance fits most imports
-# without the user having to think. Change deliberately — it is the starting
-# point for every new track until the user picks something else.
-DEFAULT_PROFILE_KEY = "standard"
+DEFAULT_PROFILE_KEY = "karaoke"
 
 
-MODEL_FILENAME_SUFFIXES = (".ckpt", ".onnx", ".pth", ".yaml", ".yml")
+PROFILE_KEY_ALIASES: dict[str, str] = {
+    "fast-preview": "karaoke",
+    "preview": "karaoke",
+    "balanced": "karaoke",
+    "standard": "karaoke",
+    "clean-instrumental": "karaoke",
+    "high": "karaoke",
+    "maximum": "karaoke",
+    "vocal-focus": "karaoke",
+    "karaoke-stems": "vocal-split",
+}
+
+
+def resolve_profile_key(profile_key: str | None) -> str:
+    cleaned = (profile_key or "").strip()
+    if not cleaned:
+        return DEFAULT_PROFILE_KEY
+    return PROFILE_KEY_ALIASES.get(cleaned, cleaned)
