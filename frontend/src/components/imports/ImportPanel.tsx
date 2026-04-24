@@ -1,7 +1,9 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+import type { DragEvent } from 'react'
 
 import { discardRejection } from '../../async'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
+import { filterImportableMediaFiles } from '../../importableMedia'
 import { Spinner } from '../feedback/Spinner'
 import type {
   ConfirmImportDraftsInput,
@@ -12,17 +14,23 @@ import type {
   UpdateImportDraftInput,
 } from '../../types'
 
-type ImportsOverlayProps = {
+export type ImportPanelProps = {
   open: boolean
   drafts: ImportDraft[]
   profiles: ProcessingProfile[]
   defaultProfileKey: string
+  resolvingYoutubeImport: boolean
+  resolvingLocalImport: boolean
   confirming: boolean
   onClose: () => void
+  onResolveYouTube: (url: string) => Promise<unknown>
+  onResolveLocalImport: (files: File[]) => Promise<unknown>
   onUpdateDraft: (draftId: string, payload: UpdateImportDraftInput) => Promise<void>
   onDiscardDraft: (draftId: string) => Promise<void>
   onConfirm: (payload: ConfirmImportDraftsInput) => Promise<unknown>
 }
+
+// ---- Helpers ---------------------------------------------------------------
 
 function formatDuration(seconds: number | null) {
   if (seconds === null) return '—'
@@ -41,6 +49,10 @@ function formatSize(bytes: number | null) {
 function sourceLabel(item: ImportDraft) {
   if (item.source_type === 'youtube') return item.playlist_source_url ? 'YouTube playlist' : 'YouTube'
   return item.original_filename ?? 'Local file'
+}
+
+function looksLikePlaylist(url: string) {
+  return /[?&]list=/.test(url.trim())
 }
 
 function needsDuplicateDecision(item: ImportDraft) {
@@ -70,6 +82,8 @@ function duplicateHint(item: ImportDraft) {
 function countAction(items: ImportDraft[], action: DraftDuplicateAction) {
   return items.filter((item) => item.duplicate_action === action).length
 }
+
+// ---- ImportRow -------------------------------------------------------------
 
 type ImportRowProps = {
   draft: ImportDraft
@@ -138,9 +152,7 @@ const ImportRow = forwardRef<ImportRowHandle, ImportRowProps>(function ImportRow
     }
   }
 
-  useImperativeHandle(ref, () => ({
-    flushPendingEdits,
-  }))
+  useImperativeHandle(ref, () => ({ flushPendingEdits }))
 
   return (
     <article className={`import-row ${needsDecision ? 'needs-decision' : ''}`} aria-busy={busy}>
@@ -229,33 +241,98 @@ const ImportRow = forwardRef<ImportRowHandle, ImportRowProps>(function ImportRow
   )
 })
 
-export function ImportsOverlay(props: ImportsOverlayProps) {
+// ---- ImportPanel -----------------------------------------------------------
+
+export function ImportPanel(props: ImportPanelProps) {
   if (!props.open) return null
-  return <ImportsOverlayContent {...props} />
+  return <ImportPanelContent {...props} />
 }
 
-function ImportsOverlayContent({
+function ImportPanelContent({
   drafts,
   profiles,
   defaultProfileKey,
+  resolvingYoutubeImport,
+  resolvingLocalImport,
   confirming,
   onClose,
+  onResolveYouTube,
+  onResolveLocalImport,
   onUpdateDraft,
   onDiscardDraft,
   onConfirm,
-}: ImportsOverlayProps) {
+}: ImportPanelProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
   useDialogFocus(true, { containerRef: panelRef, initialFocusRef: closeButtonRef })
 
-  const activeProfile = profiles.some((profile) => profile.key === defaultProfileKey)
+  // ---- Source section state -----------------------------------------------
+
+  const [youtubeUrl, setYoutubeUrl] = useState('')
+  const [localFiles, setLocalFiles] = useState<File[]>([])
+  const [dragActive, setDragActive] = useState(false)
+  const [sourceError, setSourceError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  function clearSource() {
+    setYoutubeUrl('')
+    setLocalFiles([])
+    setDragActive(false)
+    setSourceError(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  async function stageYouTube() {
+    const trimmed = youtubeUrl.trim()
+    if (!trimmed) return
+    setSourceError(null)
+    try {
+      await onResolveYouTube(trimmed)
+      clearSource()
+    } catch (raw) {
+      setSourceError(raw instanceof Error ? raw.message : 'Could not resolve URL.')
+    }
+  }
+
+  async function stageFiles() {
+    if (!localFiles.length) return
+    setSourceError(null)
+    try {
+      await onResolveLocalImport(localFiles)
+      clearSource()
+    } catch (raw) {
+      setSourceError(raw instanceof Error ? raw.message : 'Could not stage those files.')
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    setDragActive(false)
+    const accepted = filterImportableMediaFiles(event.dataTransfer.files)
+    if (accepted.length === 0) {
+      setSourceError('Drop audio or video files.')
+      return
+    }
+    setSourceError(null)
+    setLocalFiles(accepted)
+  }
+
+  const sourceBusy = resolvingYoutubeImport || resolvingLocalImport
+  const playlistHint = youtubeUrl.trim() && looksLikePlaylist(youtubeUrl)
+    ? 'Playlists can take up to 30 seconds to resolve.'
+    : null
+
+  // ---- Review section state -----------------------------------------------
+
+  const activeProfile = profiles.some((p) => p.key === defaultProfileKey)
     ? defaultProfileKey
     : profiles[0]?.key ?? defaultProfileKey
   const [selectedProfileKey, setSelectedProfileKey] = useState<string | null>(null)
   const [pendingDraftActions, setPendingDraftActions] = useState<Record<string, number>>({})
   const rowRefs = useRef<Record<string, ImportRowHandle | null>>({})
   const profileKey =
-    selectedProfileKey && profiles.some((profile) => profile.key === selectedProfileKey)
+    selectedProfileKey && profiles.some((p) => p.key === selectedProfileKey)
       ? selectedProfileKey
       : activeProfile
   const hasPendingDraftActions = Object.keys(pendingDraftActions).length > 0
@@ -316,46 +393,145 @@ function ImportsOverlayContent({
     })
   }
 
+  // ---- Render ---------------------------------------------------------------
+
   return (
     <div
       className="overlay"
       role="dialog"
       aria-modal="true"
-      aria-label="Review imports"
+      aria-label="Add songs"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
     >
-      <div className="overlay-panel overlay-panel-wide" ref={panelRef} tabIndex={-1}>
+      <div className="overlay-panel" ref={panelRef} tabIndex={-1}>
         <header className="overlay-head">
-          <h2>Review imports</h2>
+          <h2>Add songs</h2>
           <button ref={closeButtonRef} type="button" className="button-secondary" onClick={onClose}>
             Close
           </button>
         </header>
 
         <div className="overlay-body">
-          {drafts.length === 0 ? (
-            <p className="imports-empty">No imports staged.</p>
-          ) : (
+          {/* ---- Source input ------------------------------------------- */}
+          <div className="import-panel-source">
+            <div className="import-panel-url-row">
+              <input
+                type="url"
+                className="import-panel-url-input"
+                placeholder="Paste a YouTube URL…"
+                value={youtubeUrl}
+                onChange={(event) => {
+                  setYoutubeUrl(event.target.value)
+                  if (sourceError) setSourceError(null)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || !youtubeUrl.trim() || sourceBusy) return
+                  event.preventDefault()
+                  discardRejection(stageYouTube)
+                }}
+                disabled={sourceBusy}
+                aria-label="YouTube URL"
+              />
+              <button
+                type="button"
+                className="button-primary"
+                disabled={!youtubeUrl.trim() || sourceBusy}
+                onClick={() => discardRejection(stageYouTube)}
+              >
+                {resolvingYoutubeImport ? <><Spinner /> Resolving…</> : 'Add'}
+              </button>
+            </div>
+
+            {playlistHint ? (
+              <p className="import-panel-hint">{playlistHint}</p>
+            ) : null}
+
+            <div
+              className={`import-panel-drop ${dragActive ? 'is-active' : ''} ${localFiles.length > 0 ? 'is-loaded' : ''}`}
+              onDrop={handleDrop}
+              onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); setDragActive(true) }}
+              onDragLeave={(event) => { event.preventDefault(); event.stopPropagation(); setDragActive(false) }}
+              onDragEnter={(event) => { event.preventDefault(); event.stopPropagation(); setDragActive(true) }}
+              onClick={() => fileInputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              aria-label="Drop audio or video files, or press Enter to browse"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  fileInputRef.current?.click()
+                }
+              }}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="audio/*,video/*"
+                multiple
+                disabled={sourceBusy}
+                onChange={(event) => {
+                  const accepted = filterImportableMediaFiles(event.target.files ?? [])
+                  setLocalFiles(accepted)
+                  setSourceError(accepted.length > 0 ? null : 'Choose audio or video files.')
+                }}
+                hidden
+              />
+              {localFiles.length > 0 ? (
+                <span className="import-panel-drop-label">
+                  <strong>{localFiles.length} file{localFiles.length === 1 ? '' : 's'} ready</strong>
+                  <span>{localFiles.map((f) => f.name).join(', ')}</span>
+                </span>
+              ) : (
+                <span className="import-panel-drop-label">
+                  <span>Drop audio or video files, or click to browse</span>
+                </span>
+              )}
+            </div>
+
+            {localFiles.length > 0 ? (
+              <div className="import-panel-file-actions">
+                <button
+                  type="button"
+                  className="button-primary"
+                  disabled={sourceBusy}
+                  onClick={() => discardRejection(stageFiles)}
+                >
+                  {resolvingLocalImport ? <><Spinner /> Adding…</> : `Add ${localFiles.length} file${localFiles.length === 1 ? '' : 's'}`}
+                </button>
+                <button
+                  type="button"
+                  className="button-link"
+                  disabled={sourceBusy}
+                  onClick={clearSource}
+                >
+                  Clear
+                </button>
+              </div>
+            ) : null}
+
+            {sourceError ? (
+              <p className="import-panel-error" role="alert">{sourceError}</p>
+            ) : null}
+          </div>
+
+          {/* ---- Staged review ------------------------------------------ */}
+          {drafts.length > 0 ? (
             <>
-              <div className="imports-summary">
-                <strong>
-                  {drafts.length} source{drafts.length === 1 ? '' : 's'} staged
-                </strong>
-                <div className="imports-summary-stats">
-                  <span>{createNew} new</span>
-                  <span>{reuse} attached</span>
-                  <span>{skip} skipped</span>
-                </div>
+              <div className="import-panel-divider">
+                <span>Queued · {drafts.length}</span>
+                <span className="import-panel-divider-stats">
+                  {createNew > 0 ? `${createNew} new` : null}
+                  {reuse > 0 ? `${reuse} attached` : null}
+                  {skip > 0 ? `${skip} skipped` : null}
+                </span>
               </div>
 
               {ordered.map((draft) => (
                 <ImportRow
                   key={draft.id}
-                  ref={(value) => {
-                    rowRefs.current[draft.id] = value
-                  }}
+                  ref={(value) => { rowRefs.current[draft.id] = value }}
                   draft={draft}
                   busy={confirming || !!pendingDraftActions[draft.id]}
                   onUpdate={(payload) => runDraftAction(draft.id, () => onUpdateDraft(draft.id, payload))}
@@ -368,45 +544,42 @@ function ImportsOverlayContent({
                 />
               ))}
             </>
-          )}
+          ) : null}
         </div>
 
         {drafts.length > 0 ? (
           <footer className="overlay-foot">
             <div className="overlay-foot-copy">
               {hasPendingDraftActions
-                ? 'Saving import changes…'
+                ? 'Saving…'
                 : unresolved > 0
-                ? `${unresolved} duplicate decision${unresolved === 1 ? '' : 's'} left.`
-                : 'Ready to import.'}
+                  ? `${unresolved} duplicate decision${unresolved === 1 ? '' : 's'} left`
+                  : 'Ready to import'}
             </div>
             <div className="overlay-foot-actions">
-              <select
-                className="library-sort"
-                value={profileKey}
-                onChange={(event) => setSelectedProfileKey(event.target.value)}
-                disabled={!canConfirm}
-                aria-label="Split profile"
-              >
-                {profiles.map((profile) => (
-                  <option key={profile.key} value={profile.key}>
-                    {profile.label}
-                  </option>
-                ))}
-              </select>
+              <label className="overlay-foot-profile">
+                <span className="overlay-foot-profile-label">Profile</span>
+                <select
+                  className="library-sort"
+                  value={profileKey}
+                  onChange={(event) => setSelectedProfileKey(event.target.value)}
+                  disabled={!canConfirm}
+                  aria-label="Split profile"
+                >
+                  {profiles.map((profile) => (
+                    <option key={profile.key} value={profile.key}>
+                      {profile.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
                 type="button"
                 className="button-secondary"
                 disabled={!canConfirm}
                 onClick={() => discardRejection(() => confirm(false))}
               >
-                {confirming ? (
-                  <>
-                    <Spinner /> Importing…
-                  </>
-                ) : (
-                  'Add to library'
-                )}
+                {confirming ? <><Spinner /> Importing…</> : 'Add to library'}
               </button>
               <button
                 type="button"
@@ -414,13 +587,7 @@ function ImportsOverlayContent({
                 disabled={!canConfirm}
                 onClick={() => discardRejection(() => confirm(true))}
               >
-                {confirming ? (
-                  <>
-                    <Spinner /> Queueing…
-                  </>
-                ) : (
-                  'Add and split'
-                )}
+                {confirming ? <><Spinner /> Queueing…</> : 'Add and split'}
               </button>
             </div>
           </footer>

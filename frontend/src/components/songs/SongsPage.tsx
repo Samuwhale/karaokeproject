@@ -48,7 +48,7 @@ function rowStatus(track: TrackSummary): RowStatus {
       tone: 'attn',
     }
   }
-  if (stage.key === 'needs-split') return { text: 'No split yet', tone: null }
+  if (stage.key === 'needs-split') return { text: 'Not split', tone: null }
   if (stage.key === 'final') return { text: 'Final', tone: 'final' }
   return { text: null, tone: null }
 }
@@ -325,8 +325,6 @@ export function SongsPage({
 
   return (
     <section className="library">
-      <h1 className="library-hero">Library</h1>
-
       {showQueue ? (
         <QueueStrip
           draftsCount={stagedImportsCount}
@@ -427,7 +425,7 @@ export function SongsPage({
       ) : (
         <div className="library-empty">
           <strong>No songs yet</strong>
-          <p>Paste a YouTube URL, drop audio files, or hit Add to start.</p>
+          <p>Paste a YouTube URL anywhere, drag audio files onto the window, or click Add songs to browse.</p>
           <button type="button" className="button-primary" onClick={onAddSongs}>
             Add songs
           </button>
@@ -444,7 +442,7 @@ export function SongsPage({
             {allSelected ? 'Clear all' : 'Select all'}
           </button>
           <button type="button" className="button-link" onClick={clearSelection}>
-            Cancel
+            Deselect
           </button>
           <button type="button" className="button-danger" onClick={handleDelete}>
             Delete {selectedCount}

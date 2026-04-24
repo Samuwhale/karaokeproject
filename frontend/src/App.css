@@ -44,13 +44,53 @@ button.topbar-chip:focus-visible {
   position: fixed;
   top: calc(var(--topbar-h) + var(--space-sm));
   right: var(--space-md);
-  z-index: 30;
+  z-index: 60;
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
   width: min(360px, calc(100vw - var(--space-lg)));
   pointer-events: none;
 }
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--t-sm);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 18px -10px color-mix(in oklch, var(--bg) 90%, black);
+  animation: toast-in 140ms ease-out both;
+}
+
+.toast-success {
+  background: color-mix(in oklch, var(--ok) 8%, var(--surface));
+}
+
+.toast-error {
+  background: color-mix(in oklch, var(--err) 10%, var(--surface));
+  border-color: color-mix(in oklch, var(--err) 30%, var(--border));
+}
+
+.toast-info {
+  background: color-mix(in oklch, var(--info) 8%, var(--surface));
+}
+
+.toast-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+
+.toast-dot-success { background: var(--ok); }
+.toast-dot-error { background: var(--err); }
+.toast-dot-info { background: var(--info); }
 
 .toast-body {
   flex: 1 1 auto;
@@ -404,30 +444,6 @@ button.topbar-chip:focus-visible {
 
 h1, h2, h3, h4, p {
   margin: 0;
-}
-
-/* -------- Track list -------------------------------------------------- */
-
-.library-search {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--surface) 72%, transparent);
-  padding: 10px 14px;
-  color: var(--text);
-  font-size: var(--t-base);
-  font-family: var(--font-sans);
-  transition: border-color 80ms ease;
-}
-
-.library-search:hover {
-  border-color: var(--border-strong);
-}
-
-.library-search:focus {
-  outline: none;
-  border-color: var(--border-strong);
 }
 
 /* -------- Forms ------------------------------------------------------- */
@@ -799,56 +815,6 @@ code {
   color: var(--text-muted);
 }
 
-/* -------- Drop zone -------------------------------------------------- */
-
-.drop-zone-active {
-  border-color: var(--accent);
-  background: color-mix(in oklch, var(--accent) 6%, var(--surface-sunk));
-}
-
-.drop-zone-empty {
-  display: grid;
-  gap: 4px;
-  text-align: center;
-}
-
-.drop-zone-empty strong {
-  font-size: var(--t-md);
-  font-weight: 500;
-  color: var(--text);
-}
-
-.drop-zone-empty span {
-  font-size: var(--t-xs);
-  color: var(--text-muted);
-}
-
-.drop-zone-files {
-  display: grid;
-  gap: var(--space-xs);
-  width: 100%;
-}
-
-.drop-zone-files strong {
-  font-size: var(--t-sm);
-  font-weight: 500;
-  color: var(--text);
-}
-
-.drop-zone-files ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 2px;
-  font-family: var(--font-mono);
-  font-size: var(--t-xs);
-  color: var(--text-muted);
-  line-height: var(--line-height-mono);
-  max-height: 140px;
-  overflow-y: auto;
-}
-
 /* -------- Track detail ----------------------------------------------- */
 
 .model-picker {
@@ -974,61 +940,6 @@ code {
   color: var(--text);
 }
 
-/* -------- Import modal ----------------------------------------------- */
-
-.import-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  place-items: center;
-  padding: var(--space-lg);
-}
-
-.import-modal-backdrop {
-  position: absolute;
-  inset: 0;
-  background: color-mix(in oklch, var(--bg) 70%, transparent);
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-}
-
-.import-modal-panel {
-  position: relative;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  width: min(760px, calc(100vw - var(--space-2xl)));
-  max-height: calc(100vh - var(--space-2xl));
-  display: grid;
-  grid-template-rows: auto 1fr;
-  overflow: hidden;
-  min-width: 0;
-}
-
-.import-modal-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--border);
-}
-
-.import-modal-head h2 {
-  font-size: var(--t-md);
-  font-weight: 600;
-}
-
-.import-modal-body {
-  overflow-y: auto;
-  padding: var(--space-lg);
-  display: grid;
-  gap: var(--space-md);
-  min-width: 0;
-}
-
 /* -------- Advanced actions (collapsible) ---------------------------- */
 
 .advanced-actions {
@@ -1098,9 +1009,40 @@ code {
 
 /* -------- Waveform overlay (A/B) ------------------------------------ */
 
+/* -------- Segmented control buttons ---------------------------------- */
+
+.segmented {
+  padding: 5px 10px;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 80ms ease, background 80ms ease, color 80ms ease;
+  white-space: nowrap;
+}
+
+.segmented:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.segmented:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.segmented:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .segmented-active {
   color: var(--accent);
-  border-color: var(--accent);
+  border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
   background: var(--accent-dim);
 }
 
@@ -1315,104 +1257,10 @@ code {
   margin-top: var(--space-xs);
 }
 
-.mix-transport {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-  padding: 10px 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  background: color-mix(in oklch, var(--surface) 50%, transparent);
-}
-
 .mix-stem-toggle.active {
   background: var(--accent);
   color: var(--accent-ink);
   border-color: var(--accent);
-}
-
-/* -------- Import Flow / Activity / Selection refresh ----------------- */
-
-.import-flow-panel {
-  width: min(1120px, calc(100vw - var(--space-2xl)));
-}
-
-.import-flow-body {
-  grid-template-rows: minmax(0, 1fr);
-}
-
-.import-flow-head-copy {
-  display: grid;
-  gap: 4px;
-}
-
-.import-flow-head-copy p {
-  margin: 0;
-  font-size: var(--t-sm);
-  color: var(--text-muted);
-}
-
-.import-flow-head-actions {
-  display: flex;
-  gap: var(--space-xs);
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.import-flow-note {
-  display: grid;
-  gap: 4px;
-  padding: var(--space-sm);
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  background: color-mix(in oklch, var(--surface-sunk) 40%, transparent);
-}
-
-.import-flow-note strong {
-  font-size: var(--t-sm);
-  color: var(--text);
-}
-
-.import-flow-note p {
-  font-size: var(--t-sm);
-  line-height: 1.5;
-  color: var(--text-muted);
-}
-
-.import-flow-add {
-  display: grid;
-  gap: var(--space-md);
-}
-
-.import-flow-section {
-  display: grid;
-  gap: var(--space-md);
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.import-flow-section-head {
-  display: grid;
-  gap: 4px;
-}
-
-.import-flow-section-head h3 {
-  margin: 0;
-}
-
-.import-flow-section-head p {
-  margin: 0;
-  font-size: var(--t-sm);
-  color: var(--text-muted);
-}
-
-.import-flow-section-actions {
-  display: flex;
-  gap: var(--space-sm);
-  align-items: center;
-  flex-wrap: wrap;
 }
 
 .settings-cleanup-block {

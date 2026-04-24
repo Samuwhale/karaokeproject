@@ -5,8 +5,7 @@ import './App.css'
 import './redesign.css'
 import { discardRejection } from './async'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { ImportFlowDialog } from './components/ImportFlowDialog'
-import { ImportsOverlay } from './components/imports/ImportsOverlay'
+import { ImportPanel } from './components/imports/ImportPanel'
 import { BatchExportOverlay } from './components/export/BatchExportOverlay'
 import { SettingsDrawer } from './components/SettingsDrawer'
 import { ToastStack } from './components/feedback/ToastStack'
@@ -91,8 +90,7 @@ function App() {
   const [settingsView, setSettingsView] = useState<'preferences' | 'maintenance' | 'storage'>(
     'preferences',
   )
-  const [importOpen, setImportOpen] = useState(false)
-  const [reviewOpen, setReviewOpen] = useState(false)
+  const [importPanelOpen, setImportPanelOpen] = useState(false)
   const [batchExportIds, setBatchExportIds] = useState<string[] | null>(null)
   const [batchSplitIds, setBatchSplitIds] = useState<string[] | null>(null)
   const [dragOverlayActive, setDragOverlayActive] = useState(false)
@@ -127,9 +125,9 @@ function App() {
     openMix(track.id, { runId })
   }
 
-  const revealImportReview = useEffectEvent(() => {
+  const revealImportPanel = useEffectEvent(() => {
     if (mixActive) openSongs()
-    setReviewOpen(true)
+    setImportPanelOpen(true)
   })
 
   useEffect(() => {
@@ -163,7 +161,7 @@ function App() {
   ])
 
   useEffect(() => {
-    if (importOpen) return
+    if (importPanelOpen) return
 
     function hasFiles(event: DragEvent) {
       return Array.from(event.dataTransfer?.types ?? []).includes('Files')
@@ -195,7 +193,7 @@ function App() {
       if (files.length) {
         discardRejection(async () => {
           await handleResolveLocalImport(files)
-          revealImportReview()
+          revealImportPanel()
         })
         return
       }
@@ -214,7 +212,7 @@ function App() {
       dragCounterRef.current = 0
       setDragOverlayActive(false)
     }
-  }, [handleResolveLocalImport, importOpen, pushToast])
+  }, [handleResolveLocalImport, importPanelOpen, pushToast])
 
   useEffect(() => {
     function onPaste(event: ClipboardEvent) {
@@ -229,7 +227,7 @@ function App() {
       event.preventDefault()
       discardRejection(async () => {
         await handleResolveYouTube(text)
-        revealImportReview()
+        revealImportPanel()
       })
     }
 
@@ -266,14 +264,13 @@ function App() {
     },
     onEscape: () => {
       if (settingsOpen) setSettingsOpen(false)
-      else if (importOpen) setImportOpen(false)
-      else if (reviewOpen) setReviewOpen(false)
+      else if (importPanelOpen) setImportPanelOpen(false)
       else if (batchExportIds) setBatchExportIds(null)
       else if (batchSplitIds) setBatchSplitIds(null)
     },
   })
 
-  const anyDialogOpen = settingsOpen || importOpen || reviewOpen || !!batchExportIds || !!batchSplitIds
+  const anyDialogOpen = settingsOpen || importPanelOpen || !!batchExportIds || !!batchSplitIds
 
   return (
     <ErrorBoundary>
@@ -302,7 +299,7 @@ function App() {
               >
                 <GearIcon />
               </button>
-              <button type="button" className="button-primary" onClick={() => setImportOpen(true)}>
+              <button type="button" className="button-primary" onClick={() => setImportPanelOpen(true)}>
                 Add songs
               </button>
             </div>
@@ -327,8 +324,8 @@ function App() {
                   cancellingRunId={cancellingRunId}
                   onViewChange={(next) => navigate(buildSongsPath(next), { state: { songsView: next } })}
                   onOpenTrack={openTrackWorkspace}
-                  onAddSongs={() => setImportOpen(true)}
-                  onReviewImports={() => setReviewOpen(true)}
+                  onAddSongs={() => setImportPanelOpen(true)}
+                  onReviewImports={() => setImportPanelOpen(true)}
                   onCancelRun={handleCancelRun}
                   onBatchSplit={(ids) => setBatchSplitIds(ids)}
                   onBatchExport={(ids) => setBatchExportIds(ids)}
@@ -395,33 +392,22 @@ function App() {
           onBackfillMetrics={handleBackfillMetrics}
         />
 
-        <ImportFlowDialog
-          open={importOpen}
-          stagedImports={drafts}
-          onClose={() => setImportOpen(false)}
-          onSourcesStaged={() => setReviewOpen(true)}
-          resolvingYoutubeImport={resolvingYoutubeImport}
-          resolvingLocalImport={resolvingLocalImport}
-          onResolveYouTube={async (sourceUrl) => {
-            await handleResolveYouTube(sourceUrl)
-          }}
-          onResolveLocalImport={async (files) => {
-            await handleResolveLocalImport(files)
-          }}
-        />
-
-        <ImportsOverlay
-          open={reviewOpen}
+        <ImportPanel
+          open={importPanelOpen}
           drafts={drafts}
           profiles={settings?.profiles ?? []}
           defaultProfileKey={defaultProcessing.profile_key}
+          resolvingYoutubeImport={resolvingYoutubeImport}
+          resolvingLocalImport={resolvingLocalImport}
           confirming={confirmingDrafts}
-          onClose={() => setReviewOpen(false)}
+          onClose={() => setImportPanelOpen(false)}
+          onResolveYouTube={handleResolveYouTube}
+          onResolveLocalImport={handleResolveLocalImport}
           onUpdateDraft={handleUpdateDraft}
           onDiscardDraft={handleDiscardDraft}
           onConfirm={async (payload) => {
             await handleConfirmDrafts(payload)
-            setReviewOpen(false)
+            setImportPanelOpen(false)
           }}
         />
 

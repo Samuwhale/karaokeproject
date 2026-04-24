@@ -334,10 +334,20 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
         >
           {mixer.isPlaying ? <PauseGlyph /> : <PlayGlyph />}
         </button>
+        <input
+          type="range"
+          className="mix-seekbar"
+          min={0}
+          max={mixer.duration || 1}
+          step={0.01}
+          value={mixer.currentTime}
+          onChange={(event) => mixer.seek(Number(event.target.value))}
+          disabled={playDisabled}
+          aria-label="Seek"
+        />
         <span className="mix-time">{formatTime(mixer.currentTime)}</span>
         <span className="mix-time-sep" aria-hidden>/</span>
         <span className="mix-time mix-time-total">{formatTime(mixer.duration)}</span>
-        <span className="mix-transport-hint">Click any waveform to scrub · Space to play</span>
       </div>
 
       {footerVisible || showErrors ? (

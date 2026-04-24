@@ -60,32 +60,31 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
 
   return (
     <div className="mix-presets" role="group" aria-label="Output preset">
-      {supported.length ? (
-        <div className="mix-preset-group">
-          {supported.map((spec) => {
-            const active = activeIntent === spec.value
-            return (
-              <button
-                key={spec.value}
-                type="button"
-                className={`mix-preset ${active ? 'is-active' : ''}`}
-                aria-pressed={active}
-                onClick={() => discardRejection(() => applyIntent(spec.value))}
-              >
-                {spec.label}
-              </button>
-            )
-          })}
-        </div>
-      ) : null}
-      <button
-        type="button"
-        className="mix-preset-reset"
-        disabled={atRest}
-        onClick={() => discardRejection(applyReset)}
-      >
-        Reset
-      </button>
+      <div className="mix-preset-group">
+        {supported.map((spec) => {
+          const active = activeIntent === spec.value
+          return (
+            <button
+              key={spec.value}
+              type="button"
+              className={`mix-preset ${active ? 'is-active' : ''}`}
+              aria-pressed={active}
+              onClick={() => discardRejection(() => applyIntent(spec.value))}
+            >
+              {spec.label}
+            </button>
+          )
+        })}
+        {!atRest ? (
+          <button
+            type="button"
+            className="mix-preset"
+            onClick={() => discardRejection(applyReset)}
+          >
+            Reset
+          </button>
+        ) : null}
+      </div>
     </div>
   )
 }

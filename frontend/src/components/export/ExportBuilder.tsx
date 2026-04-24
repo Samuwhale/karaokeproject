@@ -30,7 +30,7 @@ const BITRATE_HINT = 'Use a value like 192k or 320k.'
 
 function buildArtifactList(
   includeMix: boolean,
-  includeStems: boolean,
+  selectedStems: Set<string>,
   includeSource: boolean,
   stemOptions: ExportStemOption[],
   mixFmt: Format,
@@ -38,13 +38,19 @@ function buildArtifactList(
 ): ExportArtifactKind[] {
   const kinds: ExportArtifactKind[] = []
   if (includeMix) kinds.push(mixFmt === 'wav' ? 'mix-wav' : 'mix-mp3')
-  if (includeStems) {
-    for (const option of stemOptions) {
+  for (const option of stemOptions) {
+    if (selectedStems.has(option.name)) {
       kinds.push(exportStemKind(option.name, stemFmt) as ExportArtifactKind)
     }
   }
   if (includeSource) kinds.push('source')
   return kinds
+}
+
+function stemAvailabilityHint(option: ExportStemOption, totalTracks: number): string {
+  if (totalTracks <= 1) return 'Separated stem from this track.'
+  if (option.track_count >= totalTracks) return `Available in all ${totalTracks} tracks.`
+  return `Available in ${option.track_count} of ${totalTracks} tracks.`
 }
 
 function formatBytes(bytes: number) {
@@ -70,7 +76,7 @@ export function ExportBuilder({
   } | null>(null)
 
   const [includeMix, setIncludeMix] = useState(true)
-  const [includeStems, setIncludeStems] = useState(false)
+  const [selectedStems, setSelectedStems] = useState<Set<string>>(() => new Set())
   const [includeSource, setIncludeSource] = useState(false)
   const [mixFmt, setMixFmt] = useState<Format>('mp3')
   const [stemFmt, setStemFmt] = useState<Format>('wav')
@@ -132,14 +138,17 @@ export function ExportBuilder({
     }
   }, [resolvedRunIds, selectedTrackIds, stemOptionsKey])
 
-  const effectiveIncludeStems = includeStems && hasStems
+  const hasSelectedStems = useMemo(
+    () => stemOptions.some((option) => selectedStems.has(option.name)),
+    [stemOptions, selectedStems],
+  )
 
   const artifactList = useMemo(
-    () => buildArtifactList(includeMix, effectiveIncludeStems, includeSource, stemOptions, mixFmt, stemFmt),
-    [includeMix, effectiveIncludeStems, includeSource, stemOptions, mixFmt, stemFmt],
+    () => buildArtifactList(includeMix, selectedStems, includeSource, stemOptions, mixFmt, stemFmt),
+    [includeMix, selectedStems, includeSource, stemOptions, mixFmt, stemFmt],
   )
   const bitrateValid = BITRATE_PATTERN.test(bitrate)
-  const mp3Requested = (includeMix && mixFmt === 'mp3') || (effectiveIncludeStems && stemFmt === 'mp3')
+  const mp3Requested = (includeMix && mixFmt === 'mp3') || (hasSelectedStems && stemFmt === 'mp3')
   const planKey = useMemo(() => {
     return `${selectedTrackIdsKey}|${runIdsKey}|${artifactList.slice().sort().join(',')}|${mode}|${bitrate}`
   }, [selectedTrackIdsKey, runIdsKey, artifactList, mode, bitrate])
@@ -272,23 +281,36 @@ export function ExportBuilder({
           format={mixFmt}
           onFormatChange={setMixFmt}
         />
-        <IncludeRow
-          checked={effectiveIncludeStems}
-          disabled={!hasStems && !stemsLoading}
-          onToggle={() => setIncludeStems((value) => !value)}
-          label="Raw stems"
-          hint={
-            stemsLoading
-              ? 'Looking up available stems…'
-              : stemLookupError
-                ? 'Could not load stem availability.'
-              : hasStems
-                ? 'Separated tracks, untouched.'
-                : 'No separated stems available for this selection.'
-          }
-          format={stemFmt}
-          onFormatChange={setStemFmt}
-        />
+        {stemsLoading || stemLookupError || !hasStems ? (
+          <StemStatusRow
+            hint={
+              stemsLoading
+                ? 'Looking up available stems…'
+                : stemLookupError
+                  ? 'Could not load stem availability.'
+                  : 'No separated stems available for this selection.'
+            }
+          />
+        ) : (
+          stemOptions.map((option) => (
+            <IncludeRow
+              key={option.name}
+              checked={selectedStems.has(option.name)}
+              onToggle={() =>
+                setSelectedStems((current) => {
+                  const next = new Set(current)
+                  if (next.has(option.name)) next.delete(option.name)
+                  else next.add(option.name)
+                  return next
+                })
+              }
+              label={option.label}
+              hint={stemAvailabilityHint(option, selectedTrackIds.length)}
+              format={stemFmt}
+              onFormatChange={setStemFmt}
+            />
+          ))
+        )}
         <IncludeRow
           checked={includeSource}
           onToggle={() => setIncludeSource((value) => !value)}
@@ -394,6 +416,18 @@ type IncludeRowProps = {
   hint: string
   format?: Format
   onFormatChange?: (next: Format) => void
+}
+
+function StemStatusRow({ hint }: { hint: string }) {
+  return (
+    <div className="export-pop-row is-disabled" aria-disabled>
+      <span aria-hidden />
+      <div className="export-pop-row-copy">
+        <strong>Raw stems</strong>
+        <span>{hint}</span>
+      </div>
+    </div>
+  )
 }
 
 function IncludeRow({ checked, disabled, onToggle, label, hint, format, onFormatChange }: IncludeRowProps) {
