@@ -379,7 +379,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
   const showErrors = !!saveError || !!mixer.error
 
   const saveIndicatorLabel =
-    saveState === 'failed' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Saving…'
+    saveState === 'failed' ? 'Save failed' : saveState === 'saved' ? 'Mix saved' : 'Saving mix…'
   const saveIndicatorClass =
     saveState === 'failed' ? 'is-error' : saveState === 'saved' ? 'is-saved' : 'is-saving'
 
