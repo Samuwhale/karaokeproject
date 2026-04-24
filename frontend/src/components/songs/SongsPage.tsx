@@ -65,6 +65,14 @@ function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowS
   return { text: null, tone: null, count: null }
 }
 
+function ClearIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+      <path d="M1 1l9 9M10 1L1 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 function RowProgressBar({ run }: { run: RunSummary }) {
   const fraction = Math.max(0, Math.min(1, run.progress))
   return (
@@ -412,14 +420,26 @@ export function SongsPage({
       {tracks.length > 0 ? (
         <>
           <div className="library-toolbar">
-            <input
-              type="search"
-              className="library-search"
-              placeholder="Search title or artist"
-              aria-label="Search songs"
-              value={view.search}
-              onChange={(event) => onViewChange({ ...view, search: event.target.value })}
-            />
+            <div className="library-search-wrap">
+              <input
+                type="search"
+                className="library-search"
+                placeholder="Search"
+                aria-label="Search songs"
+                value={view.search}
+                onChange={(event) => onViewChange({ ...view, search: event.target.value })}
+              />
+              {view.search ? (
+                <button
+                  type="button"
+                  className="library-search-clear"
+                  onClick={() => onViewChange({ ...view, search: '' })}
+                  aria-label="Clear search"
+                >
+                  <ClearIcon />
+                </button>
+              ) : null}
+            </div>
             <div className="library-sort-group" role="group" aria-label="Sort songs">
               {SONG_BROWSE_SORT_OPTIONS.map((option) => (
                 <button

@@ -18,6 +18,7 @@ type StemRow = {
   artifact_id: string
   label: string
   url: string
+  kind: string
   peaks: number[]
   color: string
   gain_db: number
@@ -50,6 +51,7 @@ function initialStems(run: RunDetail): StemRow[] {
       artifact_id: artifact.id,
       label: artifact.label,
       url: artifact.download_url,
+      kind: artifact.kind,
       peaks: artifact.metrics?.peaks ?? [],
       color: stemColorFromKind(artifact.kind),
       gain_db: entry?.gain_db ?? 0,
@@ -57,6 +59,11 @@ function initialStems(run: RunDetail): StemRow[] {
       soloed: false,
     }
   })
+}
+
+function stemDownloadName(kind: string, label: string): string {
+  const ext = kind.startsWith('stem-mp3:') ? 'mp3' : 'wav'
+  return `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.${ext}`
 }
 
 function equalsPersisted(stems: StemRow[], mixStems: RunMixStemEntry[]) {
@@ -87,6 +94,14 @@ function formatTime(seconds: number) {
   const minutes = Math.floor(total / 60)
   const remaining = (total % 60).toString().padStart(2, '0')
   return `${minutes}:${remaining}`
+}
+
+function DownloadIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+      <path d="M6 1v7M3 6l3 3 3-3M1 10.5h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
 }
 
 function PlayGlyph() {
@@ -302,6 +317,16 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
                   >
                     S
                   </button>
+                  <a
+                    href={stem.url}
+                    download={stemDownloadName(stem.kind, stem.label)}
+                    className="stem-toggle stem-toggle-dl"
+                    aria-label={`Download ${stem.label}`}
+                    title={`Download ${stem.label}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <DownloadIcon />
+                  </a>
                 </div>
               </div>
               <div className="stem-row-wave">

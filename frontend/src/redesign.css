@@ -330,16 +330,25 @@
   background: var(--accent);
 }
 
-.library-search {
+.library-search-wrap {
+  position: relative;
   flex: 1;
+  min-width: 0;
+}
+
+.library-search {
+  width: 100%;
   padding: 8px 14px;
   background: var(--surface-2);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   font-size: 13px;
   color: var(--text);
-  min-width: 0;
   transition: border-color 80ms ease, background 80ms ease;
+}
+
+.library-search:not(:placeholder-shown) {
+  padding-right: 34px;
 }
 
 .library-search::placeholder {
@@ -357,13 +366,32 @@
 }
 
 .library-search::-webkit-search-cancel-button {
-  cursor: pointer;
-  opacity: 0.4;
-  transition: opacity 100ms;
+  display: none;
 }
 
-.library-search::-webkit-search-cancel-button:hover {
-  opacity: 0.75;
+.library-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  border-radius: var(--radius-xs);
+  transition: color 80ms, background 80ms;
+}
+
+.library-search-clear:hover {
+  color: var(--text-muted);
+  background: var(--surface-hover);
+}
+
+.library-search-clear:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .library-sort-group {
@@ -2374,6 +2402,43 @@
   color: var(--text-muted);
   box-shadow: none;
   cursor: default;
+}
+
+/* Stem download toggle ------------------------------------------------------ */
+
+.stem-toggle-dl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 120ms, background 120ms, color 120ms;
+}
+
+.stem-row:hover .stem-toggle-dl {
+  opacity: 1;
+}
+
+.stem-toggle-dl:hover {
+  background: var(--surface-active);
+  color: var(--accent);
+}
+
+.stem-toggle-dl:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+/* Popover profile hint (shown below detail line when run exists) ------------ */
+
+.popover-row-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
 }
 
 

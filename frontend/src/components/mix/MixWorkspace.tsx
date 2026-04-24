@@ -332,6 +332,9 @@ function VersionsPopover({
                   <span className="popover-row-copy">
                     <strong>{profile.label}</strong>
                     {detail ? <span>{detail}</span> : null}
+                    {run && profile.best_for ? (
+                      <span className="popover-row-hint">{profile.best_for}</span>
+                    ) : null}
                   </span>
                   <span className="popover-row-state">{stateLabel(run)}</span>
                 </button>
