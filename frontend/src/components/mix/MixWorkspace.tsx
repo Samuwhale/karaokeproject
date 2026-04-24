@@ -783,7 +783,7 @@ function MixWorkspaceContent({
             )
           ) : (
             <>
-              <p>Choose a profile to separate this track into stems you can mix and export.</p>
+              <p>Separate this track into stems to mix and export.</p>
               <InlineProfilePicker
                 profiles={profiles}
                 defaultProfileKey={defaultProfileKey}

@@ -471,7 +471,7 @@ export function SongsPage({
       ) : null}
 
       {tracks.length > 0 ? (
-        <>
+        <div className="library-controls">
           <div className="library-toolbar">
             <div className="library-search-wrap">
               <input
@@ -531,7 +531,7 @@ export function SongsPage({
               ))}
             </div>
           ) : null}
-        </>
+        </div>
       ) : null}
 
       {browseTracks.length > 0 ? (
@@ -645,7 +645,7 @@ export function SongsPage({
         <div className="library-empty library-empty-onboard">
           <WaveformIcon />
           <strong>Add your first song</strong>
-          <p>Splits audio into stems — vocals, bass, drums, and more — so you can mix, mute, or download each part independently. Drop files here, paste a YouTube URL, or click below.</p>
+          <p>Drop audio files or paste a YouTube URL to split into individual stems — then mix, mute, or download each part.</p>
           <button type="button" className="button-primary" onClick={onAddSongs}>
             Add songs
           </button>

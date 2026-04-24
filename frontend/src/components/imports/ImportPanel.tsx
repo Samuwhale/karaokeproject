@@ -605,7 +605,9 @@ function ImportPanelContent({
                 ? 'Saving…'
                 : unresolved > 0
                   ? `${unresolved} duplicate${unresolved === 1 ? '' : 's'} to resolve`
-                  : null}
+                  : profiles.length > 0
+                    ? `Split with: ${profiles.find((p) => p.key === profileKey)?.label ?? profileKey}`
+                    : null}
             </div>
             <div className="overlay-foot-actions">
               <button
