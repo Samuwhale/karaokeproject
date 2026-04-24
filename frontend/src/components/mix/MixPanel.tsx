@@ -4,6 +4,7 @@ import { discardRejection } from '../../async'
 import type { RunArtifact, RunDetail, RunMixStemEntry } from '../../types'
 import { MIX_GAIN_DB_MAX, MIX_GAIN_DB_MIN } from '../../types'
 import { compareStemKinds, isStemKind, stemColorFromKind } from '../../stems'
+import { Spinner } from '../feedback/Spinner'
 import { StemWaveform } from './StemWaveform'
 import { useStemMixer } from './useStemMixer'
 
@@ -147,6 +148,13 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
     }
   }, [onSave])
 
+  // Auto-clear "Saved" indicator after a short delay
+  useEffect(() => {
+    if (saveState !== 'saved') return
+    const id = window.setTimeout(() => setSaveState('idle'), 1800)
+    return () => window.clearTimeout(id)
+  }, [saveState])
+
   const dirty = !equalsPersisted(stems, run.mix.stems)
 
   const mixerStems = useMemo(
@@ -162,6 +170,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
   )
   const mixer = useStemMixer(mixerStems)
 
+  const playLoading = mixer.loadState === 'loading'
   const playDisabled = mixer.loadState !== 'ready'
 
   const persistMix = useCallback(
@@ -247,11 +256,13 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
   const anySoloed = stems.some((stem) => stem.soloed)
 
   const footerVisible =
-    saving || saveState === 'saving' || saveState === 'pending' || saveState === 'failed' || dirty
+    saving || saveState === 'saving' || saveState === 'pending' || saveState === 'saved' || saveState === 'failed' || dirty
   const showErrors = !!saveError || !!mixer.error
 
-  const saveIndicatorLabel = saveState === 'failed' ? 'Save failed' : 'Saving…'
-  const saveIndicatorClass = saveState === 'failed' ? 'is-error' : 'is-saving'
+  const saveIndicatorLabel =
+    saveState === 'failed' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Saving…'
+  const saveIndicatorClass =
+    saveState === 'failed' ? 'is-error' : saveState === 'saved' ? 'is-saved' : 'is-saving'
 
   return (
     <>
@@ -327,12 +338,12 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
       <div className="mix-transport">
         <button
           type="button"
-          className="mix-play"
+          className={`mix-play ${playLoading ? 'is-loading' : ''}`}
           onClick={handleTogglePlay}
           disabled={playDisabled}
-          aria-label={mixer.isPlaying ? 'Pause preview' : 'Play preview'}
+          aria-label={playLoading ? 'Loading audio…' : mixer.isPlaying ? 'Pause preview' : 'Play preview'}
         >
-          {mixer.isPlaying ? <PauseGlyph /> : <PlayGlyph />}
+          {playLoading ? <Spinner /> : mixer.isPlaying ? <PauseGlyph /> : <PlayGlyph />}
         </button>
         <input
           type="range"

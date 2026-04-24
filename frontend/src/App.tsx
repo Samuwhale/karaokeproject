@@ -324,6 +324,9 @@ function App() {
                   cancellingRunId={cancellingRunId}
                   onViewChange={(next) => navigate(buildSongsPath(next), { state: { songsView: next } })}
                   onOpenTrack={openTrackWorkspace}
+                  onSplitTrack={(trackId) => {
+                    discardRejection(() => handleCreateRun(trackId, defaultProcessing))
+                  }}
                   onAddSongs={() => setImportPanelOpen(true)}
                   onReviewImports={() => setImportPanelOpen(true)}
                   onCancelRun={handleCancelRun}

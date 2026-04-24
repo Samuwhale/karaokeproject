@@ -47,6 +47,41 @@ type MixWorkspaceProps = {
 
 type Popover = null | 'versions' | 'export' | 'menu'
 
+type InlineProfilePickerProps = {
+  profiles: ProcessingProfile[]
+  creatingRun: boolean
+  onCreateRun: (processing: RunProcessingConfigInput) => void
+}
+
+function InlineProfilePicker({ profiles, creatingRun, onCreateRun }: InlineProfilePickerProps) {
+  return (
+    <>
+      <strong>Split this track</strong>
+      <p>Choose a profile to separate the stems.</p>
+      {profiles.length > 0 ? (
+        <div className="mix-profile-picker">
+          {profiles.map((profile) => (
+            <button
+              key={profile.key}
+              type="button"
+              className="mix-profile-option"
+              disabled={creatingRun}
+              onClick={() => onCreateRun({ profile_key: profile.key })}
+            >
+              <span className="mix-profile-option-label">{profile.label}</span>
+              {profile.best_for ? (
+                <span className="mix-profile-option-hint">{profile.best_for}</span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="mix-blocked-hint">No profiles configured. Check Settings → Maintenance.</p>
+      )}
+    </>
+  )
+}
+
 const RETRYABLE_STATUSES = new Set(['failed', 'cancelled'])
 
 function formatStatus(status: string) {
@@ -628,13 +663,18 @@ function MixWorkspaceContent({
               </>
             )
           ) : (
-            <>
-              <strong>No version yet</strong>
-              <p>Queue the first split to start mixing.</p>
-              <button type="button" className="button-primary" onClick={() => setPopover('versions')}>
-                New split
-              </button>
-            </>
+            <InlineProfilePicker
+              profiles={profiles}
+              creatingRun={creatingRun}
+              onCreateRun={(processing) => {
+                discardRejection(async () => {
+                  const result = await onCreateRun(track.id, processing)
+                  if (result && typeof result === 'object' && 'run' in result) {
+                    onSelectRun((result as { run: { id: string } }).run.id)
+                  }
+                })
+              }}
+            />
           )}
         </div>
       )}

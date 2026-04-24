@@ -557,10 +557,17 @@ function ImportPanelContent({
                   : 'Ready to import'}
             </div>
             <div className="overlay-foot-actions">
-              <label className="overlay-foot-profile">
-                <span className="overlay-foot-profile-label">Profile</span>
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={!canConfirm}
+                onClick={() => discardRejection(() => confirm(false))}
+              >
+                {confirming ? <><Spinner /> Importing…</> : 'Add to library'}
+              </button>
+              <div className="overlay-foot-split-group">
                 <select
-                  className="library-sort"
+                  className="overlay-foot-profile-select"
                   value={profileKey}
                   onChange={(event) => setSelectedProfileKey(event.target.value)}
                   disabled={!canConfirm}
@@ -572,23 +579,15 @@ function ImportPanelContent({
                     </option>
                   ))}
                 </select>
-              </label>
-              <button
-                type="button"
-                className="button-secondary"
-                disabled={!canConfirm}
-                onClick={() => discardRejection(() => confirm(false))}
-              >
-                {confirming ? <><Spinner /> Importing…</> : 'Add to library'}
-              </button>
-              <button
-                type="button"
-                className="button-primary"
-                disabled={!canConfirm}
-                onClick={() => discardRejection(() => confirm(true))}
-              >
-                {confirming ? <><Spinner /> Queueing…</> : 'Add and split'}
-              </button>
+                <button
+                  type="button"
+                  className="button-primary"
+                  disabled={!canConfirm}
+                  onClick={() => discardRejection(() => confirm(true))}
+                >
+                  {confirming ? <><Spinner /> Queueing…</> : 'Add and split'}
+                </button>
+              </div>
             </div>
           </footer>
         ) : null}

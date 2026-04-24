@@ -221,10 +221,10 @@ export function MixExportPopover({
           >
             {busy ? (
               <>
-                <Spinner /> Building
+                <Spinner /> Exporting…
               </>
             ) : (
-              'Build export'
+              'Export'
             )}
           </button>
           <button type="button" className="button-link" onClick={onClose}>

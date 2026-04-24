@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { discardRejection } from '../../async'
 import { describeRun, isActiveRunStatus, RUN_STATUS_LABELS } from '../runStatus'
 import { SONG_BROWSE_SORT_OPTIONS, applySongBrowse, trackStageSummary } from '../trackListView'
+import type { TrackStageSummary } from '../trackListView'
 import type { SongsView } from '../../routes'
 import type { QueueRunEntry, RunSummary, TrackSummary } from '../../types'
 
@@ -15,6 +16,7 @@ type SongsPageProps = {
   cancellingRunId: string | null
   onViewChange: (view: SongsView) => void
   onOpenTrack: (track: TrackSummary, options?: { runId?: string | null }) => void
+  onSplitTrack: (trackId: string) => void
   onAddSongs: () => void
   onReviewImports: () => void
   onCancelRun: (runId: string) => Promise<void>
@@ -33,8 +35,7 @@ function formatDuration(seconds: number | null) {
 
 type RowStatus = { text: string | null; tone: 'processing' | 'attn' | 'final' | null }
 
-function rowStatus(track: TrackSummary): RowStatus {
-  const stage = trackStageSummary(track)
+function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowStatus {
   if (stage.key === 'processing') {
     const run = track.latest_run
     const stageLabel = run ? (RUN_STATUS_LABELS[run.status] ?? 'Splitting') : 'Splitting'
@@ -48,7 +49,7 @@ function rowStatus(track: TrackSummary): RowStatus {
       tone: 'attn',
     }
   }
-  if (stage.key === 'needs-split') return { text: 'Not split', tone: null }
+  if (stage.key === 'needs-split') return { text: null, tone: null }
   if (stage.key === 'final') return { text: 'Final', tone: 'final' }
   return { text: null, tone: null }
 }
@@ -132,9 +133,6 @@ function QueueStrip({
                   <button type="button" className="library-queue-item" onClick={() => onOpenRun(entry)}>
                     <span className="library-queue-item-title" title={entry.track_title}>
                       {entry.track_title}
-                    </span>
-                    <span className="library-queue-item-profile" title={entry.run.processing.profile_label}>
-                      {entry.run.processing.profile_label}
                     </span>
                     <span className="library-queue-item-stage">{label}</span>
                     <span className="library-queue-item-bar" aria-hidden>
@@ -241,6 +239,7 @@ export function SongsPage({
   cancellingRunId,
   onViewChange,
   onOpenTrack,
+  onSplitTrack,
   onAddSongs,
   onReviewImports,
   onCancelRun,
@@ -366,7 +365,8 @@ export function SongsPage({
       {browseTracks.length > 0 ? (
         <div className="library-list" role="list">
           {browseTracks.map((track) => {
-            const status = rowStatus(track)
+            const stage = trackStageSummary(track)
+            const status = rowStatusFromStage(stage, track)
             const isActive = currentTrackId === track.id
             const isSelected = selected.has(track.id)
             const initials = track.title.trim().slice(0, 1).toUpperCase() || 'S'
@@ -408,14 +408,23 @@ export function SongsPage({
                   <span className="song-row-wave-cell" aria-hidden={!activeRun}>
                     {activeRun ? <RowProgressBar run={activeRun} /> : <TrackWaveThumb track={track} />}
                   </span>
-                  {status.text ? (
+                </button>
+                <div className="song-row-meta">
+                  {stage.key === 'needs-split' ? (
+                    <button
+                      type="button"
+                      className="song-row-split-action"
+                      onClick={() => onSplitTrack(track.id)}
+                      aria-label={`Split ${track.title}`}
+                    >
+                      Split
+                    </button>
+                  ) : status.text ? (
                     <span className={`song-row-status ${status.tone ? `is-${status.tone}` : ''}`}>
                       {status.text}
                     </span>
-                  ) : (
-                    <span />
-                  )}
-                </button>
+                  ) : null}
+                </div>
               </div>
             )
           })}
@@ -438,11 +447,13 @@ export function SongsPage({
             {selectedCount} selected
           </span>
           <div className="batch-bar-spacer" />
-          <button type="button" className="button-link" onClick={toggleAll}>
-            {allSelected ? 'Clear all' : 'Select all'}
-          </button>
+          {!allSelected ? (
+            <button type="button" className="button-link" onClick={toggleAll}>
+              Select all
+            </button>
+          ) : null}
           <button type="button" className="button-link" onClick={clearSelection}>
-            Deselect
+            {allSelected ? 'Clear all' : 'Clear'}
           </button>
           <button type="button" className="button-danger" onClick={handleDelete}>
             Delete {selectedCount}
