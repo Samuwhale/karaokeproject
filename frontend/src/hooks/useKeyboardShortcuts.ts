@@ -5,9 +5,9 @@ type Shortcuts = {
   onNavigateNext?: () => void
   onRerun?: () => void
   onToggleSettings?: () => void
+  onToggleShortcuts?: () => void
   onEscape?: () => void
   onSelectRunByIndex?: (index: number) => void
-  onToggleCompare?: () => void
 }
 
 function isEditable(target: EventTarget | null) {
@@ -33,6 +33,12 @@ export function useKeyboardShortcuts(shortcuts: Shortcuts) {
     if (isEditable(event.target)) return
     if (event.metaKey || event.ctrlKey || event.altKey) return
 
+    if (event.key === '?') {
+      event.preventDefault()
+      shortcuts.onToggleShortcuts?.()
+      return
+    }
+
     if (event.key === 'j' || event.key === 'ArrowDown') {
       event.preventDefault()
       shortcuts.onNavigateNext?.()
@@ -48,12 +54,6 @@ export function useKeyboardShortcuts(shortcuts: Shortcuts) {
     if (event.key === 'r') {
       event.preventDefault()
       shortcuts.onRerun?.()
-      return
-    }
-
-    if (event.key === 'c') {
-      event.preventDefault()
-      shortcuts.onToggleCompare?.()
       return
     }
 

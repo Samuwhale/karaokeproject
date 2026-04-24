@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { discardRejection } from '../../async'
 import { describeRun, isActiveRunStatus, RUN_STATUS_LABELS } from '../runStatus'
@@ -112,26 +112,31 @@ function QueueStrip({
 }) {
   const activeCount = activeRuns.length
   const failedCount = failedRuns.length
-  const summary: string[] = []
-  if (draftsCount > 0) summary.push(`${draftsCount} import${draftsCount === 1 ? '' : 's'} to review`)
-  if (activeCount > 0) summary.push(`${activeCount} split${activeCount === 1 ? '' : 's'} running`)
-  if (failedCount > 0) summary.push(`${failedCount} need${failedCount === 1 ? 's' : ''} attention`)
   const attn = failedCount > 0 && draftsCount === 0 && activeCount === 0
   const aggregate =
     activeCount > 0
       ? activeRuns.reduce((sum, entry) => sum + Math.max(0, Math.min(1, entry.run.progress)), 0) / activeCount
       : 0
+  // Show the head summary row only when it adds information beyond what the item rows show.
+  // A single active run with no drafts/failures is fully described by its own row.
+  const showHead = draftsCount > 0 || failedCount > 0 || activeCount > 1
+  const summary: string[] = []
+  if (draftsCount > 0) summary.push(`${draftsCount} import${draftsCount === 1 ? '' : 's'} to review`)
+  if (showHead && activeCount > 0) summary.push(`${activeCount} split${activeCount === 1 ? '' : 's'} running`)
+  if (failedCount > 0) summary.push(`${failedCount} need${failedCount === 1 ? 's' : ''} attention`)
 
   return (
     <section className={`library-queue ${attn ? 'is-attn' : ''}`}>
-      <div className="library-queue-head">
-        <span className="library-queue-summary">{summary.join(' · ')}</span>
-        {draftsCount > 0 ? (
-          <button type="button" className="button-primary" onClick={onReviewImports}>
-            Review imports
-          </button>
-        ) : null}
-      </div>
+      {showHead ? (
+        <div className="library-queue-head">
+          <span className="library-queue-summary">{summary.join(' · ')}</span>
+          {draftsCount > 0 ? (
+            <button type="button" className="button-primary" onClick={onReviewImports}>
+              Review imports
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {activeCount > 0 ? (
         <>
@@ -287,6 +292,15 @@ export function SongsPage({
   onBatchDelete,
 }: SongsPageProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (selected.size === 0) return
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setSelected(new Set())
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [selected.size])
 
   const browseTracks = useMemo(
     () => applySongBrowse(tracks, { search: view.search, sort: view.sort, filter: view.filter }),

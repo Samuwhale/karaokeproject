@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 
 import { discardRejection } from '../../async'
@@ -319,6 +319,25 @@ function ImportPanelContent({
   }
 
   const sourceBusy = resolvingYoutubeImport || resolvingLocalImport
+
+  // Auto-resolve when a valid YouTube URL is typed/pasted into the field
+  useEffect(() => {
+    const trimmed = youtubeUrl.trim()
+    if (!trimmed || sourceBusy) return
+    if (!/^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\b/i.test(trimmed)) return
+    const timer = window.setTimeout(() => {
+      discardRejection(async () => {
+        try {
+          await onResolveYouTube(trimmed)
+          clearSource()
+        } catch (raw) {
+          setSourceError(raw instanceof Error ? raw.message : 'Could not resolve URL.')
+        }
+      })
+    }, 700)
+    return () => window.clearTimeout(timer)
+  }, [youtubeUrl]) // sourceBusy intentionally omitted — stale-safe via trimmed capture
+
   const playlistHint = youtubeUrl.trim() && looksLikePlaylist(youtubeUrl)
     ? 'Playlists can take up to 30 seconds to resolve.'
     : null
@@ -417,23 +436,37 @@ function ImportPanelContent({
           {/* ---- Source input ------------------------------------------- */}
           <div className="import-panel-source">
             <div className="import-panel-url-row">
-              <input
-                type="url"
-                className="import-panel-url-input"
-                placeholder="Paste a YouTube URL…"
-                value={youtubeUrl}
-                onChange={(event) => {
-                  setYoutubeUrl(event.target.value)
-                  if (sourceError) setSourceError(null)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter' || !youtubeUrl.trim() || sourceBusy) return
-                  event.preventDefault()
-                  discardRejection(stageYouTube)
-                }}
-                disabled={sourceBusy}
-                aria-label="YouTube URL"
-              />
+              <div className="import-panel-url-wrap">
+                <input
+                  type="url"
+                  className="import-panel-url-input"
+                  placeholder="Paste a YouTube URL…"
+                  value={youtubeUrl}
+                  onChange={(event) => {
+                    setYoutubeUrl(event.target.value)
+                    if (sourceError) setSourceError(null)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' || !youtubeUrl.trim() || sourceBusy) return
+                    event.preventDefault()
+                    discardRejection(stageYouTube)
+                  }}
+                  disabled={sourceBusy}
+                  aria-label="YouTube URL"
+                />
+                {youtubeUrl && !sourceBusy ? (
+                  <button
+                    type="button"
+                    className="import-panel-url-clear"
+                    onClick={clearSource}
+                    aria-label="Clear URL"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
+                      <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                ) : null}
+              </div>
               <button
                 type="button"
                 className="button-primary"
@@ -523,7 +556,7 @@ function ImportPanelContent({
           {drafts.length > 0 ? (
             <>
               <div className="import-panel-divider">
-                <span>Queued · {drafts.length}</span>
+                <span>To import · {drafts.length}</span>
                 <span className="import-panel-divider-stats">
                   {createNew > 0 ? <span>{createNew} new</span> : null}
                   {reuse > 0 ? <span>{reuse} attached</span> : null}

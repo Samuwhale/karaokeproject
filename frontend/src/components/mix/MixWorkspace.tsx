@@ -23,6 +23,7 @@ type MixWorkspaceProps = {
   track: TrackDetail | null
   selectedRunId: string | null
   profiles: ProcessingProfile[]
+  defaultProfileKey: string
   defaultBitrate: string
   creatingRun: boolean
   cancellingRunId: string | null
@@ -54,37 +55,44 @@ type Popover = null | 'versions' | 'export' | 'menu'
 
 type InlineProfilePickerProps = {
   profiles: ProcessingProfile[]
+  defaultProfileKey: string
   creatingRun: boolean
   onCreateRun: (processing: RunProcessingConfigInput) => void
 }
 
-function InlineProfilePicker({ profiles, creatingRun, onCreateRun }: InlineProfilePickerProps) {
+function InlineProfilePicker({ profiles, defaultProfileKey, creatingRun, onCreateRun }: InlineProfilePickerProps) {
   return (
     <>
       {profiles.length > 0 ? (
         <div className="mix-profile-picker">
-          {profiles.map((profile) => (
-            <button
-              key={profile.key}
-              type="button"
-              className="mix-profile-option"
-              disabled={creatingRun}
-              onClick={() => onCreateRun({ profile_key: profile.key })}
-            >
-              <span className="mix-profile-option-label">{profile.label}</span>
-              {profile.best_for ? (
-                <span className="mix-profile-option-hint">{profile.best_for}</span>
-              ) : null}
-              {profile.stems.length > 0 ? (
-                <span className="mix-profile-option-stems">
-                  {profile.stems.map((s) => stemLabel(s)).join(' · ')}
-                </span>
-              ) : null}
-              {profile.tradeoff ? (
-                <span className="mix-profile-option-tradeoff">{profile.tradeoff}</span>
-              ) : null}
-            </button>
-          ))}
+          {profiles.map((profile) => {
+            const isDefault = profile.key === defaultProfileKey
+            return (
+              <button
+                key={profile.key}
+                type="button"
+                className={`mix-profile-option ${isDefault ? 'is-default' : ''}`}
+                disabled={creatingRun}
+                onClick={() => onCreateRun({ profile_key: profile.key })}
+              >
+                <div className="mix-profile-option-top">
+                  <span className="mix-profile-option-label">{profile.label}</span>
+                  {isDefault ? <span className="mix-profile-option-default">Default</span> : null}
+                </div>
+                {profile.best_for ? (
+                  <span className="mix-profile-option-hint">{profile.best_for}</span>
+                ) : null}
+                {profile.stems.length > 0 ? (
+                  <span className="mix-profile-option-stems">
+                    {profile.stems.map((s) => stemLabel(s)).join(' · ')}
+                  </span>
+                ) : null}
+                {profile.tradeoff ? (
+                  <span className="mix-profile-option-tradeoff">{profile.tradeoff}</span>
+                ) : null}
+              </button>
+            )
+          })}
         </div>
       ) : (
         <p className="mix-blocked-hint">No profiles configured. Check Settings → Maintenance.</p>
@@ -492,6 +500,7 @@ function MixWorkspaceContent({
   track,
   selectedRunId,
   profiles,
+  defaultProfileKey,
   defaultBitrate,
   creatingRun,
   cancellingRunId,
@@ -588,7 +597,7 @@ function MixWorkspaceContent({
                     title="Versions — click to generate, switch, or manage"
                   >
                     {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
-                    <span>{progressPct !== null ? `${progressPct}%` : versionLabel}</span>
+                    <span>{selectedRun?.status === 'queued' ? 'Queued' : progressPct !== null ? `${progressPct}%` : versionLabel}</span>
                     {progressPct === null && completedCount > 1 ? (
                       <span className="mix-version-count" aria-label={`${completedCount} versions`}>·{completedCount}</span>
                     ) : null}
@@ -625,7 +634,7 @@ function MixWorkspaceContent({
               disabled={!canExport}
               aria-haspopup="dialog"
               aria-expanded={popover === 'export'}
-              title={canExport ? undefined : 'Export unlocks after the selected version finishes.'}
+              title={canExport ? undefined : track.runs.length === 0 ? 'Split this track first to enable export.' : 'Export unlocks after the selected version finishes.'}
             >
               Export
             </button>
@@ -687,8 +696,10 @@ function MixWorkspaceContent({
             isActiveRunStatus(selectedRun.status) ? (
               <>
                 <div className="mix-progress-head">
-                  <strong>Splitting {selectedRun.processing.profile_label}</strong>
-                  <span className="mix-progress-pct">{Math.round(selectedRun.progress * 100)}%</span>
+                  <strong>{selectedRun.status === 'queued' ? 'Queued' : `Splitting ${selectedRun.processing.profile_label}`}</strong>
+                  {selectedRun.status !== 'queued' ? (
+                    <span className="mix-progress-pct">{Math.round(selectedRun.progress * 100)}%</span>
+                  ) : null}
                 </div>
                 <div
                   className="mix-progress-bar"
@@ -744,6 +755,7 @@ function MixWorkspaceContent({
               <p>Pick a profile to begin. Each profile uses a different model and produces a different set of stems.</p>
               <InlineProfilePicker
                 profiles={profiles}
+                defaultProfileKey={defaultProfileKey}
                 creatingRun={creatingRun}
                 onCreateRun={(processing) => {
                   discardRejection(async () => {

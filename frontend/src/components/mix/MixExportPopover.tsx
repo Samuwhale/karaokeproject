@@ -153,7 +153,7 @@ export function MixExportPopover({
         <div className="popover popover-right popover-wide" role="dialog" aria-label="Export ready">
           <div className="popover-title">{result.filename}</div>
           <div className="export-pop-status">
-            {formatBytes(result.byte_count)} · {result.included_track_count} track
+            {formatBytes(result.byte_count)}
           </div>
           <div className="popover-foot">
             <a className="button-primary" href={result.download_url} download={result.filename}>

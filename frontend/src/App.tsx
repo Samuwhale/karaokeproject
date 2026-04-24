@@ -87,6 +87,7 @@ function App() {
   } = dashboard
 
   const [lastVisitedTrackId, setLastVisitedTrackId] = useState<string | null>(null)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsView, setSettingsView] = useState<'preferences' | 'maintenance' | 'storage'>(
     'preferences',
@@ -276,15 +277,17 @@ function App() {
       if (settingsOpen) setSettingsOpen(false)
       else openSettings('preferences')
     },
+    onToggleShortcuts: () => setShortcutsOpen((open) => !open),
     onEscape: () => {
-      if (settingsOpen) setSettingsOpen(false)
-      else if (importPanelOpen) setImportPanelOpen(false)
-      else if (batchExportIds) setBatchExportIds(null)
-      else if (batchSplitIds) setBatchSplitIds(null)
+      if (shortcutsOpen) { setShortcutsOpen(false); return }
+      if (settingsOpen) { setSettingsOpen(false); return }
+      if (importPanelOpen) { setImportPanelOpen(false); return }
+      if (batchExportIds) { setBatchExportIds(null); return }
+      if (batchSplitIds) setBatchSplitIds(null)
     },
   })
 
-  const anyDialogOpen = settingsOpen || importPanelOpen || !!batchExportIds || !!batchSplitIds
+  const anyDialogOpen = settingsOpen || importPanelOpen || !!batchExportIds || !!batchSplitIds || shortcutsOpen
 
   return (
     <ErrorBoundary>
@@ -304,6 +307,15 @@ function App() {
                 </button>
               ) : null}
               <ConnectionDot connection={connection} hasFirstSync={hasFirstSync} />
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setShortcutsOpen(true)}
+                aria-label="Keyboard shortcuts"
+                title="Keyboard shortcuts (?)"
+              >
+                <QuestionIcon />
+              </button>
               <button
                 type="button"
                 className="icon-button"
@@ -359,6 +371,7 @@ function App() {
                   track={selectedTrack}
                   selectedRunId={mixRunId}
                   profiles={settings?.profiles ?? []}
+                  defaultProfileKey={defaultProcessing.profile_key}
                   defaultBitrate={defaultBitrate}
                   creatingRun={creatingRun}
                   cancellingRunId={cancellingRunId}
@@ -459,6 +472,8 @@ function App() {
           }}
         />
 
+        {shortcutsOpen ? <KeyboardShortcutsModal onClose={() => setShortcutsOpen(false)} /> : null}
+
         <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
         {dragOverlayActive ? (
@@ -471,6 +486,51 @@ function App() {
         ) : null}
       </div>
     </ErrorBoundary>
+  )
+}
+
+type ShortcutEntry = { key: string; desc: string; note?: string }
+
+const SHORTCUT_ENTRIES: ShortcutEntry[] = [
+  { key: 'j / ↓', desc: 'Next track' },
+  { key: 'k / ↑', desc: 'Previous track' },
+  { key: 'r', desc: 'Re-split with default profile', note: 'Mix workspace' },
+  { key: '1 – 9', desc: 'Switch to version by index', note: 'Mix workspace' },
+  { key: 'Space', desc: 'Play / Pause', note: 'Mix workspace' },
+  { key: '← →', desc: 'Adjust fader', note: '0.5 dB step' },
+  { key: 'Shift + ← →', desc: 'Fine fader', note: '0.1 dB step' },
+  { key: 'Alt + ← →', desc: 'Coarse fader', note: '3 dB step' },
+  { key: 'double-click fader', desc: 'Reset to 0 dB' },
+  { key: '?', desc: 'Show shortcuts' },
+  { key: '⌘ ,', desc: 'Open settings' },
+  { key: 'Esc', desc: 'Close panel / clear selection' },
+]
+
+function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="kbd-backdrop"
+      role="dialog"
+      aria-modal
+      aria-label="Keyboard shortcuts"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="kbd-panel">
+        <div className="kbd-head">
+          <strong>Keyboard shortcuts</strong>
+          <button type="button" className="button-secondary" onClick={onClose}>Done</button>
+        </div>
+        <ul className="kbd-list">
+          {SHORTCUT_ENTRIES.map(({ key, desc, note }, i) => (
+            <li key={i} className="kbd-row">
+              <kbd className="kbd-key">{key}</kbd>
+              <span className="kbd-desc">{desc}</span>
+              {note ? <span className="kbd-note">{note}</span> : null}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   )
 }
 
@@ -506,6 +566,16 @@ function ConnectionDot({ connection, hasFirstSync }: { connection: Connection; h
     )
   }
   return null
+}
+
+function QuestionIcon() {
+  return (
+    <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M6.5 6.2c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5c0 .7-.4 1.2-1 1.5-.4.2-.5.5-.5.8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <circle cx="8" cy="11" r=".75" fill="currentColor" />
+    </svg>
+  )
 }
 
 function GearIcon() {
