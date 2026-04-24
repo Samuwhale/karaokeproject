@@ -571,10 +571,10 @@ function ImportPanelContent({
           {drafts.length > 0 ? (
             <>
               <div className="import-panel-divider">
-                <span>To import · {drafts.length}</span>
+                <span>{drafts.length} {drafts.length === 1 ? 'song' : 'songs'} to import</span>
                 <span className="import-panel-divider-stats">
                   {createNew > 0 ? <span>{createNew} new</span> : null}
-                  {reuse > 0 ? <span>{reuse} attached</span> : null}
+                  {reuse > 0 ? <span>{reuse} version{reuse === 1 ? '' : 's'}</span> : null}
                   {skip > 0 ? <span>{skip} skipped</span> : null}
                 </span>
               </div>
@@ -614,7 +614,7 @@ function ImportPanelContent({
                 disabled={!canConfirm}
                 onClick={() => discardRejection(() => confirm(false))}
               >
-                Add without splitting
+                Import only
               </button>
               {profiles.length > 0 ? (
                 <button

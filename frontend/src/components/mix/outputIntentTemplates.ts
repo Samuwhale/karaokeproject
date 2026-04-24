@@ -15,15 +15,15 @@ type IntentSpec = {
 export const INTENTS: readonly IntentSpec[] = [
   {
     value: 'no-vocals',
-    label: 'No vocals',
-    description: 'Instrumental only — every vocal stem muted.',
+    label: 'Instrumental',
+    description: 'All vocal stems muted — pure instrumental.',
     mutes: ['vocals', 'lead_vocals', 'backing_vocals'],
     requires: ['vocals', 'lead_vocals', 'backing_vocals'],
   },
   {
     value: 'instrumental-with-backing',
-    label: 'Instrumental + backing',
-    description: 'Instrumental with the backing vocals kept in.',
+    label: 'Karaoke',
+    description: 'Lead vocals muted, backing vocals kept — karaoke-style.',
     mutes: ['lead_vocals'],
     requires: ['lead_vocals'],
     requiresProfile: 'vocal-split',

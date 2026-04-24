@@ -461,18 +461,25 @@
 
 .library-empty-onboard {
   max-width: none;
-  padding: 64px 24px;
+  padding: 72px 32px 64px;
   margin-top: 16px;
   border: 1.5px dashed var(--border-soft);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background:
-    radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--accent) 4%, transparent), transparent 70%);
-  gap: 14px;
-  transition: border-color 160ms ease, background 160ms ease;
+    radial-gradient(ellipse at 50% 30%, color-mix(in oklch, var(--accent) 6%, transparent), transparent 65%);
+  gap: 16px;
+  transition: border-color 200ms ease, background 200ms ease;
 }
 
 .library-empty-onboard:hover {
   border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
+  background:
+    radial-gradient(ellipse at 50% 30%, color-mix(in oklch, var(--accent) 9%, transparent), transparent 65%);
+}
+
+.library-onboard-icon {
+  color: color-mix(in oklch, var(--accent) 65%, var(--text-faint));
+  opacity: 0.8;
 }
 
 /* Song row */
@@ -1168,11 +1175,15 @@
 .mix-nav-btn {
   width: 34px;
   height: 34px;
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .mix-nav-btn:not(:disabled):hover {
-  color: var(--text-muted);
+  color: var(--text);
+}
+
+.mix-nav-btn:disabled {
+  color: var(--text-faint);
 }
 
 .mix-nav-sep {
@@ -1957,6 +1968,33 @@ button.stem-row-gain:focus-visible {
   background: var(--accent);
   border-radius: inherit;
   transition: width 320ms ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.mix-progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -70%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, var(--accent-ink) 22%, transparent),
+    transparent
+  );
+  animation: progress-shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes progress-shimmer {
+  0% { left: -60%; }
+  100% { left: 140%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mix-progress-fill::after { display: none; }
 }
 
 .mix-progress-hint {

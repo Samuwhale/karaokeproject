@@ -62,6 +62,30 @@ function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowS
   return { text: null, tone: null, count: null, preferred: false }
 }
 
+function WaveformIcon() {
+  const bars = [0.28, 0.52, 0.85, 0.65, 0.95, 0.72, 0.44, 0.22]
+  const barW = 5
+  const gap = 3
+  const svgH = 36
+  const svgW = bars.length * (barW + gap) - gap
+  return (
+    <svg
+      className="library-onboard-icon"
+      width={svgW}
+      height={svgH}
+      viewBox={`0 0 ${svgW} ${svgH}`}
+      aria-hidden
+    >
+      {bars.map((h, i) => {
+        const barH = Math.max(4, h * svgH)
+        const x = i * (barW + gap)
+        const y = (svgH - barH) / 2
+        return <rect key={i} x={x} y={y} width={barW} height={barH} rx={2.5} fill="currentColor" />
+      })}
+    </svg>
+  )
+}
+
 function ClearIcon() {
   return (
     <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
@@ -476,6 +500,7 @@ export function SongsPage({
                   type="button"
                   className={`library-sort-btn ${view.sort === option.value ? 'is-active' : ''}`}
                   aria-pressed={view.sort === option.value}
+                  title={option.label}
                   onClick={() => onViewChange({ ...view, sort: option.value })}
                 >
                   {option.shortLabel}
@@ -591,21 +616,21 @@ export function SongsPage({
         </div>
       ) : tracks.length > 0 ? (
         <div className="library-empty">
-          <strong>No songs match</strong>
           {view.filter !== 'all' ? (
             <>
+              <strong>Nothing here</strong>
               <p>No songs match this filter.</p>
               <button
                 type="button"
                 className="button-secondary"
                 onClick={() => onViewChange({ ...view, filter: 'all' })}
               >
-                Clear filter
+                Show all
               </button>
             </>
           ) : (
             <>
-              <p>No results for "{view.search}".</p>
+              <strong>No results for "{view.search}"</strong>
               <button
                 type="button"
                 className="button-secondary"
@@ -618,8 +643,9 @@ export function SongsPage({
         </div>
       ) : (
         <div className="library-empty library-empty-onboard">
-          <strong>Start by adding a song</strong>
-          <p>Drop audio files anywhere, paste a YouTube URL, or browse your computer.</p>
+          <WaveformIcon />
+          <strong>Add your first song</strong>
+          <p>Splits audio into stems — vocals, bass, drums, and more — so you can mix, mute, or download each part independently. Drop files here, paste a YouTube URL, or click below.</p>
           <button type="button" className="button-primary" onClick={onAddSongs}>
             Add songs
           </button>
