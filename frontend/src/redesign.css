@@ -1224,15 +1224,28 @@
   white-space: nowrap;
 }
 
-.stem-row-label span {
+.stem-row-gain {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 12px;
-  color: var(--text-muted);
+  transition: color 150ms, font-weight 150ms;
 }
 
-.stem-row.is-muted .stem-row-label strong, .stem-row.is-muted .stem-row-label span {
+.stem-row-gain.is-zero {
   color: var(--text-faint);
+}
+
+.stem-row-gain.is-set {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.stem-row.is-muted .stem-row-label strong, .stem-row.is-muted .stem-row-gain {
+  color: var(--text-faint);
+}
+
+.stem-row.is-muted .stem-row-gain.is-set {
+  font-weight: 400;
 }
 
 .stem-row.is-muted .stem-row-dot, .stem-row.is-silenced .stem-row-dot {

@@ -51,7 +51,7 @@ export function trackStageSummary(track: TrackSummary): TrackStageSummary {
   if (latestStatus === 'completed') {
     return {
       key: 'ready',
-      label: track.has_custom_mix ? 'Mix saved' : 'Ready to mix',
+      label: track.has_custom_mix ? 'Mix saved' : 'Ready',
       description: track.has_custom_mix ? 'A saved stem balance is ready to reopen.' : 'The latest completed split is ready in Mix.',
       actionLabel: 'Open mix',
     }

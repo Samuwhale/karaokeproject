@@ -105,8 +105,7 @@ function isMixableRun(run: RunDetail) {
   return run.status === 'completed' && run.artifacts.some((artifact) => isStemKind(artifact.kind))
 }
 
-function versionSummary(run: RunDetail | null, keeperId: string | null): string {
-  if (!run) return 'No version yet'
+function versionSummary(run: RunDetail, keeperId: string | null): string {
   const isKeeper = keeperId && run.id === keeperId
   return isKeeper ? `Final · ${run.processing.profile_label}` : run.processing.profile_label
 }
@@ -513,7 +512,7 @@ function MixWorkspaceContent({
   const selectedRun = resolveSelectedRun(track, selectedRunId)
   const mixable = selectedRun ? isMixableRun(selectedRun) : false
   const canExport = !!selectedRun && selectedRun.status === 'completed'
-  const versionLabel = versionSummary(selectedRun, track.keeper_run_id)
+  const versionLabel = selectedRun ? versionSummary(selectedRun, track.keeper_run_id) : ''
   const activeSplit = selectedRun && isActiveRunStatus(selectedRun.status)
   const progressPct = activeSplit ? Math.round(selectedRun.progress * 100) : null
 
@@ -564,38 +563,40 @@ function MixWorkspaceContent({
             <strong title={track.title}>{track.title}</strong>
             <span className="mix-top-artist">{track.artist ?? 'Unknown artist'}</span>
           </div>
-          <span className="popover-anchor mix-top-version">
-            <button
-              type="button"
-              className={`mix-version-pill ${popover === 'versions' ? 'is-open' : ''}`}
-              onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
-              aria-haspopup="dialog"
-              aria-expanded={popover === 'versions'}
-            >
-              {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
-              <span>{progressPct !== null ? `${progressPct}%` : versionLabel}</span>
-              <Chevron />
-            </button>
-            {popover === 'versions' ? (
-              <VersionsPopover
-                track={track}
-                selectedRun={selectedRun}
-                profiles={profiles}
-                creatingRun={creatingRun}
-                cancellingRunId={cancellingRunId}
-                retryingRunId={retryingRunId}
-                deletingRunId={deletingRunId}
-                settingKeeper={settingKeeper}
-                onClose={() => setPopover(null)}
-                onSelectRun={onSelectRun}
-                onCreateRun={(processing) => onCreateRun(track.id, processing)}
-                onCancelRun={onCancelRun}
-                onRetryRun={onRetryRun}
-                onDeleteRun={onDeleteRun}
-                onSetKeeper={(runId) => onSetKeeper(track.id, runId)}
-              />
-            ) : null}
-          </span>
+          {selectedRun ? (
+            <span className="popover-anchor mix-top-version">
+              <button
+                type="button"
+                className={`mix-version-pill ${popover === 'versions' ? 'is-open' : ''}`}
+                onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
+                aria-haspopup="dialog"
+                aria-expanded={popover === 'versions'}
+              >
+                {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
+                <span>{progressPct !== null ? `${progressPct}%` : versionLabel}</span>
+                <Chevron />
+              </button>
+              {popover === 'versions' ? (
+                <VersionsPopover
+                  track={track}
+                  selectedRun={selectedRun}
+                  profiles={profiles}
+                  creatingRun={creatingRun}
+                  cancellingRunId={cancellingRunId}
+                  retryingRunId={retryingRunId}
+                  deletingRunId={deletingRunId}
+                  settingKeeper={settingKeeper}
+                  onClose={() => setPopover(null)}
+                  onSelectRun={onSelectRun}
+                  onCreateRun={(processing) => onCreateRun(track.id, processing)}
+                  onCancelRun={onCancelRun}
+                  onRetryRun={onRetryRun}
+                  onDeleteRun={onDeleteRun}
+                  onSetKeeper={(runId) => onSetKeeper(track.id, runId)}
+                />
+              ) : null}
+            </span>
+          ) : null}
         </div>
         <div className="mix-top-actions">
           <span className="popover-anchor">
