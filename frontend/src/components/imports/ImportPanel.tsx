@@ -448,6 +448,8 @@ function ImportPanelContent({
               <p className="import-panel-hint">{playlistHint}</p>
             ) : null}
 
+            <div className="import-panel-or" aria-hidden>or</div>
+
             <div
               className={`import-panel-drop ${dragActive ? 'is-active' : ''} ${localFiles.length > 0 ? 'is-loaded' : ''}`}
               onDrop={handleDrop}

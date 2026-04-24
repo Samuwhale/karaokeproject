@@ -69,6 +69,7 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
               type="button"
               className={`mix-preset ${active ? 'is-active' : ''}`}
               aria-pressed={active}
+              title={spec.description}
               onClick={() => discardRejection(() => applyIntent(spec.value))}
             >
               {spec.label}
