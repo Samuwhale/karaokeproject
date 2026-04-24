@@ -1307,11 +1307,28 @@
   object-fit: cover;
 }
 
-.mix-top-title-copy {
+button.mix-top-title-copy {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background 100ms;
+}
+
+button.mix-top-title-copy:hover {
+  background: var(--surface-hover);
+}
+
+button.mix-top-title-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .mix-top-title strong {
@@ -1325,6 +1342,24 @@
   white-space: nowrap;
 }
 
+.mix-top-title-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.mix-top-edit-icon {
+  display: none;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+button.mix-top-title-copy:hover .mix-top-edit-icon {
+  display: flex;
+}
+
 .mix-top-artist {
   font-size: 13px;
   color: var(--text-muted);
@@ -1332,6 +1367,46 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.2;
+}
+
+.mix-top-rename {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mix-top-rename-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-xs);
+  padding: 2px 6px;
+  color: var(--text);
+  outline: none;
+  min-width: 180px;
+  max-width: 320px;
+}
+
+.mix-top-rename-artist {
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 2px 6px;
+  color: var(--text);
+  outline: none;
+  min-width: 140px;
+  max-width: 240px;
+}
+
+.mix-top-rename-title:focus,
+.mix-top-rename-artist:focus {
+  border-color: var(--accent);
 }
 
 .mix-top-actions {
@@ -2668,75 +2743,64 @@ button.stem-row-gain:focus-visible {
   font-size: 12px;
 }
 
-/* Import panel: profile card picker ---------------------------------------- */
+/* Import panel: profile tab picker ----------------------------------------- */
 
 .import-panel-profiles {
   display: flex;
-  gap: 8px;
-}
-
-.import-panel-profile-btn {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 10px 12px;
-  text-align: left;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-soft);
+  gap: 6px;
+}
+
+.import-profile-tabs {
+  display: flex;
+  gap: 4px;
   background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+
+.import-profile-tab {
+  flex: 1 1 0;
+  padding: 5px 10px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
   cursor: pointer;
-  transition: border-color 100ms, background 100ms, box-shadow 100ms;
+  transition: background 100ms, color 100ms;
+  white-space: nowrap;
 }
 
-.import-panel-profile-btn:hover:not(:disabled) {
-  border-color: var(--border-strong);
+.import-profile-tab:hover:not(:disabled) {
   background: var(--surface-hover);
+  color: var(--text);
 }
 
-.import-panel-profile-btn.is-selected {
-  border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
-  background: color-mix(in oklch, var(--accent) 5%, var(--surface));
-  box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 15%, transparent);
+.import-profile-tab.is-selected {
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 3px color-mix(in oklch, var(--shadow) 12%, transparent);
 }
 
-.import-panel-profile-btn:focus-visible {
+.import-profile-tab:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
-.import-panel-profile-btn:disabled {
+.import-profile-tab:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.import-panel-profile-name {
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--text);
-  line-height: 1.3;
-}
-
-.import-panel-profile-btn.is-selected .import-panel-profile-name {
-  color: var(--accent);
-}
-
-.import-panel-profile-hint {
-  font-size: 11px;
+.import-profile-hint {
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
-}
-
-.import-panel-profile-stems {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--text-faint);
-  line-height: 1.4;
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 0 2px;
 }
 
 /* Mix workspace: inline profile picker in zero state ----------------------- */

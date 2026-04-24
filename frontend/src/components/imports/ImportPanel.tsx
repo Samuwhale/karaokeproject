@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useEffect, useEffectEvent, useImperativeHandle, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 
 import { discardRejection } from '../../async'
@@ -191,7 +191,7 @@ const ImportRow = forwardRef<ImportRowHandle, ImportRowProps>(function ImportRow
                   : draft.existing_track_id,
               }))}
             >
-              Add version
+              Add split
             </button>
             <button
               type="button"
@@ -305,6 +305,14 @@ function ImportPanelContent({
   }
 
   const sourceBusy = resolvingYoutubeImport || resolvingLocalImport
+  const resolveTypedYouTubeUrl = useEffectEvent(async (url: string) => {
+    try {
+      await onResolveYouTube(url)
+      clearSource()
+    } catch (raw) {
+      setSourceError(raw instanceof Error ? raw.message : 'Could not resolve URL.')
+    }
+  })
 
   // Auto-resolve when a valid YouTube URL is typed/pasted into the field
   useEffect(() => {
@@ -312,17 +320,10 @@ function ImportPanelContent({
     if (!trimmed || sourceBusy) return
     if (!/^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\b/i.test(trimmed)) return
     const timer = window.setTimeout(() => {
-      discardRejection(async () => {
-        try {
-          await onResolveYouTube(trimmed)
-          clearSource()
-        } catch (raw) {
-          setSourceError(raw instanceof Error ? raw.message : 'Could not resolve URL.')
-        }
-      })
+      discardRejection(() => resolveTypedYouTubeUrl(trimmed))
     }, 700)
     return () => window.clearTimeout(timer)
-  }, [youtubeUrl]) // sourceBusy intentionally omitted — stale-safe via trimmed capture
+  }, [sourceBusy, youtubeUrl])
 
   const playlistHint = youtubeUrl.trim() && looksLikePlaylist(youtubeUrl)
     ? 'Playlists can take up to 30 seconds to resolve.'
@@ -541,29 +542,30 @@ function ImportPanelContent({
           {/* ---- Profile picker ----------------------------------------- */}
           {drafts.length > 0 && profiles.length > 0 ? (
             <div className="import-panel-profiles" role="group" aria-label="Split profile">
-              {profiles.map((profile) => {
-                const isSelected = profile.key === profileKey
-                return (
-                  <button
-                    key={profile.key}
-                    type="button"
-                    className={`import-panel-profile-btn ${isSelected ? 'is-selected' : ''}`}
-                    aria-pressed={isSelected}
-                    disabled={confirming}
-                    onClick={() => setSelectedProfileKey(profile.key)}
-                  >
-                    <span className="import-panel-profile-name">{profile.label}</span>
-                    {profile.best_for ? (
-                      <span className="import-panel-profile-hint">{profile.best_for}</span>
-                    ) : null}
-                    {profile.stems.length > 0 ? (
-                      <span className="import-panel-profile-stems">
-                        {profile.stems.map((s) => stemLabel(s)).join(' · ')}
-                      </span>
-                    ) : null}
-                  </button>
-                )
-              })}
+              <div className="import-profile-tabs">
+                {profiles.map((profile) => {
+                  const isSelected = profile.key === profileKey
+                  return (
+                    <button
+                      key={profile.key}
+                      type="button"
+                      className={`import-profile-tab ${isSelected ? 'is-selected' : ''}`}
+                      aria-pressed={isSelected}
+                      disabled={confirming}
+                      title={profile.stems.length > 0 ? profile.stems.map((s) => stemLabel(s)).join(' · ') : undefined}
+                      onClick={() => setSelectedProfileKey(profile.key)}
+                    >
+                      {profile.label}
+                    </button>
+                  )
+                })}
+              </div>
+              {(() => {
+                const selected = profiles.find((p) => p.key === profileKey)
+                return selected?.best_for ? (
+                  <p className="import-profile-hint">{selected.best_for}</p>
+                ) : null
+              })()}
             </div>
           ) : null}
 
@@ -574,7 +576,7 @@ function ImportPanelContent({
                 <span>{drafts.length} {drafts.length === 1 ? 'song' : 'songs'} to import</span>
                 <span className="import-panel-divider-stats">
                   {createNew > 0 ? <span>{createNew} new</span> : null}
-                  {reuse > 0 ? <span>{reuse} version{reuse === 1 ? '' : 's'}</span> : null}
+                  {reuse > 0 ? <span>{reuse} existing song{reuse === 1 ? '' : 's'}</span> : null}
                   {skip > 0 ? <span>{skip} skipped</span> : null}
                 </span>
               </div>

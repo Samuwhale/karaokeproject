@@ -44,32 +44,13 @@ function createDraft(settings: Settings | null): SettingsDraft {
       temp_max_age_hours: settings?.retention.temp_max_age_hours ?? 24,
       export_bundle_max_age_days: settings?.retention.export_bundle_max_age_days ?? 7,
     },
-    default_profile: settings?.default_profile ?? 'standard',
+    default_profile: settings?.default_profile ?? 'karaoke',
     export_mp3_bitrate: settings?.export_mp3_bitrate ?? '320k',
   }
 }
 
 function bucketFor(storageOverview: StorageOverview | null, key: StorageBucket['key']) {
   return storageOverview?.items.find((item) => item.key === key) ?? null
-}
-
-function panelCopy(view: SettingsPanelProps['view']) {
-  if (view === 'preferences') {
-    return {
-      title: 'Defaults',
-      description: 'Keep these defaults simple so imports, reruns, and exports stay fast.',
-    }
-  }
-  if (view === 'maintenance') {
-    return {
-      title: 'Readiness & repair',
-      description: 'Check system health and repair the library before running any cleanup.',
-    }
-  }
-  return {
-    title: 'Storage & cleanup',
-    description: 'Change paths and retention only when the workspace layout needs to move.',
-  }
 }
 
 export function SettingsPanel({
@@ -111,8 +92,6 @@ export function SettingsPanel({
     return () => window.clearTimeout(id)
   }, [savedAt])
 
-  const copy = panelCopy(view)
-
   if (view === 'maintenance') {
     return null
   }
@@ -120,12 +99,6 @@ export function SettingsPanel({
   if (!settings) {
     return (
       <section className="section">
-        <div className="section-head">
-          <div className="section-head-copy">
-            <h2>{copy.title}</h2>
-            <p>{copy.description}</p>
-          </div>
-        </div>
         <div className="skeleton-stack">
           <Skeleton height={32} />
           <Skeleton height={32} />
@@ -170,13 +143,6 @@ export function SettingsPanel({
 
   return (
     <section className="section">
-      <div className="section-head">
-        <div className="section-head-copy">
-          <h2>{copy.title}</h2>
-          <p>{copy.description}</p>
-        </div>
-      </div>
-
       {view === 'preferences' ? (
         <form className="import-form" onSubmit={handleSubmit}>
           <div className="processing-grid">
@@ -184,11 +150,10 @@ export function SettingsPanel({
               <ModelPicker
                 profileKey={draft.default_profile}
                 profiles={settings.profiles}
-                allowCustom={false}
                 labelId="default-model"
                 onProfileChange={(nextKey) => updateDraft({ ...draft, default_profile: nextKey })}
               />
-              <span className="field-hint">Used for new splits unless you change it per song.</span>
+              <span className="field-hint">Used for new splits unless you choose a different split type for a song.</span>
             </div>
 
             <label className="field">
@@ -240,15 +205,15 @@ export function SettingsPanel({
 
               <div className="storage-action-row">
                 <div className="storage-action-copy">
-                  <strong>Delete export bundles</strong>
-                  <p>Removes built zip bundles only. Your saved songs, splits, and source files stay intact.</p>
+                  <strong>Delete export downloads</strong>
+                  <p>Removes built export files only. Your saved songs, splits, and source files stay intact.</p>
                 </div>
                 <ConfirmInline
                   label={cleaningExportBundles ? 'Working…' : formatSize(exportBundles?.reclaimable_bytes ?? 0) ?? '0 B'}
                   pendingLabel="Working…"
-                  confirmLabel="Delete export bundles"
-                  cancelLabel="Keep bundles"
-                  prompt="Delete built export bundles now?"
+                  confirmLabel="Delete export downloads"
+                  cancelLabel="Keep exports"
+                  prompt="Delete built export downloads now?"
                   pending={cleaningExportBundles}
                   disabled={(exportBundles?.reclaimable_bytes ?? 0) === 0}
                   onConfirm={onCleanupExportBundles}
@@ -403,7 +368,7 @@ export function SettingsPanel({
               </label>
 
               <label className="field">
-                <span>Export bundle max age (days)</span>
+                <span>Export download max age (days)</span>
                 <input
                   type="number"
                   min={1}

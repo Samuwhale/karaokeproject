@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react'
 import { discardRejection } from '../../async'
 import { ConfirmInline } from '../feedback/ConfirmInline'
 import { RunStepper } from '../feedback/RunStepper'
-import { Spinner } from '../feedback/Spinner'
 import { MixExportPopover } from './MixExportPopover'
 import { MixPanel } from './MixPanel'
 import { OutputIntentPicker } from './OutputIntent'
@@ -167,6 +166,13 @@ function ChevronDown() {
   )
 }
 
+function PencilIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+      <path d="M7.5 1.5l2 2L3 10H1V8L7.5 1.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 type VersionsPopoverProps = {
   track: TrackDetail
@@ -281,10 +287,10 @@ function VersionsPopover({
   return (
     <>
       <div className="popover-backdrop" onClick={onClose} aria-hidden />
-      <div className="popover popover-right popover-wide" role="dialog" aria-label="Versions">
-        <div className="popover-title">Versions</div>
+      <div className="popover popover-right popover-wide" role="dialog" aria-label="Split types">
+        <div className="popover-title">Split types</div>
         {rows.length === 0 ? (
-          <p className="popover-empty">No profiles configured.</p>
+          <p className="popover-empty">No split types configured.</p>
         ) : (
           <div className="popover-list" role="list">
             {rows.map(({ profile, run }) => {
@@ -301,7 +307,7 @@ function VersionsPopover({
                   <div key={profile.key} className="popover-row is-armed" role="group">
                     <span className="popover-row-copy">
                       <strong>{profile.label}</strong>
-                      <span>{isRetry ? 'Retry this split?' : 'Generate this version?'}</span>
+                      <span>{isRetry ? 'Retry this split?' : 'Generate this split?'}</span>
                     </span>
                     <span className="popover-row-confirm">
                       <button
@@ -340,7 +346,7 @@ function VersionsPopover({
                   <span className="popover-row-copy">
                     <strong>
                       {isPreferred ? (
-                        <span className="popover-row-star" aria-label="Preferred" title="Preferred version">★</span>
+                        <span className="popover-row-star" aria-label="Preferred" title="Preferred split">★</span>
                       ) : null}
                       {profile.label}
                     </strong>
@@ -360,9 +366,9 @@ function VersionsPopover({
           <ConfirmInline
             label="Cancel split"
             pendingLabel="Cancelling…"
-            confirmLabel="Cancel version"
+            confirmLabel="Cancel split"
             cancelLabel="Keep running"
-            prompt="Cancel this version?"
+            prompt="Cancel this split?"
             pending={cancellingRunId === selectedRun.id}
             onConfirm={() => onCancelRun(selectedRun.id)}
           />
@@ -378,15 +384,15 @@ function VersionsPopover({
                 discardRejection(() => onSetKeeper(selectedIsKeeper ? null : selectedRun.id))
               }
             >
-              {selectedIsKeeper ? 'Clear preferred' : 'Set as preferred'}
+              {selectedIsKeeper ? 'Clear preferred' : 'Prefer this split'}
             </button>
             {canDeleteSelected ? (
               <ConfirmInline
-                label="Delete version"
+                label="Delete split"
                 pendingLabel="Deleting…"
                 confirmLabel="Delete"
                 cancelLabel="Keep it"
-                prompt="Delete this version?"
+                prompt="Delete this split?"
                 pending={deletingRunId === selectedRun.id}
                 onConfirm={() => onDeleteRun(selectedRun.id)}
               />
@@ -400,97 +406,48 @@ function VersionsPopover({
 
 type OverflowMenuProps = {
   track: TrackDetail
-  updatingTrack: boolean
   onClose: () => void
   onReveal: () => void | Promise<void>
-  onUpdateTrack: (payload: { title?: string; artist?: string | null }) => Promise<void>
   onDeleteTrack: () => void
   onOpenShortcuts: () => void
 }
 
-function OverflowMenu({ track, updatingTrack, onClose, onReveal, onUpdateTrack, onDeleteTrack, onOpenShortcuts }: OverflowMenuProps) {
-  const [editing, setEditing] = useState(false)
-  const [title, setTitle] = useState(track.title)
-  const [artist, setArtist] = useState(track.artist ?? '')
-
-  async function saveEdits() {
-    const nextTitle = title.trim()
-    const nextArtist = artist.trim()
-    if (!nextTitle) return
-    await onUpdateTrack({ title: nextTitle, artist: nextArtist ? nextArtist : null })
-    setEditing(false)
-    onClose()
-  }
-
+function OverflowMenu({ track, onClose, onReveal, onDeleteTrack, onOpenShortcuts }: OverflowMenuProps) {
   return (
     <>
       <div className="popover-backdrop" onClick={onClose} aria-hidden />
       <div className="popover popover-right" role="dialog" aria-label="Track options">
-        {editing ? (
-          <div className="rename-form">
-            <label>
-              Title
-              <input type="text" value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
-            </label>
-            <label>
-              Artist
-              <input
-                type="text"
-                value={artist}
-                placeholder="Optional"
-                onChange={(event) => setArtist(event.target.value)}
-              />
-            </label>
-            <div className="rename-form-actions">
-              <button type="button" className="button-link" onClick={() => setEditing(false)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="button-primary"
-                disabled={updatingTrack || !title.trim()}
-                onClick={() => discardRejection(saveEdits)}
-              >
-                {updatingTrack ? <Spinner /> : 'Save'}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="menu">
-            <button type="button" className="menu-item" onClick={() => setEditing(true)}>
-              Rename…
-            </button>
-            <button
-              type="button"
-              className="menu-item"
-              onClick={() => {
-                discardRejection(onReveal)
-                onClose()
-              }}
-            >
-              Reveal source folder
-            </button>
-            <button
-              type="button"
-              className="menu-item"
-              onClick={() => { onOpenShortcuts(); onClose() }}
-            >
-              Keyboard shortcuts
-            </button>
-            <div className="menu-sep" aria-hidden />
-            <ConfirmInline
-              label="Delete song…"
-              pendingLabel="Deleting…"
-              confirmLabel={`Delete "${track.title}"`}
-              cancelLabel="Keep"
-              prompt={`Delete "${track.title}" and all its versions?`}
-              onConfirm={async () => {
-                onDeleteTrack()
-                onClose()
-              }}
-            />
-          </div>
-        )}
+        <div className="menu">
+          <button
+            type="button"
+            className="menu-item"
+            onClick={() => {
+              discardRejection(onReveal)
+              onClose()
+            }}
+          >
+            Reveal source folder
+          </button>
+          <button
+            type="button"
+            className="menu-item"
+            onClick={() => { onOpenShortcuts(); onClose() }}
+          >
+            Keyboard shortcuts
+          </button>
+          <div className="menu-sep" aria-hidden />
+          <ConfirmInline
+            label="Delete song…"
+            pendingLabel="Deleting…"
+            confirmLabel={`Delete "${track.title}"`}
+            cancelLabel="Keep"
+            prompt={`Delete "${track.title}" and all its splits?`}
+            onConfirm={async () => {
+              onDeleteTrack()
+              onClose()
+            }}
+          />
+        </div>
       </div>
     </>
   )
@@ -543,6 +500,13 @@ function MixWorkspaceContent({
   onError,
 }: MixWorkspaceProps & { track: TrackDetail }) {
   const [popover, setPopover] = useState<Popover>(null)
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editArtist, setEditArtist] = useState('')
+  const titleCommitRef = useRef(false)
+  const editTitleRef = useRef<HTMLInputElement>(null)
+  const editArtistRef = useRef<HTMLInputElement>(null)
+
   const selectedRun = resolveSelectedRun(track, selectedRunId)
   const mixable = selectedRun ? isMixableRun(selectedRun) : false
   const canExport = !!selectedRun && selectedRun.status === 'completed'
@@ -550,6 +514,42 @@ function MixWorkspaceContent({
   const activeSplit = selectedRun && isActiveRunStatus(selectedRun.status)
   const selectedRunIsKeeper = !!selectedRun && selectedRun.id === track.keeper_run_id
   const progressPct = activeSplit ? Math.round(selectedRun.progress * 100) : null
+
+  // Reset inline edit when navigating to a different track
+  useEffect(() => {
+    setEditingTitle(false)
+    titleCommitRef.current = false
+  }, [track.id])
+
+  // Focus title input when edit mode opens
+  useEffect(() => {
+    if (editingTitle) editTitleRef.current?.focus()
+  }, [editingTitle])
+
+  function startEditTitle() {
+    titleCommitRef.current = false
+    setEditTitle(track.title)
+    setEditArtist(track.artist ?? '')
+    setEditingTitle(true)
+  }
+
+  function commitTitleEdit() {
+    if (titleCommitRef.current) return
+    titleCommitRef.current = true
+    const nextTitle = editTitle.trim()
+    setEditingTitle(false)
+    if (nextTitle && (nextTitle !== track.title || (editArtist.trim() || null) !== track.artist)) {
+      discardRejection(() => onUpdateTrack(track.id, {
+        title: nextTitle,
+        artist: editArtist.trim() || null,
+      }))
+    }
+  }
+
+  function cancelTitleEdit() {
+    titleCommitRef.current = false
+    setEditingTitle(false)
+  }
 
   const mixRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
@@ -561,6 +561,7 @@ function MixWorkspaceContent({
 
     function handleKey(event: KeyboardEvent) {
       if (event.key === 'Escape') {
+        if (editingTitle) { cancelTitleEdit(); return }
         if (popover) setPopover(null)
         return
       }
@@ -581,7 +582,7 @@ function MixWorkspaceContent({
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [popover, canExport, selectedRun])
+  }, [editingTitle, popover, canExport, selectedRun])
 
   return (
     <section className="mix" ref={mixRef}>
@@ -625,10 +626,58 @@ function MixWorkspaceContent({
               ? <img src={track.thumbnail_url} alt="" loading="lazy" />
               : track.title.trim().slice(0, 1).toUpperCase() || 'S'}
           </span>
-          <div className="mix-top-title-copy">
-            <strong title={track.title}>{track.title}</strong>
-            {track.artist ? <span className="mix-top-artist">{track.artist}</span> : null}
-          </div>
+          {editingTitle ? (
+            <div
+              className="mix-top-rename"
+              onBlur={(e) => {
+                if (e.relatedTarget instanceof HTMLElement && e.currentTarget.contains(e.relatedTarget)) return
+                commitTitleEdit()
+              }}
+            >
+              <input
+                ref={editTitleRef}
+                type="text"
+                className="mix-top-rename-title"
+                value={editTitle}
+                disabled={updatingTrack}
+                onChange={(e) => setEditTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); editArtistRef.current?.focus() }
+                  if (e.key === 'Escape') { e.preventDefault(); cancelTitleEdit() }
+                }}
+                aria-label="Song title"
+              />
+              <input
+                ref={editArtistRef}
+                type="text"
+                className="mix-top-rename-artist"
+                value={editArtist}
+                placeholder="Artist (optional)"
+                disabled={updatingTrack}
+                onChange={(e) => setEditArtist(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); commitTitleEdit() }
+                  if (e.key === 'Escape') { e.preventDefault(); cancelTitleEdit() }
+                }}
+                aria-label="Song artist"
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="mix-top-title-copy"
+              disabled={updatingTrack}
+              onClick={startEditTitle}
+              title="Click to rename"
+              aria-label={`Rename — ${track.title}`}
+            >
+              <strong>{track.title}</strong>
+              <span className="mix-top-title-sub">
+                {track.artist ? <span className="mix-top-artist">{track.artist}</span> : null}
+                <span className="mix-top-edit-icon" aria-hidden><PencilIcon /></span>
+              </span>
+            </button>
+          )}
         </div>
         <div className="mix-top-actions">
           {selectedRun ? (
@@ -643,7 +692,7 @@ function MixWorkspaceContent({
                     onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
                     aria-haspopup="dialog"
                     aria-expanded={popover === 'versions'}
-                    title={selectedRunIsKeeper ? 'Preferred version — click for all versions (v)' : 'Versions — click to generate, switch, or manage (v)'}
+                    title={selectedRunIsKeeper ? 'Preferred split — click for all split types (v)' : 'Split types — click to generate, switch, or manage (v)'}
                   >
                     {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
                     {!activeSplit && selectedRunIsKeeper ? (
@@ -655,7 +704,7 @@ function MixWorkspaceContent({
                     ) : progressPct !== null ? (
                       <span className="mix-version-count">{progressPct}%</span>
                     ) : completedCount > 1 ? (
-                      <span className="mix-version-count mix-version-count-badge" aria-label={`${completedCount} versions`}>{completedCount}</span>
+                      <span className="mix-version-count mix-version-count-badge" aria-label={`${completedCount} split types`}>{completedCount}</span>
                     ) : null}
                     <Chevron />
                   </button>
@@ -682,29 +731,31 @@ function MixWorkspaceContent({
               ) : null}
             </span>
           ) : null}
-          <span className="popover-anchor">
-            <button
-              type="button"
-              className="button-primary"
-              onClick={() => setPopover(popover === 'export' ? null : 'export')}
-              disabled={!canExport}
-              aria-haspopup="dialog"
-              aria-expanded={popover === 'export'}
-              title={canExport ? 'Export (e)' : track.runs.length === 0 ? 'Split this track first to enable export.' : 'Export unlocks after the selected version finishes.'}
-            >
-              Export
-            </button>
-            {popover === 'export' && selectedRun && canExport ? (
-              <MixExportPopover
-                track={track}
-                run={selectedRun}
-                defaultBitrate={defaultBitrate}
-                onClose={() => setPopover(null)}
-                onReveal={onReveal}
-                onError={onError}
-              />
-            ) : null}
-          </span>
+          {track.runs.length > 0 ? (
+            <span className="popover-anchor">
+              <button
+                type="button"
+                className="button-primary"
+                onClick={() => setPopover(popover === 'export' ? null : 'export')}
+                disabled={!canExport}
+                aria-haspopup="dialog"
+                aria-expanded={popover === 'export'}
+                title={canExport ? 'Export (e)' : 'Export unlocks after the selected split finishes.'}
+              >
+                Export
+              </button>
+              {popover === 'export' && selectedRun && canExport ? (
+                <MixExportPopover
+                  track={track}
+                  run={selectedRun}
+                  defaultBitrate={defaultBitrate}
+                  onClose={() => setPopover(null)}
+                  onReveal={onReveal}
+                  onError={onError}
+                />
+              ) : null}
+            </span>
+          ) : null}
           <span className="popover-anchor">
             <button
               type="button"
@@ -720,10 +771,8 @@ function MixWorkspaceContent({
               <OverflowMenu
                 key={track.id}
                 track={track}
-                updatingTrack={updatingTrack}
                 onClose={() => setPopover(null)}
                 onReveal={() => onReveal({ kind: 'track-outputs', track_id: track.id })}
-                onUpdateTrack={(payload) => onUpdateTrack(track.id, payload)}
                 onDeleteTrack={() => onDeleteTrack(track.id)}
                 onOpenShortcuts={onOpenShortcuts}
               />
@@ -790,7 +839,7 @@ function MixWorkspaceContent({
             ) : RETRYABLE_STATUSES.has(selectedRun.status) ? (
               <>
                 <strong>{selectedRun.processing.profile_label} split failed</strong>
-                <p>{selectedRun.error_message || 'Retry this version, or try a different profile.'}</p>
+                <p>{selectedRun.error_message || 'Retry this split, or try a different split type.'}</p>
                 <div className="mix-blocked-actions">
                   <button
                     type="button"
@@ -805,27 +854,27 @@ function MixWorkspaceContent({
                     className="button-secondary"
                     onClick={() => setPopover('versions')}
                   >
-                    Try another profile
+                    Try another split type
                   </button>
                 </div>
               </>
             ) : (
               <>
                 <strong>{selectedRun.processing.profile_label} produced no stems</strong>
-                <p>This version completed without separated stem files. Try another profile.</p>
+                <p>This split completed without separated stem files. Try another split type.</p>
                 <button
                   type="button"
                   className="button-secondary"
                   onClick={() => setPopover('versions')}
                 >
-                  Open versions
+                  Open split types
                 </button>
               </>
             )
           ) : (
             <>
               <strong>Split this song into stems</strong>
-              <p>Pick how you want it separated. You can add more versions later.</p>
+              <p>Pick how you want it separated. You can add other split types later.</p>
               <InlineProfilePicker
                 profiles={profiles}
                 defaultProfileKey={defaultProfileKey}
