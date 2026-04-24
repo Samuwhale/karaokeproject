@@ -574,6 +574,7 @@ function MixWorkspaceContent({
                     onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
                     aria-haspopup="dialog"
                     aria-expanded={popover === 'versions'}
+                    title="Versions — click to generate, switch, or manage"
                   >
                     {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
                     <span>{progressPct !== null ? `${progressPct}%` : versionLabel}</span>

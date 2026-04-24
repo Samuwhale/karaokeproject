@@ -76,13 +76,17 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
           )
         })}
         {!atRest ? (
-          <button
-            type="button"
-            className="mix-preset"
-            onClick={() => discardRejection(applyReset)}
-          >
-            All stems
-          </button>
+          <>
+            <span className="mix-preset-sep" aria-hidden />
+            <button
+              type="button"
+              className="mix-preset mix-preset-reset"
+              onClick={() => discardRejection(applyReset)}
+              title="Reset all stems to default levels"
+            >
+              All stems
+            </button>
+          </>
         ) : null}
       </div>
     </div>

@@ -45,9 +45,8 @@ function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowS
   if (stage.key === 'processing') {
     const run = track.latest_run
     const stageLabel = run ? (RUN_STATUS_LABELS[run.status] ?? 'Splitting') : 'Splitting'
-    if (!run || run.status === 'queued') return { text: stageLabel, tone: 'processing', count: null }
-    const pct = Math.round(run.progress * 100)
-    return { text: `${stageLabel} · ${pct}%`, tone: 'processing', count: null }
+    // The progress bar in the wave cell already shows percentage — don't duplicate it
+    return { text: stageLabel, tone: 'processing', count: null }
   }
   if (stage.key === 'needs-attention') {
     return {
@@ -473,6 +472,8 @@ export function SongsPage({
 
             const activeRun =
               track.latest_run && isActiveRunStatus(track.latest_run.status) ? track.latest_run : null
+            // Only show the progress bar once work has actually started (not while queued)
+            const showProgressBar = !!activeRun && activeRun.status !== 'queued' && activeRun.progress > 0
             return (
               <div
                 key={track.id}
@@ -505,8 +506,8 @@ export function SongsPage({
                     <span className="song-row-title">{track.title}</span>
                     <span className="song-row-sub">{meta}</span>
                   </span>
-                  <span className="song-row-wave-cell" aria-hidden={!activeRun}>
-                    {activeRun ? <RowProgressBar run={activeRun} /> : <TrackWaveThumb track={track} />}
+                  <span className="song-row-wave-cell" aria-hidden={!showProgressBar}>
+                    {showProgressBar ? <RowProgressBar run={activeRun!} /> : <TrackWaveThumb track={track} />}
                   </span>
                 </button>
                 <div className="song-row-meta">
@@ -574,7 +575,7 @@ export function SongsPage({
             </button>
           ) : null}
           <button type="button" className="button-link" onClick={clearSelection}>
-            {allSelected ? 'Deselect all' : 'Deselect'}
+            Clear
           </button>
           {splitEligible.length > 0 ? (
             <button type="button" className="button-primary" onClick={handleSplit}>

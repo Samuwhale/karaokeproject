@@ -1181,6 +1181,26 @@
   outline-offset: 2px;
 }
 
+/* Separator before the "All stems" reset button */
+.mix-preset-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border-soft);
+  align-self: center;
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+/* "All stems" reset — visually distinct from named presets */
+.mix-preset-reset {
+  color: var(--text-faint);
+}
+
+.mix-preset-reset:hover:not(.is-active) {
+  color: var(--text-muted);
+  background: var(--surface-hover);
+}
+
 /* Rows canvas ----------------------------------------------------------- */
 /*  Each stem row fills an equal share of the available height. Waveforms
     stretch to fill both axes — this is the primary visual. */
