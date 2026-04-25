@@ -24,6 +24,7 @@ from backend.services.metrics import backfill_artifact_metrics
 from backend.services.processing import build_processing_from_request
 from backend.services.settings import get_or_create_settings
 from backend.services.tracks import (
+    batch_delete_tracks as batch_delete_tracks_service,
     create_run,
     delete_run,
     delete_track,
@@ -155,7 +156,7 @@ def retry_run_endpoint(run_id: str, session: Session = Depends(get_db_session)) 
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(status_code=409, detail=str(error)) from error
     return CreateRunResponse(run=serialize_run_summary(run))
 
 
@@ -232,17 +233,7 @@ def batch_delete_tracks(
     payload: BatchTrackIdsRequest,
     session: Session = Depends(get_db_session),
 ) -> BatchDeleteResponse:
-    deleted = 0
-    blocked: list[str] = []
-    missing: list[str] = []
-    for track_id in payload.track_ids:
-        try:
-            delete_track(session, track_id)
-            deleted += 1
-        except LookupError:
-            missing.append(track_id)
-        except ValueError:
-            blocked.append(track_id)
+    deleted, blocked, missing = batch_delete_tracks_service(session, payload.track_ids)
     return BatchDeleteResponse(
         deleted_track_count=deleted,
         blocked_track_ids=blocked,

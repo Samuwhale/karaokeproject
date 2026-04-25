@@ -31,6 +31,7 @@ from backend.schemas.imports import (
     UpdateImportDraftRequest,
 )
 from backend.services.processing import (
+    ProcessingConfig,
     build_processing_from_request,
     serialize_processing_config,
     serialize_processing_profiles,
@@ -255,7 +256,7 @@ def confirm_import_drafts(
     drafts = _load_pending_drafts(session, payload.draft_ids)
     _validate_ready_for_confirm(drafts)
 
-    queued_processing: dict[str, str] | None = None
+    queued_processing: ProcessingConfig | None = None
     if payload.processing is not None and not payload.queue:
         raise ValueError("Processing can only be set when queueing imports.")
     if payload.queue:
@@ -307,7 +308,7 @@ def confirm_import_drafts(
                 created += 1
 
             if queued_processing is not None:
-                create_run(track, queued_processing.copy())
+                create_run(track, queued_processing)
                 queued += 1
 
             draft.status = DraftStatus.confirmed.value

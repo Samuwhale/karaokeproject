@@ -149,8 +149,8 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         session.commit()
 
         _check_cancellation(session, run)
-        profile_label = processing.get("profile_label") or processing.get("profile_key") or "stem model"
-        followup = processing.get("followup") if isinstance(processing.get("followup"), dict) else None
+        profile_label = processing.profile_label or processing.profile_key or "stem model"
+        followup = processing.followup
 
         # Total separating work spans 0.10 → 0.85 of the run. Split evenly
         # across the primary (and optional followup) passes so sub-progress
@@ -175,7 +175,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             source_path=normalized_path,
             output_dir=raw_stems_directory / "primary",
             model_cache_dir=storage_paths.model_cache_dir,
-            model_filename=processing["model_filename"],
+            model_filename=processing.model_filename,
             progress_callback=_stage_progress_updater(
                 session,
                 run,
@@ -194,7 +194,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             raise SeparationError("Separation produced no stems.")
 
         if followup is not None:
-            input_stem = str(followup["input_stem"])
+            input_stem = followup.input_stem
             input_path = raw_stems.get(input_stem)
             if input_path is None:
                 raise SeparationError(
@@ -216,7 +216,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
                 source_path=input_path,
                 output_dir=raw_stems_directory / "followup",
                 model_cache_dir=storage_paths.model_cache_dir,
-                model_filename=str(followup["model_filename"]),
+                model_filename=followup.model_filename,
                 progress_callback=_stage_progress_updater(
                     session,
                     run,

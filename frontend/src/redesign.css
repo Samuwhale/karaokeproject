@@ -136,6 +136,12 @@
   border-color: color-mix(in oklch, var(--err) 22%, var(--border-soft));
 }
 
+.library-queue.is-compact {
+  padding: 6px 12px;
+  background: transparent;
+  border-color: color-mix(in oklch, var(--accent) 12%, var(--border-soft));
+}
+
 .library-queue-head {
   display: flex;
   align-items: center;
@@ -197,6 +203,7 @@
   font-size: 13px;
   color: var(--text);
   border-radius: var(--radius-sm);
+  transition: background 120ms;
 }
 
 .library-queue-item:hover {
@@ -696,6 +703,11 @@
 
 .track-wave rect {
   fill: color-mix(in srgb, var(--text) 62%, transparent);
+  transition: fill 160ms;
+}
+
+.song-row:hover:not(.is-active):not(.is-selected) .track-wave rect {
+  fill: color-mix(in oklch, var(--accent) 35%, color-mix(in srgb, var(--text) 55%, transparent));
 }
 
 .song-row.is-active .track-wave rect, .song-row.is-selected .track-wave rect {
@@ -1264,11 +1276,17 @@
   height: 28px;
   color: var(--text-muted);
   border-radius: var(--radius-xs);
+  transition: background 120ms, color 120ms;
 }
 
 .mix-nav-btn:not(:disabled):hover {
   color: var(--text);
   background: var(--surface-hover);
+}
+
+.mix-nav-btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .mix-nav-btn:disabled {
@@ -1913,11 +1931,12 @@ button.stem-row-gain:focus-visible {
   opacity: 0.55;
 }
 
-/* Mute / Solo toggles --------------------------------------------------- */
+/* Mute / Solo / Download toggles ---------------------------------------- */
 
 .stem-row-toggles {
   display: inline-flex;
   gap: 4px;
+  align-items: center;
 }
 
 .stem-toggle {
@@ -1957,6 +1976,26 @@ button.stem-row-gain:focus-visible {
 .stem-toggle:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Download: separate from M/S with a gap and distinct hover */
+.stem-toggle-dl {
+  text-decoration: none;
+  color: var(--text-faint);
+  margin-left: 2px;
+  border-radius: var(--radius-xs);
+  transition: background 120ms, color 120ms, box-shadow 120ms;
+}
+
+.stem-toggle-dl:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.stem-toggle-dl:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 1px 4px color-mix(in oklch, var(--accent) 40%, transparent);
 }
 
 /* Transport ------------------------------------------------------------- */
@@ -2225,6 +2264,7 @@ button.stem-row-gain:focus-visible {
   max-width: 320px;
   text-align: center;
   line-height: 1.5;
+  margin: 0;
 }
 
 /* Popovers -------------------------------------------------------------- */
@@ -2468,7 +2508,8 @@ button.stem-row-gain:focus-visible {
 }
 
 .export-pop-row.is-on {
-  background: var(--accent-dim);
+  background: color-mix(in oklch, var(--accent) 14%, var(--surface));
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .export-pop-row.is-disabled {
@@ -2675,7 +2716,7 @@ button.stem-row-gain:focus-visible {
 .import-panel-hint {
   font-size: 12px;
   color: var(--text-muted);
-  margin: 0;
+  margin: 4px 0 0;
 }
 
 .import-panel-or {
@@ -2999,22 +3040,6 @@ button.stem-row-gain:focus-visible {
   cursor: default;
 }
 
-/* Stem download toggle ------------------------------------------------------ */
-
-.stem-toggle-dl {
-  text-decoration: none;
-  color: var(--text-faint);
-}
-
-.stem-toggle-dl:hover {
-  color: var(--accent);
-}
-
-.stem-toggle-dl:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
-}
-
 /* Keyboard shortcuts modal ------------------------------------------------- */
 
 .kbd-backdrop {
@@ -3161,38 +3186,10 @@ button.stem-row-gain:focus-visible {
   opacity: 1;
 }
 
-/* Profile picker: default indicator ---------------------------------------- */
-
-.mix-profile-option-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.mix-profile-option-default {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--accent);
-  flex-shrink: 0;
-  line-height: 1.5;
-  opacity: 0.85;
-}
+/* Profile picker: default card gets a subtle accent border -------------------- */
 
 .mix-profile-option.is-default {
-  border-color: var(--accent);
-  background: color-mix(in oklch, var(--accent) 4%, var(--surface));
-  box-shadow:
-    0 0 0 1px color-mix(in oklch, var(--accent) 20%, transparent),
-    0 1px 4px color-mix(in srgb, var(--text) 6%, transparent);
-}
-
-.mix-profile-option.is-default:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: color-mix(in oklch, var(--accent) 7%, var(--surface));
-  box-shadow:
-    0 0 0 3px color-mix(in oklch, var(--accent) 14%, transparent),
-    0 2px 8px color-mix(in srgb, var(--text) 8%, transparent);
+  border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
 }
 
 

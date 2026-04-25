@@ -37,7 +37,7 @@ from backend.schemas.tracks import (
     TrackSummaryResponse,
 )
 from backend.services.processing import (
-    build_processing_config,
+    ProcessingConfig,
     resolve_run_processing,
     serialize_processing_config,
 )
@@ -160,7 +160,7 @@ def _run_has_mixable_stems(run: Run) -> bool:
 
 
 def _run_profile_key(run: Run) -> str:
-    return str(resolve_run_processing(run)["profile_key"])
+    return resolve_run_processing(run).profile_key
 
 
 def _profile_runs(track: Track, profile_key: str, *, exclude_run_id: str | None = None) -> list[Run]:
@@ -396,7 +396,7 @@ def create_track(
     return track
 
 
-def create_run(track: Track, processing: dict[str, Any]) -> Run:
+def create_run(track: Track, processing: ProcessingConfig) -> Run:
     session = object_session(track)
     if session is not None:
         prune_terminal_runs_without_stems(session, track)
@@ -405,22 +405,22 @@ def create_run(track: Track, processing: dict[str, Any]) -> Run:
     active_same_profile = next(
         (
             run
-            for run in _profile_runs(track, str(processing["profile_key"]))
+            for run in _profile_runs(track, processing.profile_key)
             if _run_is_active(run)
         ),
         None,
     )
     if active_same_profile is not None:
-        raise ValueError(f"{processing['profile_label']} is already queued or running for this song.")
+        raise ValueError(f"{processing.profile_label} is already queued or running for this song.")
 
     _touch_track(track)
     run = Run(
         track_id=track.id,
-        profile_key=str(processing["profile_key"]),
+        profile_key=processing.profile_key,
         status=RunStatus.queued.value,
         progress=0.0,
         status_message="",
-        metadata_json={"processing": {"profile_key": str(processing["profile_key"])}},
+        metadata_json={"processing": processing.to_metadata()},
     )
     run.artifacts.append(
         RunArtifact(
@@ -581,10 +581,12 @@ def retry_run(session: Session, run_id: str) -> Run:
     source_run = session.get(Run, run_id, options=[selectinload(Run.track)])
     if source_run is None:
         raise LookupError(f"Run '{run_id}' does not exist.")
+    if source_run.status not in {RunStatus.failed.value, RunStatus.cancelled.value}:
+        raise ValueError("Only failed or cancelled runs can be retried.")
 
     # Drop the failed/cancelled source run from the queue view so it doesn't
     # sit next to the retry that replaces it.
-    if source_run.status in TERMINAL_RUN_STATUSES and source_run.dismissed_at is None:
+    if source_run.dismissed_at is None:
         source_run.dismissed_at = datetime.utcnow()
 
     track = source_run.track
@@ -745,6 +747,8 @@ def update_track(
 def purge_non_keeper_runs(
     session: Session,
     track_id: str,
+    *,
+    commit: bool = True,
 ) -> tuple[int, int]:
     track = get_track(session, track_id)
     if track is None:
@@ -768,14 +772,15 @@ def purge_non_keeper_runs(
 
     if deleted:
         _touch_track(track)
-        session.commit()
+        if commit:
+            session.commit()
     return deleted, reclaimed
 
 
-def delete_track(
+def _prepare_track_delete(
     session: Session,
     track_id: str,
-) -> None:
+) -> Path | None:
     track = get_track(session, track_id)
     if track is None:
         raise LookupError(f"Track '{track_id}' does not exist.")
@@ -789,10 +794,44 @@ def delete_track(
         _delete_run_files(run, include_source=False)
 
     session.delete(track)
-    session.commit()
+    return source_path
 
+
+def _delete_source_file(source_path: Path | None) -> None:
     if source_path is not None and source_path.exists():
         source_path.unlink(missing_ok=True)
+
+
+def delete_track(
+    session: Session,
+    track_id: str,
+) -> None:
+    source_path = _prepare_track_delete(session, track_id)
+    session.commit()
+    _delete_source_file(source_path)
+
+
+def batch_delete_tracks(session: Session, track_ids: list[str]) -> tuple[int, list[str], list[str]]:
+    deleted = 0
+    blocked: list[str] = []
+    missing: list[str] = []
+    source_paths: list[Path | None] = []
+
+    for track_id in track_ids:
+        try:
+            source_paths.append(_prepare_track_delete(session, track_id))
+            deleted += 1
+        except LookupError:
+            missing.append(track_id)
+        except ValueError:
+            blocked.append(track_id)
+
+    if deleted:
+        session.commit()
+        for source_path in source_paths:
+            _delete_source_file(source_path)
+
+    return deleted, blocked, missing
 
 
 def _directory_size(path: Path) -> int:

@@ -104,10 +104,7 @@ function InlineProfilePicker({ profiles, defaultProfileKey, creatingRun, onCreat
             disabled={creatingRun}
             onClick={() => onCreateRun({ profile_key: profile.key })}
           >
-            <div className="mix-profile-option-top">
-              <span className="mix-profile-option-label">{profile.label}</span>
-              {isDefault ? <span className="mix-profile-option-default">Default</span> : null}
-            </div>
+            <span className="mix-profile-option-label">{profile.label}</span>
             {profile.best_for ? (
               <span className="mix-profile-option-hint">{profile.best_for}</span>
             ) : null}
@@ -859,6 +856,9 @@ function MixWorkspaceContent({
                     style={{ width: `${Math.max(0, Math.min(1, selectedRun.progress)) * 100}%` }}
                   />
                 </div>
+                {selectedRun.status_message && selectedRun.status !== 'queued' ? (
+                  <p className="mix-progress-hint" aria-live="polite">{selectedRun.status_message}</p>
+                ) : null}
                 <RunStepper status={selectedRun.status} lastActiveStatus={selectedRun.last_active_status} />
                 <ConfirmInline
                   label="Cancel split"

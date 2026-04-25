@@ -155,7 +155,7 @@ def _artifact_export_label(kind: str, *, stem_name: str | None = None) -> str:
 def _split_export_label(run: Run | None) -> str | None:
     if run is None:
         return None
-    return str(resolve_run_processing(run)["profile_label"])
+    return resolve_run_processing(run).profile_label
 
 
 def _artifact_export_filename(

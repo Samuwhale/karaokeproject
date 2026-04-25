@@ -349,11 +349,14 @@ def cleanup_non_keeper_runs_library(
         if not track.keeper_run_id or any(run.status in ACTIVE_RUN_STATUSES for run in track.runs):
             skipped_track_count += 1
             continue
-        deleted, reclaimed = purge_non_keeper_runs(session, track.id)
+        deleted, reclaimed = purge_non_keeper_runs(session, track.id, commit=False)
         if deleted > 0:
             purged_track_count += 1
             deleted_run_count += deleted
             bytes_reclaimed += reclaimed
+
+    if deleted_run_count > 0:
+        session.commit()
 
     _, orphan_bytes_reclaimed = cleanup_orphaned_output_artifacts(session, runtime_settings)
     bytes_reclaimed += orphan_bytes_reclaimed

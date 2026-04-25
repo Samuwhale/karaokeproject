@@ -471,6 +471,8 @@ function ImportPanelContent({
 
             {playlistHint ? (
               <p className="import-panel-hint">{playlistHint}</p>
+            ) : !youtubeUrl && !drafts.length ? (
+              <p className="import-panel-hint">You can also paste a YouTube URL from any screen — this panel opens automatically.</p>
             ) : null}
 
             <div className="import-panel-or" aria-hidden>or</div>

@@ -149,8 +149,10 @@ function QueueStrip({
   if (showHead && activeCount > 0) summary.push(`${activeCount} split${activeCount === 1 ? '' : 's'} running`)
   if (failedCount > 0) summary.push(`${failedCount} need${failedCount === 1 ? 's' : ''} attention`)
 
+  const compact = !showHead && activeCount === 1 && failedCount === 0
+
   return (
-    <section className={`library-queue ${attn ? 'is-attn' : ''}`}>
+    <section className={`library-queue ${attn ? 'is-attn' : ''} ${compact ? 'is-compact' : ''}`}>
       {showHead ? (
         <div className="library-queue-head">
           <span className="library-queue-summary">{summary.join(' · ')}</span>
