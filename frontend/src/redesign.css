@@ -312,6 +312,7 @@
   align-items: center;
   gap: 10px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
 .library-count {
@@ -327,6 +328,7 @@
   align-items: center;
   gap: 2px;
   margin-bottom: 4px;
+  flex-wrap: wrap;
 }
 
 .library-filter {
@@ -813,8 +815,8 @@
   font-weight: 500;
   border-radius: var(--radius-sm);
   color: var(--accent);
-  background: color-mix(in oklch, var(--accent) 11%, transparent);
-  border: 1px solid color-mix(in oklch, var(--accent) 45%, var(--border-soft));
+  background: color-mix(in oklch, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in oklch, var(--accent) 50%, var(--border-soft));
   cursor: pointer;
   white-space: nowrap;
   transition: background 120ms, color 120ms, border-color 120ms;
@@ -1559,9 +1561,10 @@ button.mix-top-title-copy:hover .mix-top-edit-icon {
   grid-row: 2;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  gap: 12px;
   padding: 7px 24px;
   border-bottom: 1px solid var(--border-soft);
+  min-width: 0;
 }
 
 .mix-preset-group {
@@ -1608,6 +1611,22 @@ button.mix-top-title-copy:hover .mix-top-edit-icon {
   align-self: center;
   flex-shrink: 0;
   margin: 0 2px;
+}
+
+/* Description of the currently active preset — inline, below the group */
+.mix-preset-description {
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  align-self: center;
+  padding-left: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: preset-desc-in 150ms ease-out both;
+}
+
+@keyframes preset-desc-in {
+  from { opacity: 0; transform: translateX(-4px); }
 }
 
 /* "All stems" reset — visually distinct from named presets */
@@ -2118,8 +2137,19 @@ button.stem-row-gain:focus-visible {
 }
 
 .mix-seekbar:disabled {
-  opacity: 0.35;
+  opacity: 0.25;
   cursor: not-allowed;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  animation: seekbar-loading 1.6s ease-in-out infinite;
+}
+
+@keyframes seekbar-loading {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.12; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mix-seekbar:disabled { animation: none; }
 }
 
 .mix-seekbar:focus-visible {
@@ -2408,6 +2438,18 @@ button.stem-row-gain:focus-visible {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   text-align: right;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* "Split" state on unprocessed profiles: hint it's actionable */
+.popover-row:not(.is-active):not(.is-preferred):not([disabled]) .popover-row-state {
+  color: var(--text-faint);
+}
+
+/* On hover, make the CTA label more visible */
+.popover-row:hover .popover-row-state {
+  color: var(--accent);
 }
 
 .popover-row.is-armed {
@@ -2660,6 +2702,10 @@ button.stem-row-gain:focus-visible {
 /* Compact layout when drafts are already staged — reviewer mode takes focus. */
 .import-panel-source.is-compact {
   gap: 6px;
+  padding: 12px;
+  background: var(--surface-sunk);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
 }
 
 .import-panel-source.is-compact .import-panel-or {
@@ -2667,9 +2713,15 @@ button.stem-row-gain:focus-visible {
 }
 
 .import-panel-source.is-compact .import-panel-drop {
-  min-height: 52px;
-  padding: 10px 14px;
+  min-height: 44px;
+  padding: 8px 14px;
   text-align: left;
+  background: var(--surface-2);
+  border-color: var(--border-soft);
+}
+
+.import-panel-source.is-compact .import-panel-url-input {
+  background: var(--surface-2);
 }
 
 .import-panel-source.is-compact .import-panel-drop-label {
@@ -2904,6 +2956,11 @@ button.stem-row-gain:focus-visible {
 .mix-profile-option:nth-child(2) { animation-delay: 70ms; }
 .mix-profile-option:nth-child(3) { animation-delay: 140ms; }
 
+.mix-profile-option.is-default {
+  border-color: color-mix(in oklch, var(--accent) 30%, var(--border));
+  background: color-mix(in oklch, var(--accent) 3%, var(--surface));
+}
+
 .mix-profile-option:hover:not(:disabled) {
   border-color: var(--accent);
   background: color-mix(in oklch, var(--accent) 3%, var(--surface));
@@ -2931,6 +2988,23 @@ button.stem-row-gain:focus-visible {
   font-size: var(--t-md);
   color: var(--text);
   line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mix-profile-option-badge {
+  font-size: var(--t-micro);
+  font-weight: 600;
+  font-family: var(--font-sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-radius: var(--radius-xs);
+  padding: 1px 5px;
+  line-height: 1.5;
+  flex-shrink: 0;
 }
 
 .mix-profile-option-hint {
@@ -3184,12 +3258,6 @@ button.stem-row-gain:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 1px;
   opacity: 1;
-}
-
-/* Profile picker: default card gets a subtle accent border -------------------- */
-
-.mix-profile-option.is-default {
-  border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
 }
 
 

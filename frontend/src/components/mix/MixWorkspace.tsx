@@ -104,7 +104,10 @@ function InlineProfilePicker({ profiles, defaultProfileKey, creatingRun, onCreat
             disabled={creatingRun}
             onClick={() => onCreateRun({ profile_key: profile.key })}
           >
-            <span className="mix-profile-option-label">{profile.label}</span>
+            <span className="mix-profile-option-label">
+              {profile.label}
+              {isDefault ? <span className="mix-profile-option-badge">Default</span> : null}
+            </span>
             {profile.best_for ? (
               <span className="mix-profile-option-hint">{profile.best_for}</span>
             ) : null}
@@ -909,7 +912,7 @@ function MixWorkspaceContent({
             <>
               <StemSplitIcon />
               <strong>Split this song into stems</strong>
-              <p>Choose a split type to separate it. You can add more split types any time.</p>
+              <p>Choose a split type below to separate it into individual stems.</p>
               <InlineProfilePicker
                 profiles={profiles}
                 defaultProfileKey={defaultProfileKey}

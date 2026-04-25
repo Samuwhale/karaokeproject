@@ -58,6 +58,8 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
 
   if (!supported.length && atRest) return null
 
+  const activeSpec = INTENTS.find((s) => s.value === activeIntent)
+
   return (
     <div className="mix-presets" role="group" aria-label="Output preset">
       <div className="mix-preset-group">
@@ -90,6 +92,11 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
           </>
         ) : null}
       </div>
+      {activeSpec ? (
+        <span className="mix-preset-description" aria-live="polite">
+          {activeSpec.description}
+        </span>
+      ) : null}
     </div>
   )
 }
