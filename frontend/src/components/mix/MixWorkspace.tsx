@@ -87,9 +87,6 @@ function InlineProfilePicker({ profiles, defaultProfileKey, creatingRun, onCreat
                     {profile.stems.map((s) => stemLabel(s)).join(' · ')}
                   </span>
                 ) : null}
-                {profile.tradeoff ? (
-                  <span className="mix-profile-option-tradeoff">{profile.tradeoff}</span>
-                ) : null}
               </button>
             )
           })}

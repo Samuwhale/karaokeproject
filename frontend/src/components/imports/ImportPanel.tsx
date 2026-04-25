@@ -250,7 +250,11 @@ function ImportPanelContent({
 }: ImportPanelProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
-  useDialogFocus(true, { containerRef: panelRef, initialFocusRef: closeButtonRef })
+  const urlInputRef = useRef<HTMLInputElement | null>(null)
+  // When no drafts are staged, direct focus to the URL field so the user can
+  // immediately paste or type without an extra click.
+  const initialFocusRef = drafts.length === 0 ? urlInputRef : closeButtonRef
+  useDialogFocus(true, { containerRef: panelRef, initialFocusRef })
 
   // ---- Source section state -----------------------------------------------
 
@@ -425,6 +429,7 @@ function ImportPanelContent({
             <div className="import-panel-url-row">
               <div className="import-panel-url-wrap">
                 <input
+                  ref={urlInputRef}
                   type="url"
                   className="import-panel-url-input"
                   placeholder="Paste a YouTube URL…"

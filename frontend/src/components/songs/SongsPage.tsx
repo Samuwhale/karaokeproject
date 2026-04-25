@@ -615,23 +615,19 @@ export function SongsPage({
                     >
                       {retryingRunId === track.latest_run.id ? 'Retrying…' : 'Retry'}
                     </button>
-                  ) : status.text ? (() => {
-                    const hideText = status.preferred && !track.has_custom_mix
-                    const showText = !hideText
-                    return (
-                      <span className={`song-row-status ${status.tone ? `is-${status.tone}` : ''} ${status.preferred ? 'is-preferred' : ''}`}>
-                        {status.preferred ? (
-                          <span className="song-row-status-star" aria-label="Preferred split" title="Preferred split">★</span>
-                        ) : null}
-                        {showText ? status.text : null}
-                        {status.count ? (
-                          <span className="song-row-status-count" aria-label={`${status.count} splits`}>
-                            {showText ? `· ${status.count}` : status.count}
-                          </span>
-                        ) : null}
-                      </span>
-                    )
-                  })() : null}
+                  ) : status.text ? (
+                    <span className={`song-row-status ${status.tone ? `is-${status.tone}` : ''} ${status.preferred ? 'is-preferred' : ''}`}>
+                      {status.preferred ? (
+                        <span className="song-row-status-star" aria-label="Preferred split" title="Preferred split">★</span>
+                      ) : null}
+                      {status.text}
+                      {status.count ? (
+                        <span className="song-row-status-count" aria-label={`${status.count} splits`}>
+                          {status.count}
+                        </span>
+                      ) : null}
+                    </span>
+                  ) : null}
                 </div>
               </div>
             )
@@ -701,7 +697,7 @@ export function SongsPage({
                   Export {exportEligible.length}
                 </button>
               ) : null}
-              <button type="button" className="button-danger" onClick={handleDelete}>
+              <button type="button" className="button-secondary" onClick={handleDelete}>
                 Delete {selectedCount}
               </button>
             </>
