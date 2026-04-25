@@ -284,7 +284,7 @@ export function ExportBuilder({
         <IncludeRow
           checked={includeMix}
           onToggle={() => setIncludeMix((value) => !value)}
-          label="Edited mix"
+          label="Mix"
           hint="Rendered file using each track's saved balance."
           format={mixFmt}
           onFormatChange={setMixFmt}

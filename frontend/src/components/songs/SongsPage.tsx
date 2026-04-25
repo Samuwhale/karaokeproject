@@ -639,13 +639,13 @@ export function SongsPage({
         <div className="library-empty">
           {view.filter !== 'all' ? (
             <>
-              <strong>No songs match this filter</strong>
+              <strong>Nothing in this filter</strong>
               <button
                 type="button"
                 className="button-secondary"
                 onClick={() => onViewChange({ ...view, filter: 'all' })}
               >
-                Show all
+                Show all songs
               </button>
             </>
           ) : (
@@ -665,7 +665,7 @@ export function SongsPage({
         <div className="library-empty library-empty-onboard">
           <WaveformIcon />
           <strong>Add your first song</strong>
-          <p>Drop files or paste a YouTube URL to separate a song into stems — then mix, mute, or export each part.</p>
+          <p>Drop audio files or paste a YouTube URL to split a song into stems — then balance levels, mute parts, and export your mix.</p>
           <button type="button" className="button-primary" onClick={onAddSongs}>
             Add songs
           </button>

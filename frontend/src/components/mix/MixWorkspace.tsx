@@ -510,9 +510,8 @@ export function MixWorkspace(props: MixWorkspaceProps) {
         <div className="mix-empty">
           <strong>No song selected</strong>
           <p>Open a song from your library to mix and export its stems.</p>
-          <button type="button" className="mix-back" onClick={props.onBackToSongs}>
-            <BackArrow />
-            Library
+          <button type="button" className="button-secondary" onClick={props.onBackToSongs}>
+            Back to library
           </button>
         </div>
       </section>

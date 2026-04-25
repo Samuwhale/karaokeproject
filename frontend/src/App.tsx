@@ -551,23 +551,34 @@ function App() {
 }
 
 type ShortcutEntry = { key: string; desc: string; note?: string }
+type ShortcutGroup = { section: string; entries: ShortcutEntry[] }
 
-const SHORTCUT_ENTRIES: ShortcutEntry[] = [
-  { key: 'a', desc: 'Add songs' },
-  { key: 'j / ↓', desc: 'Next track' },
-  { key: 'k / ↑', desc: 'Previous track' },
-  { key: 'r', desc: 'Re-split with default split type', note: 'Mix workspace' },
-  { key: '1 – 9', desc: 'Switch to split by index', note: 'Mix workspace' },
-  { key: 'v', desc: 'Open split picker', note: 'Mix workspace' },
-  { key: 'e', desc: 'Open Export panel', note: 'Mix workspace' },
-  { key: 'Space', desc: 'Play / Pause', note: 'Mix workspace' },
-  { key: '← →', desc: 'Adjust fader', note: '0.5 dB step' },
-  { key: 'Shift + ← →', desc: 'Fine fader', note: '0.1 dB step' },
-  { key: 'Alt + ← →', desc: 'Coarse fader', note: '3 dB step' },
-  { key: 'double-click fader', desc: 'Reset to 0 dB' },
-  { key: '?', desc: 'Show shortcuts' },
-  { key: '⌘ ,', desc: 'Open settings' },
-  { key: 'Esc', desc: 'Close panel / clear selection' },
+const SHORTCUT_GROUPS: ShortcutGroup[] = [
+  {
+    section: 'Anywhere',
+    entries: [
+      { key: 'a', desc: 'Add songs' },
+      { key: 'j / ↓', desc: 'Next track' },
+      { key: 'k / ↑', desc: 'Previous track' },
+      { key: '?', desc: 'Show shortcuts' },
+      { key: '⌘ ,', desc: 'Open settings' },
+      { key: 'Esc', desc: 'Close panel / clear selection' },
+    ],
+  },
+  {
+    section: 'Mix workspace',
+    entries: [
+      { key: 'Space', desc: 'Play / Pause' },
+      { key: 'r', desc: 'Re-split with default split type' },
+      { key: '1 – 9', desc: 'Switch to split by index' },
+      { key: 'v', desc: 'Open split picker' },
+      { key: 'e', desc: 'Open export panel' },
+      { key: '← →', desc: 'Adjust fader', note: '0.5 dB' },
+      { key: 'Shift + ← →', desc: 'Fine fader', note: '0.1 dB' },
+      { key: 'Alt + ← →', desc: 'Coarse fader', note: '3 dB' },
+      { key: 'double-click fader', desc: 'Reset to 0 dB' },
+    ],
+  },
 ]
 
 function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
@@ -584,15 +595,22 @@ function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
           <strong>Keyboard shortcuts</strong>
           <button type="button" className="button-secondary" onClick={onClose}>Done</button>
         </div>
-        <ul className="kbd-list">
-          {SHORTCUT_ENTRIES.map(({ key, desc, note }, i) => (
-            <li key={i} className="kbd-row">
-              <kbd className="kbd-key">{key}</kbd>
-              <span className="kbd-desc">{desc}</span>
-              {note ? <span className="kbd-note">{note}</span> : null}
-            </li>
+        <div className="kbd-groups">
+          {SHORTCUT_GROUPS.map(({ section, entries }) => (
+            <div key={section} className="kbd-group">
+              <div className="kbd-group-head">{section}</div>
+              <ul className="kbd-list">
+                {entries.map(({ key, desc, note }, i) => (
+                  <li key={i} className="kbd-row">
+                    <kbd className="kbd-key">{key}</kbd>
+                    <span className="kbd-desc">{desc}</span>
+                    {note ? <span className="kbd-note">{note}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
     </div>
   )

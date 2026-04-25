@@ -3182,6 +3182,27 @@ button.stem-row-gain:focus-visible {
   color: var(--text);
 }
 
+.kbd-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.kbd-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kbd-group-head {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  padding: 0 4px 4px;
+}
+
 .kbd-list {
   list-style: none;
   margin: 0;
