@@ -1,5 +1,8 @@
 import type { QualityOption, RunProcessingConfigInput, StemOption, StemQuality } from '../types'
 
+const BAND_STEMS = new Set(['drums', 'bass', 'other'])
+const VOCAL_ROUTE_STEMS = new Set(['vocals', 'instrumental', 'lead_vocals', 'backing_vocals'])
+
 type StemSelectionPickerProps = {
   value: RunProcessingConfigInput
   stemOptions: StemOption[]
@@ -21,8 +24,16 @@ export function StemSelectionPicker({
 
   function toggleStem(name: string) {
     const next = new Set(selected)
-    if (next.has(name)) next.delete(name)
-    else next.add(name)
+    if (next.has(name)) {
+      next.delete(name)
+    } else {
+      next.add(name)
+      if (name === 'instrumental') {
+        BAND_STEMS.forEach((stem) => next.delete(stem))
+      } else if (BAND_STEMS.has(name)) {
+        next.delete('instrumental')
+      }
+    }
     const stems = stemOptions.map((option) => option.name).filter((name) => next.has(name))
     onChange({ ...value, stems, quality: usesQualityRoute(stems) ? value.quality : 'balanced' })
   }
@@ -69,18 +80,6 @@ export function StemSelectionPicker({
   )
 }
 
-export function stemSelectionLabel(stems: string[], stemOptions: StemOption[]) {
-  const labels = new Map(stemOptions.map((option) => [option.name, option.label]))
-  return stems.map((stem) => labels.get(stem) ?? stem).join(' + ')
-}
-
 function usesQualityRoute(stems: string[]) {
-  const selected = new Set(stems)
-  const wantsBandOnlyVocals = selected.has('vocals') && (selected.has('drums') || selected.has('bass') || selected.has('other'))
-  return (
-    selected.has('instrumental') ||
-    selected.has('lead_vocals') ||
-    selected.has('backing_vocals') ||
-    (selected.has('vocals') && !wantsBandOnlyVocals)
-  )
+  return stems.some((stem) => VOCAL_ROUTE_STEMS.has(stem))
 }

@@ -1,6 +1,6 @@
 import type { RunSummary } from '../types'
 
-export const ACTIVE_RUN_STATUSES = new Set(['queued', 'preparing', 'separating', 'exporting'])
+const ACTIVE_RUN_STATUSES = new Set(['queued', 'preparing', 'separating', 'exporting'])
 
 export function isActiveRunStatus(status: string): boolean {
   return ACTIVE_RUN_STATUSES.has(status)

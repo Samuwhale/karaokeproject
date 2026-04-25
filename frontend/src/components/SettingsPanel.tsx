@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import { stemSelectionLabel } from '../stems'
 import type { Settings, StorageBucket, StorageOverview } from '../types'
 import { Spinner } from './feedback/Spinner'
 import { Skeleton } from './feedback/Skeleton'
@@ -174,9 +175,7 @@ export function SettingsPanel({
                     ...draft,
                     default_stem_selection: {
                       ...next,
-                      label: next.stems
-                        .map((stem) => settings.stem_options.find((option) => option.name === stem)?.label ?? stem)
-                        .join(' + '),
+                      label: stemSelectionLabel(next.stems, settings.stem_options),
                     },
                   })
                 }

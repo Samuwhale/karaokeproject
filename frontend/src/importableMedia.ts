@@ -25,7 +25,7 @@ function hasImportableExtension(filename: string) {
   return IMPORTABLE_MEDIA_EXTENSIONS.has(filename.slice(dotIndex).toLowerCase())
 }
 
-export function isImportableMediaFile(file: File) {
+function isImportableMediaFile(file: File) {
   if (/^(audio|video)\//.test(file.type)) return true
   return hasImportableExtension(file.name)
 }

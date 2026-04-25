@@ -41,13 +41,17 @@ def main() -> None:
             print(f"[worker] removed {deduplicated} redundant output run(s)", flush=True)
 
     while not shutdown_requested:
+        processed_run = False
         with SessionLocal() as session:
             run = claim_next_run(session)
             if run is not None:
                 session.commit()
                 process_run(session, runtime_settings, run)
+                processed_run = True
         if shutdown_requested:
             break
+        if processed_run:
+            continue
         time.sleep(runtime_settings.worker_poll_interval_seconds)
 
 

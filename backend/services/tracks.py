@@ -455,14 +455,14 @@ def create_run(track: Track, processing: ProcessingConfig) -> Run:
         prune_terminal_runs_without_stems(session, track)
         deduplicate_terminal_runs_by_pipeline(session, track)
 
-        requested = set(processing.visible_stems)
+        required_generated_stems = set(processing.generated_stems)
         reusable = next(
             (
                 run
                 for run in track.runs
                 if run.status == RunStatus.completed.value
                 and resolve_run_processing(run).quality == processing.quality
-                and requested.issubset(generated_stem_names(run))
+                and required_generated_stems.issubset(generated_stem_names(run))
             ),
             None,
         )

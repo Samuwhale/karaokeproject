@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from 'react'
 
 import { discardRejection } from '../../async'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
-import { StemSelectionPicker, stemSelectionLabel } from '../StemSelectionPicker'
+import { stemSelectionLabel } from '../../stems'
+import { StemSelectionPicker } from '../StemSelectionPicker'
 import { Spinner } from '../feedback/Spinner'
 import { trackStageSummary } from '../trackListView'
 import type {

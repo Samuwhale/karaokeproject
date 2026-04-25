@@ -19,7 +19,7 @@ export type RunProcessingConfigInput = {
   quality: StemQuality
 }
 
-export type StemQuality = 'fast' | 'balanced' | 'best'
+export type StemQuality = 'fast' | 'balanced'
 
 export type Settings = {
   storage: {

@@ -1,6 +1,8 @@
-export const STEM_KIND_PREFIX = 'stem:'
-export const EXPORT_STEM_WAV_PREFIX = 'stem-wav:'
-export const EXPORT_STEM_MP3_PREFIX = 'stem-mp3:'
+import type { StemOption } from './types'
+
+const STEM_KIND_PREFIX = 'stem:'
+const EXPORT_STEM_WAV_PREFIX = 'stem-wav:'
+const EXPORT_STEM_MP3_PREFIX = 'stem-mp3:'
 
 type CanonicalStem = {
   name: string
@@ -32,7 +34,7 @@ export function isStemKind(kind: string): boolean {
   return kind.startsWith(STEM_KIND_PREFIX)
 }
 
-export function stemNameFromKind(kind: string): string | null {
+function stemNameFromKind(kind: string): string | null {
   if (!kind.startsWith(STEM_KIND_PREFIX)) return null
   return kind.slice(STEM_KIND_PREFIX.length)
 }
@@ -45,7 +47,12 @@ export function stemLabel(stemName: string): string {
     .replace(/\b\w/g, (ch) => ch.toUpperCase())
 }
 
-export function stemDisplayOrder(stemName: string): number {
+export function stemSelectionLabel(stems: string[], stemOptions: StemOption[]) {
+  const labels = new Map(stemOptions.map((option) => [option.name, option.label]))
+  return stems.map((stem) => labels.get(stem) ?? stem).join(' + ')
+}
+
+function stemDisplayOrder(stemName: string): number {
   const canonical = BY_NAME.get(stemName)
   if (canonical) return canonical.displayOrder
   let sum = 0
@@ -70,7 +77,7 @@ export function exportStemKind(stemName: string, fmt: 'wav' | 'mp3'): string {
   return `${fmt === 'wav' ? EXPORT_STEM_WAV_PREFIX : EXPORT_STEM_MP3_PREFIX}${stemName}`
 }
 
-export function stemColor(stemName: string | null | undefined): string {
+function stemColor(stemName: string | null | undefined): string {
   if (!stemName) return FALLBACK_COLOR
   return BY_NAME.get(stemName)?.color ?? FALLBACK_COLOR
 }

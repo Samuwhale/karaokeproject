@@ -102,7 +102,7 @@ async function parseSuccessBody<T>(response: Response): Promise<T> {
   return (text || undefined) as T
 }
 
-export class ApiError extends Error {
+class ApiError extends Error {
   status: number
   statusText: string
   detail: string | null

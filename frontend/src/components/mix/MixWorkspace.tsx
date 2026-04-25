@@ -73,10 +73,6 @@ function StemCreateControl({
 }: StemCreateControlProps) {
   const [selection, setSelection] = useState(defaultSelection)
 
-  useEffect(() => {
-    setSelection(defaultSelection)
-  }, [defaultSelection])
-
   return (
     <div className="mix-stem-select">
       <StemSelectionPicker
@@ -106,6 +102,10 @@ function trackHue(str: string): number {
 }
 
 const RETRYABLE_STATUSES = new Set(['failed', 'cancelled'])
+
+function processingSelectionKey(selection: RunProcessingConfigInput) {
+  return `${selection.quality}:${selection.stems.join(',')}`
+}
 
 function formatStatus(status: string) {
   return RUN_STATUS_SHORT_LABELS[status] ?? status
@@ -880,6 +880,7 @@ function MixWorkspaceContent({
                   </button>
                 </div>
                 <StemCreateControl
+                  key={processingSelectionKey(defaultSelection)}
                   stemOptions={stemOptions}
                   qualityOptions={qualityOptions}
                   defaultSelection={defaultSelection}
@@ -892,6 +893,7 @@ function MixWorkspaceContent({
                 <strong>{selectedRun.processing.label} produced no stems</strong>
                 <p>This output completed without separated stem files. Choose a different stem set.</p>
                 <StemCreateControl
+                  key={processingSelectionKey(defaultSelection)}
                   stemOptions={stemOptions}
                   qualityOptions={qualityOptions}
                   defaultSelection={defaultSelection}
@@ -905,6 +907,7 @@ function MixWorkspaceContent({
               <StemCreateIcon />
               <strong>Create stems for this song</strong>
               <StemCreateControl
+                key={processingSelectionKey(defaultSelection)}
                 stemOptions={stemOptions}
                 qualityOptions={qualityOptions}
                 defaultSelection={defaultSelection}

@@ -119,7 +119,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             run,
             status=RunStatus.preparing,
             progress=0.09,
-            status_message="Normalising loudness",
+            status_message="Preparing working WAV",
         )
         session.commit()
         normalized_path = work_directory / "normalized.wav"
