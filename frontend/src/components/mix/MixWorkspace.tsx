@@ -464,7 +464,7 @@ export function MixWorkspace(props: MixWorkspaceProps) {
       </section>
     )
   }
-  return <MixWorkspaceContent {...props} track={props.track} />
+  return <MixWorkspaceContent key={props.track.id} {...props} track={props.track} />
 }
 
 function MixWorkspaceContent({
@@ -514,12 +514,8 @@ function MixWorkspaceContent({
   const activeSplit = selectedRun && isActiveRunStatus(selectedRun.status)
   const selectedRunIsKeeper = !!selectedRun && selectedRun.id === track.keeper_run_id
   const progressPct = activeSplit ? Math.round(selectedRun.progress * 100) : null
-
-  // Reset inline edit when navigating to a different track
-  useEffect(() => {
-    setEditingTitle(false)
-    titleCommitRef.current = false
-  }, [track.id])
+  const completedRunCount = track.runs.filter((run) => run.status === 'completed').length
+  const selectedRunQueued = selectedRun?.status === 'queued'
 
   // Focus title input when edit mode opens
   useEffect(() => {
@@ -551,7 +547,6 @@ function MixWorkspaceContent({
     setEditingTitle(false)
   }
 
-  const mixRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
     function isEditable(target: EventTarget | null) {
       if (!(target instanceof HTMLElement)) return false
@@ -585,7 +580,7 @@ function MixWorkspaceContent({
   }, [editingTitle, popover, canExport, selectedRun])
 
   return (
-    <section className="mix" ref={mixRef}>
+    <section className="mix">
       <header className="mix-top">
         <div className="mix-top-nav">
           <button type="button" className="mix-back" onClick={onBackToSongs} title="Back to library (Esc)">
@@ -682,34 +677,30 @@ function MixWorkspaceContent({
         <div className="mix-top-actions">
           {selectedRun ? (
             <span className="popover-anchor">
-              {(() => {
-                const completedCount = track.runs.filter((r) => r.status === 'completed').length
-                const isQueued = selectedRun?.status === 'queued'
-                return (
-                  <button
-                    type="button"
-                    className={`mix-version-pill ${popover === 'versions' ? 'is-open' : ''} ${selectedRunIsKeeper ? 'is-keeper' : ''}`}
-                    onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
-                    aria-haspopup="dialog"
-                    aria-expanded={popover === 'versions'}
-                    title={selectedRunIsKeeper ? 'Preferred split — click for all split types (v)' : 'Split types — click to generate, switch, or manage (v)'}
-                  >
-                    {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
-                    {!activeSplit && selectedRunIsKeeper ? (
-                      <span className="mix-version-star" aria-hidden>★</span>
-                    ) : null}
-                    <span className="mix-version-pill-label">{versionLabel}</span>
-                    {isQueued ? (
-                      <span className="mix-version-count">queued</span>
-                    ) : progressPct !== null ? (
-                      <span className="mix-version-count">{progressPct}%</span>
-                    ) : completedCount > 1 ? (
-                      <span className="mix-version-count mix-version-count-badge" aria-label={`${completedCount} split types`}>{completedCount}</span>
-                    ) : null}
-                    <span className="mix-version-chevron"><Chevron /></span>
-                  </button>
-                )
-              })()}
+              <button
+                type="button"
+                className={`mix-version-pill ${popover === 'versions' ? 'is-open' : ''} ${selectedRunIsKeeper ? 'is-keeper' : ''}`}
+                onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
+                aria-haspopup="dialog"
+                aria-expanded={popover === 'versions'}
+                title={selectedRunIsKeeper ? 'Preferred split — click for all split types (v)' : 'Split types — click to generate, switch, or manage (v)'}
+              >
+                {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
+                {!activeSplit && selectedRunIsKeeper ? (
+                  <span className="mix-version-star" aria-hidden>★</span>
+                ) : null}
+                <span className="mix-version-pill-label">{versionLabel}</span>
+                {selectedRunQueued ? (
+                  <span className="mix-version-count">queued</span>
+                ) : progressPct !== null ? (
+                  <span className="mix-version-count">{progressPct}%</span>
+                ) : completedRunCount > 1 ? (
+                  <span className="mix-version-count mix-version-count-badge" aria-label={`${completedRunCount} split types`}>
+                    {completedRunCount}
+                  </span>
+                ) : null}
+                <span className="mix-version-chevron"><Chevron /></span>
+              </button>
               {popover === 'versions' ? (
                 <VersionsPopover
                   track={track}

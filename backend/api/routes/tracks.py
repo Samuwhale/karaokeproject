@@ -27,7 +27,6 @@ from backend.services.tracks import (
     create_run,
     delete_run,
     delete_track,
-    dismiss_run,
     get_track,
     list_tracks,
     request_run_cancellation,
@@ -227,17 +226,6 @@ def list_active_runs(session: Session = Depends(get_db_session)) -> list[QueueRu
             )
         )
     return entries
-
-
-@router.post("/runs/{run_id}/dismiss", response_model=CreateRunResponse)
-def dismiss_run_endpoint(run_id: str, session: Session = Depends(get_db_session)) -> CreateRunResponse:
-    try:
-        run = dismiss_run(session, run_id)
-    except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return CreateRunResponse(run=serialize_run_summary(run))
 
 
 @router.post("/tracks/batch/delete", response_model=BatchDeleteResponse)

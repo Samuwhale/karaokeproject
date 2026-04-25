@@ -555,19 +555,6 @@ def mark_run_cancelled(run: Run) -> None:
     run.metadata_json = metadata
 
 
-def dismiss_run(session: Session, run_id: str) -> Run:
-    run = session.get(Run, run_id, options=[selectinload(Run.track), selectinload(Run.artifacts)])
-    if run is None:
-        raise LookupError(f"Run '{run_id}' does not exist.")
-    if run.status not in TERMINAL_RUN_STATUSES:
-        raise ValueError("Only completed, failed, or cancelled runs can be dismissed from the queue.")
-    if run.dismissed_at is None:
-        run.dismissed_at = datetime.utcnow()
-        session.commit()
-        session.refresh(run)
-    return run
-
-
 def delete_run(session: Session, run_id: str) -> None:
     run = session.get(Run, run_id, options=[selectinload(Run.track), selectinload(Run.artifacts)])
     if run is None:

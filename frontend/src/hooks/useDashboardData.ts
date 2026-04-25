@@ -12,7 +12,6 @@ import {
   createRun,
   deleteRun,
   discardImportDraft,
-  dismissRun,
   flushPendingLibraryCleanup,
   flushPendingTrackDeletes,
   getActiveRuns,
@@ -501,17 +500,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
     }
   }
 
-  async function handleDismissRun(runId: string) {
-    try {
-      await dismissRun(runId)
-      pushToast('success', `Cleared ${findRunTrackLabel(runId)} from queue follow-up.`)
-      await refreshDashboard()
-    } catch (error) {
-      pushToast('error', getErrorMessage(error))
-      throw error
-    }
-  }
-
   async function handleRevealFolder(payload: RevealFolderInput) {
     try {
       await revealFolder(payload)
@@ -817,7 +805,6 @@ export function useDashboardData(selection: { trackId: string | null }) {
     handleCancelRun,
     handleRetryRun,
     handleDeleteRun,
-    handleDismissRun,
     handleRevealFolder,
     handleSaveSettings,
     handleCleanupTempStorage,

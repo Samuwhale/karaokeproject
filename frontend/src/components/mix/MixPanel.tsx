@@ -374,14 +374,9 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
 
   const anySoloed = stems.some((stem) => stem.soloed)
 
-  const footerVisible =
-    saving || saveState === 'saving' || saveState === 'pending' || saveState === 'saved' || saveState === 'failed' || dirty
+  const showTransportSave =
+    !saveError && (saving || saveState === 'saving' || saveState === 'pending' || saveState === 'saved' || dirty)
   const showErrors = !!saveError || !!mixer.error
-
-  const saveIndicatorLabel =
-    saveState === 'failed' ? 'Save failed' : saveState === 'saved' ? 'Mix saved' : 'Saving mix…'
-  const saveIndicatorClass =
-    saveState === 'failed' ? 'is-error' : saveState === 'saved' ? 'is-saved' : 'is-saving'
 
   return (
     <>
@@ -498,30 +493,38 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
           <span className="mix-time-total">{formatTime(mixer.duration)}</span>
         </span>
         <MixStateLabel stems={stems} anySoloed={anySoloed} />
+        {showTransportSave ? (
+          <>
+            <span className="mix-transport-sep" aria-hidden>·</span>
+            <span
+              className={`mix-transport-save ${saveState === 'saved' ? 'is-saved' : ''}`}
+              aria-live="polite"
+            >
+              {saveState === 'saved' ? 'Saved' : 'Saving…'}
+            </span>
+          </>
+        ) : null}
       </div>
 
-      {footerVisible || showErrors ? (
+      {showErrors ? (
         <div className="mix-footer">
-          {footerVisible ? (
-            <span className={`mix-save-state ${saveIndicatorClass}`} aria-live="polite">
-              <span>{saveIndicatorLabel}</span>
-              {saveState === 'failed' && retryPayload ? (
-                <button
-                  type="button"
-                  className="button-link"
-                  onClick={() => discardRejection(() => persistMix(retryPayload))}
-                >
-                  Retry
-                </button>
-              ) : null}
-            </span>
-          ) : null}
-          {showErrors ? (
-            <div className="mix-errors" role="status" aria-live="polite">
-              {saveError ? <p>{saveError}</p> : null}
-              {mixer.error ? <p>{mixer.error}</p> : null}
-            </div>
-          ) : null}
+          <div className="mix-errors" role="status" aria-live="polite">
+            {saveError ? (
+              <span className="mix-save-state is-error">
+                {saveError}
+                {retryPayload ? (
+                  <button
+                    type="button"
+                    className="button-link"
+                    onClick={() => discardRejection(() => persistMix(retryPayload))}
+                  >
+                    Retry
+                  </button>
+                ) : null}
+              </span>
+            ) : null}
+            {mixer.error ? <p>{mixer.error}</p> : null}
+          </div>
         </div>
       ) : null}
     </>

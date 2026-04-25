@@ -214,10 +214,6 @@ export function retryRun(runId: string) {
   return fetchJson<{ run: RunSummary }>(`/api/runs/${runId}/retry`, { method: 'POST' })
 }
 
-export function dismissRun(runId: string) {
-  return fetchJson<{ run: RunSummary }>(`/api/runs/${runId}/dismiss`, { method: 'POST' })
-}
-
 export async function deleteRun(runId: string) {
   await fetchJson(`/api/runs/${runId}`, { method: 'DELETE' })
 }

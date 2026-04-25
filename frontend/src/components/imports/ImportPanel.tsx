@@ -539,36 +539,6 @@ function ImportPanelContent({
             ) : null}
           </div>
 
-          {/* ---- Profile picker ----------------------------------------- */}
-          {drafts.length > 0 && profiles.length > 0 ? (
-            <div className="import-panel-profiles" role="group" aria-label="Split profile">
-              <div className="import-profile-tabs">
-                {profiles.map((profile) => {
-                  const isSelected = profile.key === profileKey
-                  return (
-                    <button
-                      key={profile.key}
-                      type="button"
-                      className={`import-profile-tab ${isSelected ? 'is-selected' : ''}`}
-                      aria-pressed={isSelected}
-                      disabled={confirming}
-                      title={profile.stems.length > 0 ? profile.stems.map((s) => stemLabel(s)).join(' · ') : undefined}
-                      onClick={() => setSelectedProfileKey(profile.key)}
-                    >
-                      {profile.label}
-                    </button>
-                  )
-                })}
-              </div>
-              {(() => {
-                const selected = profiles.find((p) => p.key === profileKey)
-                return selected?.best_for ? (
-                  <p className="import-profile-hint">{selected.best_for}</p>
-                ) : null
-              })()}
-            </div>
-          ) : null}
-
           {/* ---- Staged review ------------------------------------------ */}
           {drafts.length > 0 ? (
             <>
@@ -602,35 +572,57 @@ function ImportPanelContent({
 
         {drafts.length > 0 ? (
           <footer className="overlay-foot">
-            <div className="overlay-foot-copy">
-              {hasPendingDraftActions
-                ? 'Saving…'
-                : unresolved > 0
-                  ? `${unresolved} duplicate${unresolved === 1 ? '' : 's'} to resolve`
-                  : profiles.length > 0
-                    ? `Split with: ${profiles.find((p) => p.key === profileKey)?.label ?? profileKey}`
-                    : null}
-            </div>
-            <div className="overlay-foot-actions">
-              <button
-                type="button"
-                className="button-secondary"
-                disabled={!canConfirm}
-                onClick={() => discardRejection(() => confirm(false))}
-                title="Add to your library without queueing a split. You can split later from the song."
-              >
-                Add without splitting
-              </button>
-              {profiles.length > 0 ? (
+            {profiles.length > 1 ? (
+              <div className="import-profile-tabs" role="group" aria-label="Split profile">
+                {profiles.map((profile) => {
+                  const isSelected = profile.key === profileKey
+                  return (
+                    <button
+                      key={profile.key}
+                      type="button"
+                      className={`import-profile-tab ${isSelected ? 'is-selected' : ''}`}
+                      aria-pressed={isSelected}
+                      disabled={confirming}
+                      title={profile.stems.length > 0 ? profile.stems.map((s) => stemLabel(s)).join(' · ') : undefined}
+                      onClick={() => setSelectedProfileKey(profile.key)}
+                    >
+                      {profile.label}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
+            <div className="overlay-foot-bottom">
+              <div className="overlay-foot-copy">
+                {hasPendingDraftActions
+                  ? 'Saving…'
+                  : unresolved > 0
+                    ? `${unresolved} duplicate${unresolved === 1 ? '' : 's'} to resolve`
+                    : profiles.length === 1
+                      ? `Split with: ${profiles[0].label}`
+                      : null}
+              </div>
+              <div className="overlay-foot-actions">
                 <button
                   type="button"
-                  className="button-primary"
+                  className="button-secondary"
                   disabled={!canConfirm}
-                  onClick={() => discardRejection(() => confirm(true))}
+                  onClick={() => discardRejection(() => confirm(false))}
+                  title="Add to your library without queueing a split. You can split later from the song."
                 >
-                  {confirming ? <><Spinner /> Adding…</> : 'Add and split'}
+                  Add without splitting
                 </button>
-              ) : null}
+                {profiles.length > 0 ? (
+                  <button
+                    type="button"
+                    className="button-primary"
+                    disabled={!canConfirm}
+                    onClick={() => discardRejection(() => confirm(true))}
+                  >
+                    {confirming ? <><Spinner /> Adding…</> : 'Add and split'}
+                  </button>
+                ) : null}
+              </div>
             </div>
           </footer>
         ) : null}

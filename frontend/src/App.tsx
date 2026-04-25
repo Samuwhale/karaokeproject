@@ -22,6 +22,11 @@ import type { SongsView } from './routes'
 import { resolveSelectedRun } from './runSelection'
 import type { RunProcessingConfigInput, TrackSummary } from './types'
 
+type NavigationState = {
+  songsView?: SongsView
+  currentTrackId?: string | null
+}
+
 function App() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -31,8 +36,9 @@ function App() {
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const mixRunId = mixActive ? searchParams.get('run') : null
   const routeSongsView = useMemo(() => parseSongsView(new URLSearchParams(location.search)), [location.search])
-  const navigationState = location.state as { songsView?: SongsView } | null
+  const navigationState = location.state as NavigationState | null
   const rememberedSongsView = navigationState?.songsView ?? parseSongsView(new URLSearchParams())
+  const rememberedCurrentTrackId = navigationState?.currentTrackId ?? mixTrackId ?? null
   const songsView = !mixActive ? routeSongsView : rememberedSongsView
 
   const dashboard = useDashboardData({ trackId: mixTrackId })
@@ -96,7 +102,6 @@ function App() {
   const [batchSplitIds, setBatchSplitIds] = useState<string[] | null>(null)
   const [dragOverlayActive, setDragOverlayActive] = useState(false)
   const dragCounterRef = useRef(0)
-  const lastVisitedTrackIdRef = useRef<string | null>(mixTrackId)
 
   const browseTracks = useMemo(
     () => applySongBrowse(tracks, { search: songsView.search, sort: songsView.sort }),
@@ -123,13 +128,14 @@ function App() {
     setSettingsOpen(true)
   }
 
-  function openSongs(view = rememberedSongsView) {
-    navigate(buildSongsPath(view), { state: { songsView: view } })
+  function openSongs(view = rememberedSongsView, currentTrackId = rememberedCurrentTrackId) {
+    navigate(buildSongsPath(view), { state: { songsView: view, currentTrackId } })
   }
 
   function openMix(trackId: string, options?: { runId?: string | null }) {
-    lastVisitedTrackIdRef.current = trackId
-    navigate(buildMixPath(trackId, { runId: options?.runId ?? null }), { state: { songsView } })
+    navigate(buildMixPath(trackId, { runId: options?.runId ?? null }), {
+      state: { songsView, currentTrackId: trackId },
+    })
   }
 
   function openTrackWorkspace(track: TrackSummary, options?: { runId?: string | null }) {
@@ -146,7 +152,10 @@ function App() {
     if (!mixActive) return
     const trackKnown = mixTrackId ? tracks.some((track) => track.id === mixTrackId) : false
     if (hasFirstSync && !selectedTrack && !trackKnown) {
-      navigate(buildSongsPath(songsView), { replace: true, state: { songsView } })
+      navigate(buildSongsPath(songsView), {
+        replace: true,
+        state: { songsView, currentTrackId: null },
+      })
       return
     }
     if (!selectedTrack) return
@@ -157,7 +166,10 @@ function App() {
     })
 
     if (`${location.pathname}${location.search}` !== nextPath) {
-      navigate(nextPath, { replace: true, state: { songsView } })
+      navigate(nextPath, {
+        replace: true,
+        state: { songsView, currentTrackId: selectedTrack.id },
+      })
     }
   }, [
     hasFirstSync,
@@ -348,12 +360,16 @@ function App() {
                 <SongsPage
                   view={songsView}
                   tracks={tracks}
-                  currentTrackId={mixTrackId ?? lastVisitedTrackIdRef.current}
+                  currentTrackId={rememberedCurrentTrackId}
                   stagedImportsCount={drafts.length}
                   queueRuns={queueRuns}
                   cancellingRunId={cancellingRunId}
                   retryingRunId={retryingRunId}
-                  onViewChange={(next) => navigate(buildSongsPath(next), { state: { songsView: next } })}
+                  onViewChange={(next) =>
+                    navigate(buildSongsPath(next), {
+                      state: { songsView: next, currentTrackId: rememberedCurrentTrackId },
+                    })
+                  }
                   onOpenTrack={openTrackWorkspace}
                   onSplitTrack={(trackId) => {
                     discardRejection(() => handleCreateRun(trackId, defaultProcessing))
@@ -403,7 +419,7 @@ function App() {
                   onUpdateTrack={handleUpdateTrack}
                   onDeleteTrack={(trackId) => {
                     handleDeleteTrack(trackId)
-                    openSongs()
+                    openSongs(undefined, null)
                   }}
                   onReveal={handleRevealFolder}
                   onOpenShortcuts={() => setShortcutsOpen(true)}

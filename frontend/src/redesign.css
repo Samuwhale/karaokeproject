@@ -963,24 +963,18 @@
 
 .overlay-foot {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 24px 20px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 24px 20px;
   background: var(--bg);
   border-top: 1px solid var(--border-soft);
 }
 
-.overlay-foot-profile {
+.overlay-foot-bottom {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-.overlay-foot-profile-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .overlay-foot-copy {
@@ -2080,13 +2074,24 @@ button.stem-row-gain:focus-visible {
   border-radius: 2px;
 }
 
-/* Footer (save state + errors) ------------------------------------------ */
+/* Transport save state (inline in transport bar) */
+
+.mix-transport-save {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color 160ms;
+}
+
+.mix-transport-save.is-saved {
+  color: var(--ok);
+}
+
+/* Footer (errors only) --------------------------------------------------- */
 
 .mix-footer {
   grid-row: 5;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
   padding: 4px 24px 12px;
   font-size: 12px;
 }
@@ -2100,10 +2105,6 @@ button.stem-row-gain:focus-visible {
 
 .mix-save-state.is-error {
   color: var(--err);
-}
-
-.mix-save-state.is-saved {
-  color: var(--ok);
 }
 
 .mix-errors {
@@ -2763,12 +2764,6 @@ button.stem-row-gain:focus-visible {
 
 /* Import panel: profile tab picker ----------------------------------------- */
 
-.import-panel-profiles {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
 .import-profile-tabs {
   display: flex;
   gap: 4px;
@@ -2812,13 +2807,6 @@ button.stem-row-gain:focus-visible {
 .import-profile-tab:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.import-profile-hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.4;
-  padding: 0 2px;
 }
 
 /* Mix workspace: inline profile picker in zero state ----------------------- */
