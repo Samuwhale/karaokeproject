@@ -32,7 +32,10 @@ button.topbar-chip:focus-visible {
   background: var(--text-faint);
 }
 
-.topbar-dot-warn { background: var(--warn); }
+.topbar-dot-warn {
+  background: var(--warn);
+  animation: dot-pulse 2000ms ease-in-out infinite;
+}
 
 .topbar-chip-warn {
   color: var(--warn);

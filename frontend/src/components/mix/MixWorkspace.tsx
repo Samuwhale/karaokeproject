@@ -224,6 +224,43 @@ function StemSplitIcon() {
   )
 }
 
+// Looping waveform visualiser shown during active stem separation
+function ProcessingWaveIcon() {
+  // Heights as fractions of viewBox (0–1), arranged to look like a waveform
+  const bars = [0.45, 0.78, 0.55, 1.0, 0.65, 0.88, 0.42, 0.70, 0.52]
+  const barW = 7
+  const gap = 4
+  const svgH = 36
+  const svgW = bars.length * (barW + gap) - gap
+  return (
+    <svg
+      className="mix-processing-icon"
+      width={svgW}
+      height={svgH}
+      viewBox={`0 0 ${svgW} ${svgH}`}
+      aria-hidden
+    >
+      {bars.map((h, i) => {
+        const barH = Math.max(4, h * svgH)
+        const x = i * (barW + gap)
+        const y = (svgH - barH) / 2
+        return (
+          <rect
+            key={i}
+            x={x}
+            y={y}
+            width={barW}
+            height={barH}
+            rx={3.5}
+            fill="currentColor"
+            className={`mix-processing-bar mix-processing-bar-${i + 1}`}
+          />
+        )
+      })}
+    </svg>
+  )
+}
+
 type VersionsPopoverProps = {
   track: TrackDetail
   selectedRun: RunDetail | null
@@ -849,23 +886,32 @@ function MixWorkspaceContent({
           {selectedRun ? (
             isActiveRunStatus(selectedRun.status) ? (
               <>
+                {selectedRun.status !== 'queued' ? (
+                  <ProcessingWaveIcon />
+                ) : null}
                 <div className="mix-progress-head">
-                  <strong>{selectedRun.status === 'queued' ? 'Queued' : `Splitting ${selectedRun.processing.profile_label}`}</strong>
-                  {selectedRun.status !== 'queued' ? (
+                  <strong>
+                    {selectedRun.status === 'queued'
+                      ? 'Waiting in queue'
+                      : `Splitting ${selectedRun.processing.profile_label}`}
+                  </strong>
+                  {selectedRun.status !== 'queued' && selectedRun.progress > 0 ? (
                     <span className="mix-progress-pct">{Math.round(selectedRun.progress * 100)}%</span>
                   ) : null}
                 </div>
                 <div
-                  className="mix-progress-bar"
+                  className={`mix-progress-bar ${selectedRun.status === 'queued' ? 'is-queued' : ''}`}
                   role="progressbar"
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={Math.round(selectedRun.progress * 100)}
                 >
-                  <span
-                    className="mix-progress-fill"
-                    style={{ width: `${Math.max(0, Math.min(1, selectedRun.progress)) * 100}%` }}
-                  />
+                  {selectedRun.status !== 'queued' ? (
+                    <span
+                      className="mix-progress-fill"
+                      style={{ width: `${Math.max(0, Math.min(1, selectedRun.progress)) * 100}%` }}
+                    />
+                  ) : null}
                 </div>
                 {selectedRun.status_message && selectedRun.status !== 'queued' ? (
                   <p className="mix-progress-hint" aria-live="polite">{selectedRun.status_message}</p>

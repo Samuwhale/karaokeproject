@@ -268,7 +268,7 @@
 }
 
 .library-queue-item-bar {
-  height: 4px;
+  height: 6px;
   background: color-mix(in srgb, var(--text) 8%, transparent);
   border-radius: 999px;
   overflow: hidden;
@@ -332,7 +332,7 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   flex-wrap: wrap;
 }
 
@@ -715,7 +715,7 @@
 }
 
 .track-wave rect {
-  fill: color-mix(in srgb, var(--text) 62%, transparent);
+  fill: color-mix(in srgb, var(--text) 68%, transparent);
   transition: fill 160ms;
 }
 
@@ -735,7 +735,7 @@
 .song-row-progress {
   display: block;
   width: 100%;
-  height: 10px;
+  height: 8px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--text) 8%, transparent);
   overflow: hidden;
@@ -1638,6 +1638,7 @@ button.mix-top-title-copy:hover .mix-top-edit-icon {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
   animation: preset-desc-in 150ms ease-out both;
 }
 
@@ -1816,6 +1817,7 @@ button.stem-row-gain:focus-visible {
   width: 100%;
   height: 100%;
   touch-action: none;
+  transition: opacity 300ms ease;
 }
 
 .stem-waveform.is-interactive {
@@ -1954,7 +1956,7 @@ button.stem-row-gain:focus-visible {
   top: 10px;
   bottom: 10px;
   width: 2px;
-  background: color-mix(in srgb, var(--text) 18%, transparent);
+  background: color-mix(in srgb, var(--text) 22%, transparent);
   transform: translateX(-50%);
   pointer-events: none;
   border-radius: 1px;
@@ -2126,7 +2128,12 @@ button.stem-row-gain:focus-visible {
   border-radius: 999px;
   cursor: pointer;
   accent-color: var(--accent);
-  transition: opacity 120ms;
+  transition: height 150ms ease, opacity 120ms;
+}
+
+.mix-seekbar:hover:not(:disabled),
+.mix-seekbar:focus-visible:not(:disabled) {
+  height: 8px;
 }
 
 .mix-seekbar::-webkit-slider-thumb {
@@ -2272,10 +2279,11 @@ button.stem-row-gain:focus-visible {
 
 .mix-progress-bar {
   width: min(100%, 360px);
-  height: 6px;
+  height: 8px;
   background: color-mix(in srgb, var(--text) 8%, transparent);
   border-radius: 999px;
   overflow: hidden;
+  position: relative;
 }
 
 .mix-progress-fill {
@@ -2665,6 +2673,7 @@ button.stem-row-gain:focus-visible {
   text-overflow: ellipsis;
   max-width: 260px;
   flex-shrink: 1;
+  min-width: 0;
 }
 
 .mix-transport-state.is-solo {
@@ -2819,7 +2828,7 @@ button.stem-row-gain:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px 20px;
+  padding: 20px;
   background: var(--surface-2);
   border: 1px dashed var(--border);
   border-radius: var(--radius-sm);
@@ -3303,5 +3312,87 @@ button.stem-row-gain:focus-visible {
   padding: 1px 5px;
   line-height: 1.6;
   vertical-align: 1px;
+}
+
+/* Processing wave icon (active split) -------------------------------------- */
+
+.mix-processing-icon {
+  color: color-mix(in oklch, var(--accent) 55%, var(--text-faint));
+  flex-shrink: 0;
+  margin-bottom: -4px;
+}
+
+.mix-processing-bar {
+  transform-origin: 50% 50%;
+  animation: processing-bar-dance 1.3s ease-in-out infinite;
+}
+
+.mix-processing-bar-1 { animation-delay:   0ms; }
+.mix-processing-bar-2 { animation-delay: 150ms; }
+.mix-processing-bar-3 { animation-delay:  75ms; }
+.mix-processing-bar-4 { animation-delay: 225ms; }
+.mix-processing-bar-5 { animation-delay: 100ms; }
+.mix-processing-bar-6 { animation-delay: 185ms; }
+.mix-processing-bar-7 { animation-delay:  40ms; }
+.mix-processing-bar-8 { animation-delay: 130ms; }
+.mix-processing-bar-9 { animation-delay:  65ms; }
+
+@keyframes processing-bar-dance {
+  0%, 100% { transform: scaleY(1);   opacity: 0.85; }
+  50%       { transform: scaleY(0.28); opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mix-processing-bar { animation: none; }
+}
+
+/* Queued state: indeterminate progress bar ---------------------------------- */
+/* Shows a travelling shimmer on the empty track instead of a 0-width fill.   */
+
+.mix-progress-bar.is-queued::after {
+  content: '';
+  display: block;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklch, var(--accent) 28%, transparent) 45%,
+    color-mix(in oklch, var(--accent) 28%, transparent) 55%,
+    transparent 100%
+  );
+  background-size: 300% 100%;
+  animation: queued-shimmer 2.4s ease-in-out infinite;
+}
+
+@keyframes queued-shimmer {
+  0%   { background-position: 300% 0; }
+  100% { background-position: -300% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mix-progress-bar.is-queued::after { animation: none; }
+}
+
+/* Stem rows: audio loading state ------------------------------------------- */
+/* Dims and pulses waveforms while audio buffers are being fetched/decoded.
+   transition: opacity on .stem-waveform (unconditional) ensures the fade-in
+   on loading complete is also animated, not instant.                          */
+
+.mix-rows[data-audio-loading] .stem-waveform {
+  animation: waveform-loading-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes waveform-loading-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%       { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mix-rows[data-audio-loading] .stem-waveform {
+    animation: none;
+    opacity: 0.4;
+  }
 }
 

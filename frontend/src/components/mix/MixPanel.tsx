@@ -382,7 +382,7 @@ export function MixPanel({ run, onSave, saving }: MixPanelProps) {
 
   return (
     <>
-      <div className="mix-rows" role="group" aria-label="Stem mixer">
+      <div className="mix-rows" role="group" aria-label="Stem mixer" data-audio-loading={playLoading || undefined}>
         {stems.map((stem, index) => {
           const silenced = stem.muted || (anySoloed && !stem.soloed)
           const fillStyle = faderFillStyle(stem.gain_db)
