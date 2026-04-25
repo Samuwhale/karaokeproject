@@ -1,7 +1,9 @@
 import json
+import shutil
+from pathlib import Path
 
-from sqlalchemy import Engine, create_engine, text
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy import Engine, create_engine, event, text
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from backend.core.constants import PROFILE_KEY_ALIASES
 from backend.core.config import get_runtime_settings
@@ -17,6 +19,7 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+_PENDING_PATH_CLEANUPS_KEY = "pending_path_cleanups"
 
 
 _COLUMN_ADDITIONS: tuple[tuple[str, str, str], ...] = (
@@ -107,6 +110,42 @@ def _migrate_profile_keys(engine: Engine) -> None:
                 text("UPDATE runs SET metadata_json = :metadata WHERE id = :id"),
                 {"metadata": json.dumps(metadata), "id": run_id},
             )
+
+
+def schedule_path_cleanup(session: Session, *paths: Path | None) -> None:
+    pending = session.info.setdefault(_PENDING_PATH_CLEANUPS_KEY, set())
+    for path in paths:
+        if path is None:
+            continue
+        pending.add(path.resolve())
+
+
+def _clear_scheduled_path_cleanups(session: Session) -> None:
+    session.info.pop(_PENDING_PATH_CLEANUPS_KEY, None)
+
+
+@event.listens_for(SessionLocal, "after_commit")
+def _delete_scheduled_paths(session: Session) -> None:
+    pending: set[Path] = session.info.pop(_PENDING_PATH_CLEANUPS_KEY, set())
+    for path in pending:
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        else:
+            path.unlink(missing_ok=True)
+
+
+@event.listens_for(SessionLocal, "after_rollback")
+def _clear_path_cleanups_after_rollback(session: Session) -> None:
+    _clear_scheduled_path_cleanups(session)
+
+
+@event.listens_for(SessionLocal, "after_soft_rollback")
+def _clear_path_cleanups_after_soft_rollback(
+    session: Session,
+    previous_transaction: object,
+) -> None:
+    del previous_transaction
+    _clear_scheduled_path_cleanups(session)
 
 
 def init_database() -> None:

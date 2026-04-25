@@ -65,6 +65,13 @@ function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowS
   return { text: null, tone: null, count: null, preferred: false }
 }
 
+/** DJB2 hash → stable hue in [0, 360) for track art background. */
+function trackHue(str: string): number {
+  let h = 5381
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0
+  return Math.abs(h) % 360
+}
+
 function WaveformIcon() {
   const bars = [0.28, 0.52, 0.85, 0.65, 0.95, 0.72, 0.44, 0.22]
   const barW = 5
@@ -583,7 +590,12 @@ export function SongsPage({
                   className="song-row-open"
                   onClick={() => onOpenTrack(track)}
                 >
-                  <span className="song-row-art" aria-hidden data-stage={stage.key}>
+                  <span
+                    className="song-row-art"
+                    aria-hidden
+                    data-stage={stage.key}
+                    style={{ '--art-hue': String(trackHue(track.title)) } as React.CSSProperties}
+                  >
                     {track.thumbnail_url ? <img src={track.thumbnail_url} alt="" loading="lazy" /> : initials}
                     {stage.key !== 'needs-split' ? (
                       <span className="song-row-art-dot" aria-hidden />

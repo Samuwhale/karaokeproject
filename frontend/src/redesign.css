@@ -143,8 +143,8 @@
 
 .library-queue.is-compact {
   padding: 6px 12px;
-  background: transparent;
-  border-color: color-mix(in oklch, var(--accent) 12%, var(--border-soft));
+  background: color-mix(in oklch, var(--accent) 3%, var(--surface));
+  border-color: color-mix(in oklch, var(--accent) 18%, var(--border-soft));
 }
 
 .library-queue-head {
@@ -624,17 +624,31 @@
   width: 40px;
   height: 40px;
   border-radius: 6px;
-  background: color-mix(in oklch, var(--accent) 8%, var(--surface-2));
+  background: oklch(90% 0.07 var(--art-hue, 55));
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 15px;
-  color: color-mix(in oklch, var(--accent) 60%, var(--text-2));
+  color: oklch(36% 0.16 var(--art-hue, 55));
   flex-shrink: 0;
   position: relative;
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 16%, var(--border-soft));
+  box-shadow: inset 0 0 0 1px oklch(78% 0.09 var(--art-hue, 55) / 0.4);
+}
+
+[data-theme='dark'] .song-row-art {
+  background: oklch(27% 0.09 var(--art-hue, 55));
+  color: oklch(75% 0.11 var(--art-hue, 55));
+  box-shadow: inset 0 0 0 1px oklch(42% 0.07 var(--art-hue, 55) / 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .song-row-art {
+    background: oklch(27% 0.09 var(--art-hue, 55));
+    color: oklch(75% 0.11 var(--art-hue, 55));
+    box-shadow: inset 0 0 0 1px oklch(42% 0.07 var(--art-hue, 55) / 0.45);
+  }
 }
 
 .song-row-art img {
@@ -1329,17 +1343,31 @@
   width: 40px;
   height: 40px;
   border-radius: 6px;
-  background: color-mix(in oklch, var(--accent) 8%, var(--surface-2));
+  background: oklch(90% 0.07 var(--art-hue, 55));
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 14px;
-  color: color-mix(in oklch, var(--accent) 60%, var(--text-2));
+  color: oklch(36% 0.16 var(--art-hue, 55));
   flex-shrink: 0;
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 16%, var(--border-soft));
+  box-shadow: inset 0 0 0 1px oklch(78% 0.09 var(--art-hue, 55) / 0.4);
+}
+
+[data-theme='dark'] .mix-top-art {
+  background: oklch(27% 0.09 var(--art-hue, 55));
+  color: oklch(75% 0.11 var(--art-hue, 55));
+  box-shadow: inset 0 0 0 1px oklch(42% 0.07 var(--art-hue, 55) / 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .mix-top-art {
+    background: oklch(27% 0.09 var(--art-hue, 55));
+    color: oklch(75% 0.11 var(--art-hue, 55));
+    box-shadow: inset 0 0 0 1px oklch(42% 0.07 var(--art-hue, 55) / 0.45);
+  }
 }
 
 .mix-top-art img {
@@ -2098,6 +2126,7 @@ button.stem-row-gain:focus-visible {
   font-size: 13px;
   color: var(--text);
   white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 
 .mix-time-sep {
@@ -2243,7 +2272,7 @@ button.stem-row-gain:focus-visible {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 16px;
   padding: 32px;
   text-align: center;
   color: var(--text-muted);
@@ -2265,16 +2294,17 @@ button.stem-row-gain:focus-visible {
 
 .mix-progress-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 16px;
 }
 
 .mix-progress-pct {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 18px;
+  font-size: 28px;
   font-weight: 600;
   color: var(--text);
+  line-height: 1;
 }
 
 .mix-progress-bar {
@@ -2767,6 +2797,10 @@ button.stem-row-gain:focus-visible {
   gap: 6px;
 }
 
+.import-panel-source.is-compact .import-drop-icon {
+  display: none;
+}
+
 .import-panel-source.is-compact .import-panel-drop-label strong {
   font-size: 13px;
 }
@@ -2830,11 +2864,11 @@ button.stem-row-gain:focus-visible {
   justify-content: center;
   padding: 20px;
   background: var(--surface-2);
-  border: 1px dashed var(--border);
+  border: 1.5px dashed var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: border-color 120ms, background 120ms;
-  min-height: 88px;
+  transition: border-color 120ms, background 120ms, box-shadow 120ms;
+  min-height: 96px;
   text-align: center;
 }
 
@@ -2845,21 +2879,28 @@ button.stem-row-gain:focus-visible {
   outline: none;
 }
 
+.import-panel-drop:hover .import-drop-icon,
+.import-panel-drop:focus-visible .import-drop-icon {
+  color: var(--accent);
+}
+
 .import-panel-drop.is-active {
   border-color: var(--accent);
-  background: color-mix(in oklch, var(--accent) 7%, var(--surface-2));
+  background: color-mix(in oklch, var(--accent) 8%, var(--surface-2));
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 14%, transparent);
   outline: none;
 }
 
 .import-panel-drop.is-loaded {
   border-style: solid;
-  border-color: var(--border);
+  border-color: color-mix(in oklch, var(--ok) 40%, var(--border));
+  background: color-mix(in oklch, var(--ok) 4%, var(--surface-2));
 }
 
 .import-panel-drop-label {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 3px;
   font-size: 13px;
   color: var(--text-muted);
@@ -2877,6 +2918,16 @@ button.stem-row-gain:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
+}
+
+.import-drop-icon {
+  color: var(--text-faint);
+  margin-bottom: 4px;
+  transition: color 120ms;
+}
+
+.import-drop-icon-ok {
+  color: var(--ok);
 }
 
 .import-panel-file-actions {
@@ -2994,8 +3045,11 @@ button.stem-row-gain:focus-visible {
 .mix-profile-option:nth-child(3) { animation-delay: 140ms; }
 
 .mix-profile-option.is-default {
-  border-color: color-mix(in oklch, var(--accent) 30%, var(--border));
-  background: color-mix(in oklch, var(--accent) 3%, var(--surface));
+  border-color: color-mix(in oklch, var(--accent) 55%, var(--border));
+  background: color-mix(in oklch, var(--accent) 6%, var(--surface));
+  box-shadow:
+    0 0 0 3px color-mix(in oklch, var(--accent) 8%, transparent),
+    0 2px 6px color-mix(in srgb, var(--text) 5%, transparent);
 }
 
 .mix-profile-option:hover:not(:disabled) {
@@ -3034,10 +3088,11 @@ button.stem-row-gain:focus-visible {
   font-size: var(--t-micro);
   font-weight: 600;
   font-family: var(--font-sans);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--accent);
   background: var(--accent-dim);
+  border: 1px solid color-mix(in oklch, var(--accent) 28%, transparent);
   border-radius: var(--radius-xs);
   padding: 1px 5px;
   line-height: 1.5;

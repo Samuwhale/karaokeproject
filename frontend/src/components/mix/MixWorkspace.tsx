@@ -124,6 +124,13 @@ function InlineProfilePicker({ profiles, defaultProfileKey, creatingRun, onCreat
   )
 }
 
+/** DJB2 hash → stable hue in [0, 360) for track art background. */
+function trackHue(str: string): number {
+  let h = 5381
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0
+  return Math.abs(h) % 360
+}
+
 const RETRYABLE_STATUSES = new Set(['failed', 'cancelled'])
 
 function formatStatus(status: string) {
@@ -706,7 +713,11 @@ function MixWorkspaceContent({
           ) : null}
         </div>
         <div className="mix-top-title">
-          <span className="mix-top-art" aria-hidden>
+          <span
+            className="mix-top-art"
+            aria-hidden
+            style={{ '--art-hue': String(trackHue(track.title)) } as React.CSSProperties}
+          >
             {track.thumbnail_url
               ? <img src={track.thumbnail_url} alt="" loading="lazy" />
               : track.title.trim().slice(0, 1).toUpperCase() || 'S'}

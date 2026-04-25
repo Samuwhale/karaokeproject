@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import shutil
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +22,7 @@ from backend.db.models import (
     RunStatus,
     Track,
 )
+from backend.db.session import schedule_path_cleanup
 from backend.schemas.tracks import (
     MIX_GAIN_DB_MAX,
     MIX_GAIN_DB_MIN,
@@ -585,7 +585,7 @@ def delete_run(session: Session, run_id: str) -> None:
     if run.track is not None:
         _touch_track(run.track)
 
-    _delete_run_files(run, include_source=False)
+    schedule_path_cleanup(session, *_run_file_paths(run, include_source=False))
     session.delete(run)
     session.commit()
 
@@ -620,7 +620,7 @@ def prune_terminal_runs_without_stems(session: Session, track: Track) -> int:
         if _run_has_mixable_stems(run):
             continue
 
-        _delete_run_files(run, include_source=False)
+        schedule_path_cleanup(session, *_run_file_paths(run, include_source=False))
         session.delete(run)
         deleted += 1
 
@@ -644,7 +644,7 @@ def deduplicate_terminal_runs_by_profile(session: Session, track: Track) -> int:
         for run in terminal_runs:
             if run.id == keep_run.id:
                 continue
-            _delete_run_files(run, include_source=False)
+            schedule_path_cleanup(session, *_run_file_paths(run, include_source=False))
             session.delete(run)
             deleted += 1
 
@@ -669,7 +669,7 @@ def replace_terminal_runs_for_completed_profile(session: Session, completed_run:
             continue
         if track.keeper_run_id == run.id:
             replaced_keeper = True
-        _delete_run_files(run, include_source=False)
+        schedule_path_cleanup(session, *_run_file_paths(run, include_source=False))
         session.delete(run)
         deleted += 1
 
@@ -775,7 +775,7 @@ def purge_non_keeper_runs(
             continue
 
         reclaimed += _measure_run_files(run, include_source=False)
-        _delete_run_files(run, include_source=False)
+        schedule_path_cleanup(session, *_run_file_paths(run, include_source=False))
 
         session.delete(run)
         deleted += 1
@@ -790,7 +790,7 @@ def purge_non_keeper_runs(
 def _prepare_track_delete(
     session: Session,
     track_id: str,
-) -> Path | None:
+) -> None:
     track = get_track(session, track_id)
     if track is None:
         raise LookupError(f"Track '{track_id}' does not exist.")
@@ -798,29 +798,22 @@ def _prepare_track_delete(
     if any(_run_is_active(run) for run in track.runs):
         raise ValueError("Cancel or wait for queued or running splits before deleting this track.")
 
-    source_path = Path(track.source_path) if track.source_path else None
-
     for run in list(track.runs):
-        _delete_run_files(run, include_source=False)
+        schedule_path_cleanup(session, *_run_file_paths(run, include_source=False))
 
+    if track.source_path:
+        schedule_path_cleanup(session, Path(track.source_path))
     session.delete(track)
-    return source_path
-
-
-def _delete_source_file(source_path: Path | None) -> None:
-    if source_path is not None and source_path.exists():
-        source_path.unlink(missing_ok=True)
 
 
 def batch_delete_tracks(session: Session, track_ids: list[str]) -> tuple[int, list[str], list[str]]:
     deleted = 0
     blocked: list[str] = []
     missing: list[str] = []
-    source_paths: list[Path | None] = []
 
     for track_id in track_ids:
         try:
-            source_paths.append(_prepare_track_delete(session, track_id))
+            _prepare_track_delete(session, track_id)
             deleted += 1
         except LookupError:
             missing.append(track_id)
@@ -829,8 +822,6 @@ def batch_delete_tracks(session: Session, track_ids: list[str]) -> tuple[int, li
 
     if deleted:
         session.commit()
-        for source_path in source_paths:
-            _delete_source_file(source_path)
 
     return deleted, blocked, missing
 
@@ -878,14 +869,6 @@ def _run_file_paths(run: Run, *, include_source: bool) -> set[Path]:
 
 def _measure_run_files(run: Run, *, include_source: bool) -> int:
     return _measure_paths(_run_file_paths(run, include_source=include_source))
-
-
-def _delete_run_files(run: Run, *, include_source: bool) -> None:
-    for path in _run_file_paths(run, include_source=include_source):
-        if path.is_dir():
-            shutil.rmtree(path, ignore_errors=True)
-        else:
-            path.unlink(missing_ok=True)
 
 
 def write_metadata_file(track: Track, run: Run, target_path: Path) -> None:

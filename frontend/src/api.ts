@@ -31,9 +31,13 @@ import type {
 } from './types'
 import { discardRejection } from './async'
 
-async function parseErrorBody(response: Response): Promise<string | null> {
+function hasJsonBody(response: Response) {
   const contentType = response.headers.get('content-type') ?? ''
-  if (contentType.includes('application/json')) {
+  return contentType.includes('application/json')
+}
+
+async function parseErrorBody(response: Response): Promise<string | null> {
+  if (hasJsonBody(response)) {
     try {
       const payload = (await response.json()) as { detail?: unknown } | null
       if (payload) {
@@ -76,6 +80,28 @@ async function parseErrorBody(response: Response): Promise<string | null> {
   }
 }
 
+async function parseSuccessBody<T>(response: Response): Promise<T> {
+  if (response.status === 204 || response.status === 205) {
+    return undefined as T
+  }
+
+  const contentLength = response.headers.get('content-length')
+  if (contentLength === '0') {
+    return undefined as T
+  }
+
+  if (hasJsonBody(response)) {
+    const raw = await response.text()
+    if (!raw.trim()) {
+      return undefined as T
+    }
+    return JSON.parse(raw) as T
+  }
+
+  const text = await response.text()
+  return (text || undefined) as T
+}
+
 export class ApiError extends Error {
   status: number
   statusText: string
@@ -95,7 +121,7 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError
 }
 
-async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+async function fetchApi<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   let response: Response
   try {
     response = await fetch(input, init)
@@ -109,27 +135,27 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
     throw new ApiError(response, detail)
   }
 
-  return (await response.json()) as T
+  return parseSuccessBody<T>(response)
 }
 
-function postJson<T>(url: string, body: unknown): Promise<T> {
-  return fetchJson<T>(url, {
+function postApi<T>(url: string, body: unknown): Promise<T> {
+  return fetchApi<T>(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
 }
 
-function patchJson<T>(url: string, body: unknown): Promise<T> {
-  return fetchJson<T>(url, {
+function patchApi<T>(url: string, body: unknown): Promise<T> {
+  return fetchApi<T>(url, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
 }
 
-function putJson<T>(url: string, body: unknown): Promise<T> {
-  return fetchJson<T>(url, {
+function putApi<T>(url: string, body: unknown): Promise<T> {
+  return fetchApi<T>(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -149,35 +175,35 @@ function postKeepalive(url: string, body?: unknown) {
 }
 
 export function getDiagnostics() {
-  return fetchJson<Diagnostics>('/api/diagnostics')
+  return fetchApi<Diagnostics>('/api/diagnostics')
 }
 
 export function getSettings() {
-  return fetchJson<Settings>('/api/settings')
+  return fetchApi<Settings>('/api/settings')
 }
 
 export function updateSettings(settings: Omit<Settings, 'profiles'>) {
-  return putJson<Settings>('/api/settings', settings)
+  return putApi<Settings>('/api/settings', settings)
 }
 
 export function getStorageOverview() {
-  return fetchJson<StorageOverview>('/api/storage')
+  return fetchApi<StorageOverview>('/api/storage')
 }
 
 export function cleanupTempStorage() {
-  return fetchJson<TempCleanupResponse>('/api/storage/cleanup/temp', {
+  return fetchApi<TempCleanupResponse>('/api/storage/cleanup/temp', {
     method: 'POST',
   })
 }
 
 export function cleanupExportBundles() {
-  return fetchJson<ExportBundleCleanupResponse>('/api/storage/cleanup/export-bundles', {
+  return fetchApi<ExportBundleCleanupResponse>('/api/storage/cleanup/export-bundles', {
     method: 'POST',
   })
 }
 
 export function cleanupNonKeeperRunsLibrary() {
-  return fetchJson<NonKeeperCleanupResponse>('/api/storage/cleanup/non-keeper-runs', {
+  return fetchApi<NonKeeperCleanupResponse>('/api/storage/cleanup/non-keeper-runs', {
     method: 'POST',
   })
 }
@@ -189,51 +215,51 @@ export function flushPendingLibraryCleanup() {
 // --- Tracks ---
 
 export function getTracks() {
-  return fetchJson<TrackSummary[]>('/api/tracks')
+  return fetchApi<TrackSummary[]>('/api/tracks')
 }
 
 export function getTrack(trackId: string) {
-  return fetchJson<TrackDetail>(`/api/tracks/${trackId}`)
+  return fetchApi<TrackDetail>(`/api/tracks/${trackId}`)
 }
 
 export function updateTrack(trackId: string, payload: { title?: string; artist?: string | null }) {
-  return putJson<TrackDetail>(`/api/tracks/${trackId}`, payload)
+  return putApi<TrackDetail>(`/api/tracks/${trackId}`, payload)
 }
 
 // --- Runs ---
 
 export function createRun(trackId: string, processing: RunProcessingConfigInput) {
-  return postJson<{ run: RunSummary }>(`/api/tracks/${trackId}/runs`, { processing })
+  return postApi<{ run: RunSummary }>(`/api/tracks/${trackId}/runs`, { processing })
 }
 
 export function cancelRun(runId: string) {
-  return fetchJson<{ run: RunSummary }>(`/api/runs/${runId}/cancel`, { method: 'POST' })
+  return fetchApi<{ run: RunSummary }>(`/api/runs/${runId}/cancel`, { method: 'POST' })
 }
 
 export function retryRun(runId: string) {
-  return fetchJson<{ run: RunSummary }>(`/api/runs/${runId}/retry`, { method: 'POST' })
+  return fetchApi<{ run: RunSummary }>(`/api/runs/${runId}/retry`, { method: 'POST' })
 }
 
 export async function deleteRun(runId: string) {
-  await fetchJson(`/api/runs/${runId}`, { method: 'DELETE' })
+  await fetchApi(`/api/runs/${runId}`, { method: 'DELETE' })
 }
 
 export function updateRunMix(trackId: string, runId: string, stems: RunMixStemEntry[]) {
-  return putJson<RunDetail>(`/api/tracks/${trackId}/runs/${runId}/mix`, { stems })
+  return putApi<RunDetail>(`/api/tracks/${trackId}/runs/${runId}/mix`, { stems })
 }
 
 export function getActiveRuns() {
-  return fetchJson<QueueRunEntry[]>('/api/runs/active')
+  return fetchApi<QueueRunEntry[]>('/api/runs/active')
 }
 
 // --- Keeper / cleanup ---
 
 export function setKeeperRun(trackId: string, runId: string | null) {
-  return putJson<TrackDetail>(`/api/tracks/${trackId}/keeper`, { run_id: runId })
+  return putApi<TrackDetail>(`/api/tracks/${trackId}/keeper`, { run_id: runId })
 }
 
 export function batchDeleteTracks(payload: BatchTrackIdsInput) {
-  return postJson<BatchDeleteResponse>('/api/tracks/batch/delete', payload)
+  return postApi<BatchDeleteResponse>('/api/tracks/batch/delete', payload)
 }
 
 export function flushPendingTrackDeletes(trackIds: string[]) {
@@ -244,7 +270,7 @@ export function flushPendingTrackDeletes(trackIds: string[]) {
 // --- Imports (drafts) ---
 
 export function resolveYouTubeImport(sourceUrl: string) {
-  return postJson<ResolveYouTubeImportResponse>('/api/imports/youtube/resolve', {
+  return postApi<ResolveYouTubeImportResponse>('/api/imports/youtube/resolve', {
     source_url: sourceUrl,
   })
 }
@@ -252,52 +278,52 @@ export function resolveYouTubeImport(sourceUrl: string) {
 export function resolveLocalImport(files: File[]) {
   const formData = new FormData()
   for (const file of files) formData.append('files', file)
-  return fetchJson<ResolveLocalImportResponse>('/api/imports/local/resolve', {
+  return fetchApi<ResolveLocalImportResponse>('/api/imports/local/resolve', {
     method: 'POST',
     body: formData,
   })
 }
 
 export function listImportDrafts() {
-  return fetchJson<ImportDraft[]>('/api/imports/drafts')
+  return fetchApi<ImportDraft[]>('/api/imports/drafts')
 }
 
 export function updateImportDraft(draftId: string, payload: UpdateImportDraftInput) {
-  return patchJson<ImportDraft>(`/api/imports/drafts/${draftId}`, payload)
+  return patchApi<ImportDraft>(`/api/imports/drafts/${draftId}`, payload)
 }
 
 export async function discardImportDraft(draftId: string) {
-  await fetchJson(`/api/imports/drafts/${draftId}`, { method: 'DELETE' })
+  await fetchApi(`/api/imports/drafts/${draftId}`, { method: 'DELETE' })
 }
 
 export function confirmImportDrafts(payload: ConfirmImportDraftsInput) {
-  return postJson<ConfirmImportDraftsResponse>('/api/imports/drafts/confirm', payload)
+  return postApi<ConfirmImportDraftsResponse>('/api/imports/drafts/confirm', payload)
 }
 
 // --- Exports ---
 
 export function createExportBundle(payload: ExportBundleInput) {
-  return postJson<ExportBundleResponse>('/api/exports/bundle', payload)
+  return postApi<ExportBundleResponse>('/api/exports/bundle', payload)
 }
 
 export function planExportBundle(payload: ExportPlanInput) {
-  return postJson<ExportPlanResponse>('/api/exports/plan', payload)
+  return postApi<ExportPlanResponse>('/api/exports/plan', payload)
 }
 
 export function listExportStems(payload: ExportStemsInput) {
-  return postJson<ExportStemsResponse>('/api/exports/stems', payload)
+  return postApi<ExportStemsResponse>('/api/exports/stems', payload)
 }
 
 // --- System ---
 
 export function revealFolder(payload: RevealFolderInput) {
-  return postJson<RevealFolderResponse>('/api/system/reveal', payload)
+  return postApi<RevealFolderResponse>('/api/system/reveal', payload)
 }
 
 // --- Admin ---
 
 export function backfillMetrics() {
-  return fetchJson<{ updated_artifact_count: number }>('/api/admin/backfill-metrics', {
+  return fetchApi<{ updated_artifact_count: number }>('/api/admin/backfill-metrics', {
     method: 'POST',
   })
 }

@@ -32,6 +32,25 @@ export type ImportPanelProps = {
   onConfirm: (payload: ConfirmImportDraftsInput) => Promise<unknown>
 }
 
+// ---- Icons -----------------------------------------------------------------
+
+function UploadIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden className="import-drop-icon">
+      <path d="M10 13V4M7 7l3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 14v1a2 2 0 002 2h10a2 2 0 002-2v-1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden className="import-drop-icon import-drop-icon-ok">
+      <path d="M5 10l4 4 6-8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 // ---- Helpers ---------------------------------------------------------------
 
 function sourceLabel(item: ImportDraft) {
@@ -517,11 +536,13 @@ function ImportPanelContent({
               />
               {localFiles.length > 0 ? (
                 <span className="import-panel-drop-label">
+                  <CheckIcon />
                   <strong>{localFiles.length} file{localFiles.length === 1 ? '' : 's'} ready</strong>
                   <span>{localFiles.map((f) => f.name).join(', ')}</span>
                 </span>
               ) : (
                 <span className="import-panel-drop-label">
+                  <UploadIcon />
                   <strong>Drop files here</strong>
                   <span>Audio or video — or click to browse</span>
                 </span>
