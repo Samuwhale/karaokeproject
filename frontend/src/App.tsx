@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useMatch, useNavigate } from 'react-router-dom'
 
 import './App.css'
@@ -162,10 +162,10 @@ function App() {
     openMix(track.id, { runId })
   }
 
-  const revealImportPanel = useEffectEvent(() => {
+  function revealImportPanel() {
     if (mixActive) openSongs()
     setImportPanelOpen(true)
-  })
+  }
 
   useEffect(() => {
     if (!mixActive) return
@@ -236,7 +236,12 @@ function App() {
       if (files.length) {
         discardRejection(async () => {
           await handleResolveLocalImport(files)
-          revealImportPanel()
+          if (mixActive) {
+            navigate(buildSongsPath(rememberedSongsView), {
+              state: { songsView: rememberedSongsView, currentTrackId: rememberedCurrentTrackId },
+            })
+          }
+          setImportPanelOpen(true)
         })
         return
       }
@@ -255,7 +260,7 @@ function App() {
       dragCounterRef.current = 0
       setDragOverlayActive(false)
     }
-  }, [handleResolveLocalImport, importPanelOpen, pushToast])
+  }, [handleResolveLocalImport, importPanelOpen, mixActive, navigate, pushToast, rememberedCurrentTrackId, rememberedSongsView])
 
   useEffect(() => {
     function onPaste(event: ClipboardEvent) {
@@ -270,13 +275,18 @@ function App() {
       event.preventDefault()
       discardRejection(async () => {
         await handleResolveYouTube(text)
-        revealImportPanel()
+        if (mixActive) {
+          navigate(buildSongsPath(rememberedSongsView), {
+            state: { songsView: rememberedSongsView, currentTrackId: rememberedCurrentTrackId },
+          })
+        }
+        setImportPanelOpen(true)
       })
     }
 
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
-  }, [handleResolveYouTube])
+  }, [handleResolveYouTube, mixActive, navigate, rememberedCurrentTrackId, rememberedSongsView])
 
   function selectAdjacentTrack(offset: number) {
     if (!browseTracks.length) return
@@ -371,7 +381,7 @@ function App() {
               >
                 <GearIcon />
               </button>
-              <button type="button" className="button-primary" title="Add songs (a)" onClick={() => setImportPanelOpen(true)}>
+              <button type="button" className="button-primary" title="Add songs (a)" onClick={revealImportPanel}>
                 Add songs
               </button>
             </div>
@@ -404,8 +414,8 @@ function App() {
                   onSplitTrack={(trackId) => {
                     discardRejection(() => handleCreateRun(trackId, defaultProcessing))
                   }}
-                  onAddSongs={() => setImportPanelOpen(true)}
-                  onReviewImports={() => setImportPanelOpen(true)}
+                  onAddSongs={revealImportPanel}
+                  onReviewImports={revealImportPanel}
                   onCancelRun={handleCancelRun}
                   onRetryRun={handleRetryRun}
                   onBatchSplit={(ids) => setBatchSplitIds(ids)}

@@ -262,6 +262,7 @@ function ImportPanelContent({
   const [localFiles, setLocalFiles] = useState<File[]>([])
   const [dragActive, setDragActive] = useState(false)
   const [sourceError, setSourceError] = useState<string | null>(null)
+  const autoResolvedUrlRef = useRef<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   function clearSource() {
@@ -269,6 +270,7 @@ function ImportPanelContent({
     setLocalFiles([])
     setDragActive(false)
     setSourceError(null)
+    autoResolvedUrlRef.current = null
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -323,7 +325,9 @@ function ImportPanelContent({
     const trimmed = youtubeUrl.trim()
     if (!trimmed || sourceBusy) return
     if (!/^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\b/i.test(trimmed)) return
+    if (autoResolvedUrlRef.current === trimmed) return
     const timer = window.setTimeout(() => {
+      autoResolvedUrlRef.current = trimmed
       discardRejection(() => resolveTypedYouTubeUrl(trimmed))
     }, 700)
     return () => window.clearTimeout(timer)
@@ -435,7 +439,11 @@ function ImportPanelContent({
                   placeholder="Paste a YouTube URL or playlist…"
                   value={youtubeUrl}
                   onChange={(event) => {
-                    setYoutubeUrl(event.target.value)
+                    const nextValue = event.target.value
+                    if (nextValue.trim() !== autoResolvedUrlRef.current) {
+                      autoResolvedUrlRef.current = null
+                    }
+                    setYoutubeUrl(nextValue)
                     if (sourceError) setSourceError(null)
                   }}
                   onKeyDown={(event) => {

@@ -812,15 +812,6 @@ def _delete_source_file(source_path: Path | None) -> None:
         source_path.unlink(missing_ok=True)
 
 
-def delete_track(
-    session: Session,
-    track_id: str,
-) -> None:
-    source_path = _prepare_track_delete(session, track_id)
-    session.commit()
-    _delete_source_file(source_path)
-
-
 def batch_delete_tracks(session: Session, track_ids: list[str]) -> tuple[int, list[str], list[str]]:
     deleted = 0
     blocked: list[str] = []

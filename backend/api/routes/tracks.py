@@ -27,7 +27,6 @@ from backend.services.tracks import (
     batch_delete_tracks as batch_delete_tracks_service,
     create_run,
     delete_run,
-    delete_track,
     get_track,
     list_tracks,
     request_run_cancellation,
@@ -74,20 +73,6 @@ def update_track_endpoint(
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return serialize_track_detail(track)
-
-
-@router.delete("/tracks/{track_id}")
-def delete_track_endpoint(
-    track_id: str,
-    session: Session = Depends(get_db_session),
-) -> dict[str, bool]:
-    try:
-        delete_track(session, track_id)
-    except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except ValueError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
-    return {"ok": True}
 
 
 @router.get("/tracks/{track_id}/source")
