@@ -5,25 +5,27 @@ import { ConfirmInline } from '../feedback/ConfirmInline'
 import { RunStepper } from '../feedback/RunStepper'
 import { MixExportPopover } from './MixExportPopover'
 import { MixPanel } from './MixPanel'
-import { OutputIntentPicker } from './OutputIntent'
+import { StemSelectionPicker } from '../StemSelectionPicker'
 import { formatDuration } from '../metrics'
 import { RUN_STATUS_SHORT_LABELS, isActiveRunStatus } from '../runStatus'
 import { resolveSelectedRun } from '../../runSelection'
-import { isStemKind, stemLabel } from '../../stems'
+import { isStemKind } from '../../stems'
 import type {
-  ProcessingProfile,
+  QualityOption,
   RevealFolderInput,
   RunDetail,
   RunMixStemEntry,
   RunProcessingConfigInput,
+  StemOption,
   TrackDetail,
 } from '../../types'
 
 type MixWorkspaceProps = {
   track: TrackDetail | null
   selectedRunId: string | null
-  profiles: ProcessingProfile[]
-  defaultProfileKey: string
+  stemOptions: StemOption[]
+  qualityOptions: QualityOption[]
+  defaultSelection: RunProcessingConfigInput
   defaultBitrate: string
   creatingRun: boolean
   cancellingRunId: string | null
@@ -54,72 +56,44 @@ type MixWorkspaceProps = {
 
 type Popover = null | 'versions' | 'export' | 'menu'
 
-type InlineProfilePickerProps = {
-  profiles: ProcessingProfile[]
-  defaultProfileKey: string
+type StemCreateControlProps = {
+  stemOptions: StemOption[]
+  qualityOptions: QualityOption[]
+  defaultSelection: RunProcessingConfigInput
   creatingRun: boolean
   onCreateRun: (processing: RunProcessingConfigInput) => void
 }
 
-function InlineProfilePicker({ profiles, defaultProfileKey, creatingRun, onCreateRun }: InlineProfilePickerProps) {
-  if (profiles.length === 0) {
-    return <p className="mix-blocked-hint">No profiles configured. Check Settings → Maintenance.</p>
-  }
+function StemCreateControl({
+  stemOptions,
+  qualityOptions,
+  defaultSelection,
+  creatingRun,
+  onCreateRun,
+}: StemCreateControlProps) {
+  const [selection, setSelection] = useState(defaultSelection)
 
-  // Default profile first, then the rest in their configured order
-  const defaultProfile = profiles.find((p) => p.key === defaultProfileKey)
-  const otherProfiles = profiles.filter((p) => p.key !== defaultProfileKey)
-  const sorted = defaultProfile ? [defaultProfile, ...otherProfiles] : profiles
-
-  // Single profile: one prominent action, no card grid
-  if (sorted.length === 1) {
-    const profile = sorted[0]
-    return (
-      <div className="mix-profile-single">
-        <button
-          type="button"
-          className="button-primary"
-          disabled={creatingRun}
-          onClick={() => onCreateRun({ profile_key: profile.key })}
-        >
-          Split with {profile.label}
-        </button>
-        {profile.stems.length > 0 ? (
-          <span className="mix-blocked-hint">
-            {profile.stems.map((s) => stemLabel(s)).join(' · ')}
-          </span>
-        ) : null}
-      </div>
-    )
-  }
+  useEffect(() => {
+    setSelection(defaultSelection)
+  }, [defaultSelection])
 
   return (
-    <div className="mix-profile-picker">
-      {sorted.map((profile) => {
-        const isDefault = profile.key === defaultProfileKey
-        return (
-          <button
-            key={profile.key}
-            type="button"
-            className={`mix-profile-option ${isDefault ? 'is-default' : ''}`}
-            disabled={creatingRun}
-            onClick={() => onCreateRun({ profile_key: profile.key })}
-          >
-            <span className="mix-profile-option-label">
-              {profile.label}
-              {isDefault ? <span className="mix-profile-option-badge">Default</span> : null}
-            </span>
-            {profile.best_for ? (
-              <span className="mix-profile-option-hint">{profile.best_for}</span>
-            ) : null}
-            {profile.stems.length > 0 ? (
-              <span className="mix-profile-option-stems">
-                {profile.stems.map((s) => stemLabel(s)).join(' · ')}
-              </span>
-            ) : null}
-          </button>
-        )
-      })}
+    <div className="mix-stem-select">
+      <StemSelectionPicker
+        value={selection}
+        stemOptions={stemOptions}
+        qualityOptions={qualityOptions}
+        disabled={creatingRun}
+        onChange={setSelection}
+      />
+      <button
+        type="button"
+        className="button-primary"
+        disabled={creatingRun || selection.stems.length === 0}
+        onClick={() => onCreateRun(selection)}
+      >
+        {creatingRun ? 'Queueing…' : 'Create stems'}
+      </button>
     </div>
   )
 }
@@ -151,7 +125,7 @@ function isMixableRun(run: RunDetail) {
 }
 
 function versionSummary(run: RunDetail): string {
-  return run.processing.profile_label
+  return run.processing.label
 }
 
 function Chevron() {
@@ -204,7 +178,7 @@ function PencilIcon() {
   )
 }
 
-function StemSplitIcon() {
+function StemCreateIcon() {
   // Five bars representing isolated stem tracks — vocals, drums, bass, piano, other
   const bars = [
     { y: 8,  h: 20 }, // vocals — medium
@@ -271,7 +245,9 @@ function ProcessingWaveIcon() {
 type VersionsPopoverProps = {
   track: TrackDetail
   selectedRun: RunDetail | null
-  profiles: ProcessingProfile[]
+  stemOptions: StemOption[]
+  qualityOptions: QualityOption[]
+  defaultSelection: RunProcessingConfigInput
   creatingRun: boolean
   cancellingRunId: string | null
   retryingRunId: string | null
@@ -286,27 +262,12 @@ type VersionsPopoverProps = {
   onSetKeeper: (runId: string | null) => Promise<void>
 }
 
-function pickRepresentativeRun(
-  runs: RunDetail[],
-  profileKey: string,
-  keeperId: string | null,
-): RunDetail | null {
-  const matches = runs.filter((run) => run.processing.profile_key === profileKey)
-  if (matches.length === 0) return null
-  const sorted = [...matches].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-  const keeper = sorted.find((run) => run.id === keeperId)
-  if (keeper) return keeper
-  const completed = sorted.find((run) => run.status === 'completed')
-  if (completed) return completed
-  const active = sorted.find((run) => isActiveRunStatus(run.status))
-  if (active) return active
-  return sorted[0]
-}
-
 function VersionsPopover({
   track,
   selectedRun,
-  profiles,
+  stemOptions,
+  qualityOptions,
+  defaultSelection,
   creatingRun,
   cancellingRunId,
   retryingRunId,
@@ -324,21 +285,11 @@ function VersionsPopover({
   const selectedIsKeeper = !!selectedRun && keeperId === selectedRun.id
   const canDeleteSelected =
     !!selectedRun && selectedRun.id !== keeperId && !isActiveRunStatus(selectedRun.status)
-  const [armedKey, setArmedKey] = useState<string | null>(null)
+  const [selection, setSelection] = useState(defaultSelection)
+  const runs = [...track.runs].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
 
-  useEffect(() => {
-    if (!armedKey) return
-    const timeoutId = window.setTimeout(() => setArmedKey(null), 5000)
-    return () => window.clearTimeout(timeoutId)
-  }, [armedKey])
-
-  const rows = profiles.map((profile) => ({
-    profile,
-    run: pickRepresentativeRun(track.runs, profile.key, keeperId),
-  }))
-
-  async function generate(profileKey: string) {
-    const result = await onCreateRun({ profile_key: profileKey })
+  async function generate() {
+    const result = await onCreateRun(selection)
     if (result && typeof result === 'object' && 'run' in result) {
       const runId = (result as { run: { id: string } }).run.id
       onSelectRun(runId)
@@ -352,17 +303,7 @@ function VersionsPopover({
     onClose()
   }
 
-  function handleRowClick(profileKey: string, run: RunDetail | null) {
-    if (!run || RETRYABLE_STATUSES.has(run.status)) {
-      setArmedKey(profileKey)
-      return
-    }
-    onSelectRun(run.id)
-    onClose()
-  }
-
-  function stateLabel(run: RunDetail | null): string {
-    if (!run) return creatingRun ? 'Queueing…' : 'Split'
+  function stateLabel(run: RunDetail): string {
     if (isActiveRunStatus(run.status)) return `${Math.round(run.progress * 100)}%`
     if (RETRYABLE_STATUSES.has(run.status)) {
       return retryingRunId === run.id ? 'Retrying…' : 'Retry'
@@ -370,8 +311,7 @@ function VersionsPopover({
     return 'Ready'
   }
 
-  function detailLine(profile: ProcessingProfile, run: RunDetail | null): string | null {
-    if (!run) return profile.best_for || null
+  function detailLine(run: RunDetail): string {
     if (isActiveRunStatus(run.status)) return run.status_message || formatStatus(run.status)
     const when = formatTimestampShort(run.updated_at)
     if (run.status === 'completed') return when
@@ -381,85 +321,68 @@ function VersionsPopover({
   return (
     <>
       <div className="popover-backdrop" onClick={onClose} aria-hidden />
-      <div className="popover popover-right popover-wide" role="dialog" aria-label="Split types">
-        <div className="popover-title">Split types</div>
-        {rows.length === 0 ? (
-          <p className="popover-empty">No split types configured.</p>
-        ) : (
+      <div className="popover popover-right popover-wide" role="dialog" aria-label="Stem outputs">
+        <div className="popover-title">Stems</div>
+        <div className="popover-section">
+          <StemSelectionPicker
+            value={selection}
+            stemOptions={stemOptions}
+            qualityOptions={qualityOptions}
+            disabled={creatingRun}
+            onChange={setSelection}
+          />
+          <button
+            type="button"
+            className="button-primary"
+            disabled={creatingRun || selection.stems.length === 0}
+            onClick={() => discardRejection(generate)}
+          >
+            {creatingRun ? 'Queueing…' : 'Create stems'}
+          </button>
+        </div>
+        {runs.length > 0 ? (
           <div className="popover-list" role="list">
-            {rows.map(({ profile, run }) => {
-              const isActive = !!run && run.id === selectedRun?.id
-              const isArmed = armedKey === profile.key
-              const detail = detailLine(profile, run)
-              const disabled =
-                (!run && creatingRun) ||
-                (!!run && RETRYABLE_STATUSES.has(run.status) && retryingRunId === run.id)
-
-              if (isArmed) {
-                const isRetry = !!run && RETRYABLE_STATUSES.has(run.status)
-                return (
-                  <div key={profile.key} className="popover-row is-armed" role="group">
-                    <span className="popover-row-copy">
-                      <strong>{profile.label}</strong>
-                      <span>{isRetry ? 'Retry this split?' : 'Start this split?'}</span>
-                    </span>
-                    <span className="popover-row-confirm">
-                      <button
-                        type="button"
-                        className="button-primary"
-                        disabled={disabled}
-                        onClick={() => {
-                          setArmedKey(null)
-                          if (isRetry && run) discardRejection(() => retry(run))
-                          else discardRejection(() => generate(profile.key))
-                        }}
-                      >
-                        {isRetry ? 'Retry' : 'Split'}
-                      </button>
-                      <button
-                        type="button"
-                        className="button-secondary"
-                        onClick={() => setArmedKey(null)}
-                      >
-                        Cancel
-                      </button>
-                    </span>
-                  </div>
-                )
-              }
-
-              const isPreferred = !!run && run.id === keeperId
+            {runs.map((run) => {
+              const isActive = run.id === selectedRun?.id
+              const isPreferred = run.id === keeperId
+              const disabled = RETRYABLE_STATUSES.has(run.status) && retryingRunId === run.id
               return (
                 <button
-                  key={profile.key}
+                  key={run.id}
                   type="button"
                   className={`popover-row ${isActive ? 'is-active' : ''} ${isPreferred ? 'is-preferred' : ''}`}
                   disabled={disabled}
-                  onClick={() => handleRowClick(profile.key, run)}
+                  onClick={() => {
+                    if (RETRYABLE_STATUSES.has(run.status)) discardRejection(() => retry(run))
+                    else {
+                      onSelectRun(run.id)
+                      onClose()
+                    }
+                  }}
                 >
                   <span className="popover-row-copy">
                     <strong>
                       {isPreferred ? (
-                        <span className="popover-row-star" aria-label="Preferred" title="Preferred split">★</span>
+                        <span className="popover-row-star" aria-label="Preferred" title="Preferred output">★</span>
                       ) : null}
-                      {profile.label}
+                      {run.processing.label}
                     </strong>
-                    {detail ? <span>{detail}</span> : null}
+                    <span>{detailLine(run)}</span>
                   </span>
                   <span className="popover-row-state">{stateLabel(run)}</span>
                 </button>
               )
             })}
           </div>
-        )}
+        ) : null}
 
         {selectedRun && isActiveRunStatus(selectedRun.status) ? (
           <ConfirmInline
-            label="Cancel split"
+            label="Cancel"
             pendingLabel="Cancelling…"
             confirmLabel="Stop"
             cancelLabel="Keep running"
-            prompt="Stop this split?"
+            prompt="Stop creating stems?"
             pending={cancellingRunId === selectedRun.id}
             onConfirm={() => onCancelRun(selectedRun.id)}
           />
@@ -475,15 +398,15 @@ function VersionsPopover({
                 discardRejection(() => onSetKeeper(selectedIsKeeper ? null : selectedRun.id))
               }
             >
-              {selectedIsKeeper ? 'Clear preferred' : 'Prefer this split'}
+              {selectedIsKeeper ? 'Clear preferred' : 'Prefer this output'}
             </button>
             {canDeleteSelected ? (
               <ConfirmInline
-                label="Delete split"
+                label="Delete output"
                 pendingLabel="Deleting…"
                 confirmLabel="Delete"
                 cancelLabel="Keep it"
-                prompt="Delete this split?"
+                prompt="Delete this output?"
                 pending={deletingRunId === selectedRun.id}
                 onConfirm={() => onDeleteRun(selectedRun.id)}
               />
@@ -530,11 +453,11 @@ function OverflowMenu({ track, onClose, onReveal, onDeleteTrack, onOpenShortcuts
           </button>
           <div className="menu-sep" aria-hidden />
           <ConfirmInline
-            label={hasActiveRun ? 'Finish active split first' : 'Delete song…'}
+            label={hasActiveRun ? 'Finish active stem job first' : 'Delete song…'}
             pendingLabel="Deleting…"
             confirmLabel={`Delete "${track.title}"`}
             cancelLabel="Keep"
-            prompt={`Delete "${track.title}" and all its splits?`}
+            prompt={`Delete "${track.title}" and all its outputs?`}
             disabled={hasActiveRun}
             onConfirm={async () => {
               onDeleteTrack()
@@ -567,8 +490,9 @@ export function MixWorkspace(props: MixWorkspaceProps) {
 function MixWorkspaceContent({
   track,
   selectedRunId,
-  profiles,
-  defaultProfileKey,
+  stemOptions,
+  qualityOptions,
+  defaultSelection,
   defaultBitrate,
   creatingRun,
   cancellingRunId,
@@ -608,9 +532,9 @@ function MixWorkspaceContent({
   const mixable = selectedRun ? isMixableRun(selectedRun) : false
   const canExport = !!selectedRun && selectedRun.status === 'completed'
   const versionLabel = selectedRun ? versionSummary(selectedRun) : ''
-  const activeSplit = selectedRun && isActiveRunStatus(selectedRun.status)
+  const activeOutput = selectedRun && isActiveRunStatus(selectedRun.status)
   const selectedRunIsKeeper = !!selectedRun && selectedRun.id === track.keeper_run_id
-  const progressPct = activeSplit ? Math.round(selectedRun.progress * 100) : null
+  const progressPct = activeOutput ? Math.round(selectedRun.progress * 100) : null
   const completedRunCount = track.runs.filter((run) => run.status === 'completed').length
   const selectedRunQueued = selectedRun?.status === 'queued'
 
@@ -675,6 +599,15 @@ function MixWorkspaceContent({
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [editingTitle, popover, canExport, selectedRun])
+
+  function createRunAndSelect(processing: RunProcessingConfigInput) {
+    discardRejection(async () => {
+      const result = await onCreateRun(track.id, processing)
+      if (result && typeof result === 'object' && 'run' in result) {
+        onSelectRun((result as { run: { id: string } }).run.id)
+      }
+    })
+  }
 
   return (
     <section className="mix">
@@ -788,10 +721,10 @@ function MixWorkspaceContent({
                 onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
                 aria-haspopup="dialog"
                 aria-expanded={popover === 'versions'}
-                title={selectedRunIsKeeper ? 'Preferred split — click for all split types (v)' : 'Split types — click to split, switch, or manage (v)'}
+                title={selectedRunIsKeeper ? 'Preferred output — click for stems (v)' : 'Stems — click to create, switch, or manage (v)'}
               >
-                {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
-                {!activeSplit && selectedRunIsKeeper ? (
+                {activeOutput ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
+                {!activeOutput && selectedRunIsKeeper ? (
                   <span className="mix-version-star" aria-hidden>★</span>
                 ) : null}
                 <span className="mix-version-pill-label">{versionLabel}</span>
@@ -800,7 +733,7 @@ function MixWorkspaceContent({
                 ) : progressPct !== null ? (
                   <span className="mix-version-count">{progressPct}%</span>
                 ) : completedRunCount > 1 ? (
-                  <span className="mix-version-count mix-version-count-badge" aria-label={`${completedRunCount} split types`}>
+                  <span className="mix-version-count mix-version-count-badge" aria-label={`${completedRunCount} outputs`}>
                     {completedRunCount}
                   </span>
                 ) : null}
@@ -810,7 +743,9 @@ function MixWorkspaceContent({
                 <VersionsPopover
                   track={track}
                   selectedRun={selectedRun}
-                  profiles={profiles}
+                  stemOptions={stemOptions}
+                  qualityOptions={qualityOptions}
+                  defaultSelection={defaultSelection}
                   creatingRun={creatingRun}
                   cancellingRunId={cancellingRunId}
                   retryingRunId={retryingRunId}
@@ -836,7 +771,7 @@ function MixWorkspaceContent({
                 disabled={!canExport}
                 aria-haspopup="dialog"
                 aria-expanded={popover === 'export'}
-                title={canExport ? 'Export (e)' : 'Export unlocks after the selected split finishes.'}
+                title={canExport ? 'Export (e)' : 'Export unlocks after the selected output is ready.'}
               >
                 Export
               </button>
@@ -877,14 +812,6 @@ function MixWorkspaceContent({
         </div>
       </header>
 
-      {mixable && selectedRun ? (
-        <OutputIntentPicker
-          run={selectedRun}
-          saving={savingMixRunId === selectedRun.id}
-          onApplyTemplate={(stems) => onSaveMix(track.id, selectedRun.id, stems)}
-        />
-      ) : null}
-
       {selectedRun && mixable ? (
         <MixPanel
           key={`${track.id}:${selectedRun.id}`}
@@ -904,7 +831,7 @@ function MixWorkspaceContent({
                   <strong>
                     {selectedRun.status === 'queued'
                       ? 'Waiting in queue'
-                      : `Splitting ${selectedRun.processing.profile_label}`}
+                      : `Creating ${selectedRun.processing.label}`}
                   </strong>
                   {selectedRun.status !== 'queued' && selectedRun.progress > 0 ? (
                     <span className="mix-progress-pct">{Math.round(selectedRun.progress * 100)}%</span>
@@ -929,19 +856,19 @@ function MixWorkspaceContent({
                 ) : null}
                 <RunStepper status={selectedRun.status} lastActiveStatus={selectedRun.last_active_status} />
                 <ConfirmInline
-                  label="Cancel split"
+                  label="Cancel"
                   pendingLabel="Cancelling…"
                   confirmLabel="Stop"
                   cancelLabel="Keep running"
-                  prompt="Stop this split?"
+                  prompt="Stop creating stems?"
                   pending={cancellingRunId === selectedRun.id}
                   onConfirm={() => onCancelRun(selectedRun.id)}
                 />
               </>
             ) : RETRYABLE_STATUSES.has(selectedRun.status) ? (
               <>
-                <strong>{selectedRun.processing.profile_label} split failed</strong>
-                <p>{selectedRun.error_message || 'Retry this split, or try a different split type.'}</p>
+                <strong>{selectedRun.processing.label} failed</strong>
+                <p>{selectedRun.error_message || 'Retry this output, or choose a different stem set.'}</p>
                 <div className="mix-blocked-actions">
                   <button
                     type="button"
@@ -949,46 +876,40 @@ function MixWorkspaceContent({
                     disabled={retryingRunId === selectedRun.id}
                     onClick={() => discardRejection(() => onRetryRun(selectedRun.id))}
                   >
-                    {retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry split'}
-                  </button>
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    onClick={() => setPopover('versions')}
-                  >
-                    Try another split type
+                    {retryingRunId === selectedRun.id ? 'Retrying…' : 'Retry'}
                   </button>
                 </div>
+                <StemCreateControl
+                  stemOptions={stemOptions}
+                  qualityOptions={qualityOptions}
+                  defaultSelection={defaultSelection}
+                  creatingRun={creatingRun}
+                  onCreateRun={createRunAndSelect}
+                />
               </>
             ) : (
               <>
-                <strong>{selectedRun.processing.profile_label} produced no stems</strong>
-                <p>This split completed without separated stem files. Try another split type.</p>
-                <button
-                  type="button"
-                  className="button-secondary"
-                  onClick={() => setPopover('versions')}
-                >
-                  Open split types
-                </button>
+                <strong>{selectedRun.processing.label} produced no stems</strong>
+                <p>This output completed without separated stem files. Choose a different stem set.</p>
+                <StemCreateControl
+                  stemOptions={stemOptions}
+                  qualityOptions={qualityOptions}
+                  defaultSelection={defaultSelection}
+                  creatingRun={creatingRun}
+                  onCreateRun={createRunAndSelect}
+                />
               </>
             )
           ) : (
             <>
-              <StemSplitIcon />
-              <strong>Split this song into stems</strong>
-              <InlineProfilePicker
-                profiles={profiles}
-                defaultProfileKey={defaultProfileKey}
+              <StemCreateIcon />
+              <strong>Create stems for this song</strong>
+              <StemCreateControl
+                stemOptions={stemOptions}
+                qualityOptions={qualityOptions}
+                defaultSelection={defaultSelection}
                 creatingRun={creatingRun}
-                onCreateRun={(processing) => {
-                  discardRejection(async () => {
-                    const result = await onCreateRun(track.id, processing)
-                    if (result && typeof result === 'object' && 'run' in result) {
-                      onSelectRun((result as { run: { id: string } }).run.id)
-                    }
-                  })
-                }}
+                onCreateRun={createRunAndSelect}
               />
             </>
           )}

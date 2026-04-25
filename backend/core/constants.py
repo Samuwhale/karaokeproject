@@ -16,98 +16,138 @@ SUPPORTED_IMPORT_EXTENSIONS = {
     ".webm",
 }
 
+STEM_QUALITY_KEYS = ("fast", "balanced", "best")
+DEFAULT_STEMS: tuple[str, ...] = ("instrumental", "vocals")
+DEFAULT_QUALITY = "balanced"
+
+PUBLIC_STEMS: tuple[str, ...] = (
+    "instrumental",
+    "vocals",
+    "lead_vocals",
+    "backing_vocals",
+    "drums",
+    "bass",
+    "other",
+)
+
+
+@dataclass(frozen=True)
+class StemOptionDefinition:
+    name: str
+    label: str
+
+
+@dataclass(frozen=True)
+class QualityOptionDefinition:
+    key: str
+    label: str
+
 
 @dataclass(frozen=True)
 class FollowupDefinition:
-    """A second separation pass run on one of the primary model's stems.
-
-    The worker picks the primary stem whose canonical name matches `input_stem`
-    (e.g. "vocals"), feeds its WAV into the followup model, and replaces that
-    primary stem with the followup's outputs in the final stem map. See
-    workers/processor.py for the merge.
-    """
     input_stem: str
     model_filename: str
 
 
 @dataclass(frozen=True)
-class ProfileDefinition:
+class PipelineStepDefinition:
     key: str
-    label: str
-    strength: str
-    best_for: str
-    tradeoff: str
     model_filename: str
-    stems: tuple[str, ...]
-    followup: FollowupDefinition | None = None
+    source_stem: str | None = None
 
 
-_VOCAL_INSTRUMENTAL_STEMS: tuple[str, ...] = ("vocals", "instrumental")
-_FOUR_STEM_STEMS: tuple[str, ...] = ("vocals", "drums", "bass", "other")
-_VOCAL_SPLIT_STEMS: tuple[str, ...] = ("lead_vocals", "backing_vocals", "instrumental")
+@dataclass(frozen=True)
+class PipelineDefinition:
+    key: str
+    quality: str
+    steps: tuple[PipelineStepDefinition, ...]
+    generated_stems: tuple[str, ...]
 
 
-PROFILE_DEFINITIONS: tuple[ProfileDefinition, ...] = (
-    ProfileDefinition(
-        key="karaoke",
-        label="Karaoke",
-        strength="Vocals + instrumental",
-        best_for="Clean vocal removal when you want a straight karaoke or instrumental mix.",
-        tradeoff="Use Full stems if you need separate drums, bass, or other instruments.",
-        model_filename="model_bs_roformer_ep_368_sdr_12.9628.ckpt",
-        stems=_VOCAL_INSTRUMENTAL_STEMS,
-    ),
-    ProfileDefinition(
-        key="full-stems",
-        label="Full stems",
-        strength="Vocals + drums + bass + other",
-        best_for="Turning specific instruments up or down without collapsing everything into one instrumental stem.",
-        tradeoff="Vocals are usually less isolated than Karaoke because the split is more granular.",
-        model_filename="htdemucs_ft.yaml",
-        stems=_FOUR_STEM_STEMS,
-    ),
-    ProfileDefinition(
-        key="vocal-split",
-        label="Lead vocal split",
-        strength="Lead + backing vocals + instrumental",
-        best_for="Keeping backing vocals in while reducing or removing only the lead vocal.",
-        tradeoff="Runs a second vocal-only split after Karaoke, so it is the slowest option.",
-        # Chained pipeline: Karaoke (bs_roformer) isolates vocals from the
-        # mix, then UVR-BVE-4B splits that vocal stem into lead + backing.
-        # Final output: {instrumental (from Karaoke), lead_vocals, backing_vocals}.
-        model_filename="model_bs_roformer_ep_368_sdr_12.9628.ckpt",
-        stems=_VOCAL_SPLIT_STEMS,
-        followup=FollowupDefinition(
-            input_stem="vocals",
-            model_filename="UVR-BVE-4B_SN-44100-2.pth",
-        ),
-    ),
+STEM_OPTIONS: tuple[StemOptionDefinition, ...] = (
+    StemOptionDefinition("instrumental", "Instrumental"),
+    StemOptionDefinition("vocals", "Vocals"),
+    StemOptionDefinition("lead_vocals", "Lead vocals"),
+    StemOptionDefinition("backing_vocals", "Backing vocals"),
+    StemOptionDefinition("drums", "Drums"),
+    StemOptionDefinition("bass", "Bass"),
+    StemOptionDefinition("other", "Other"),
 )
 
+QUALITY_OPTIONS: tuple[QualityOptionDefinition, ...] = (
+    QualityOptionDefinition("fast", "Fast"),
+    QualityOptionDefinition("balanced", "Balanced"),
+)
 
-PROFILE_LOOKUP: dict[str, ProfileDefinition] = {
-    profile.key: profile for profile in PROFILE_DEFINITIONS
-}
+_VOCAL_FAST_MODEL = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+_VOCAL_BALANCED_MODEL = "model_bs_roformer_ep_368_sdr_12.9628.ckpt"
+_VOCAL_BEST_MODEL = "model_bs_roformer_ep_368_sdr_12.9628.ckpt"
+_FULL_STEMS_MODEL = "htdemucs_ft.yaml"
+_VOCAL_DETAIL_MODEL = "UVR-BVE-4B_SN-44100-2.pth"
 
-
-DEFAULT_PROFILE_KEY = "karaoke"
-
-
-PROFILE_KEY_ALIASES: dict[str, str] = {
-    "fast-preview": "karaoke",
-    "preview": "karaoke",
-    "balanced": "karaoke",
-    "standard": "karaoke",
-    "clean-instrumental": "karaoke",
-    "high": "karaoke",
-    "maximum": "karaoke",
-    "vocal-focus": "karaoke",
-    "karaoke-stems": "vocal-split",
-}
+_VOCAL_STEMS: tuple[str, ...] = ("instrumental", "vocals")
+_FULL_STEMS: tuple[str, ...] = ("vocals", "drums", "bass", "other")
+_VOCAL_DETAIL_STEMS: tuple[str, ...] = ("lead_vocals", "backing_vocals")
 
 
-def resolve_profile_key(profile_key: str | None) -> str:
-    cleaned = (profile_key or "").strip()
-    if not cleaned:
-        return DEFAULT_PROFILE_KEY
-    return PROFILE_KEY_ALIASES.get(cleaned, cleaned)
+def _vocal_model_for_quality(quality: str) -> str:
+    if quality == "fast":
+        return _VOCAL_FAST_MODEL
+    if quality == "best":
+        return _VOCAL_BEST_MODEL
+    return _VOCAL_BALANCED_MODEL
+
+
+def build_pipeline_definition(
+    *,
+    requested_stems: tuple[str, ...],
+    quality: str,
+) -> PipelineDefinition:
+    requested = set(requested_stems)
+    wants_band_stems = bool(requested & {"drums", "bass", "other"})
+    wants_vocal_detail = bool(requested & {"lead_vocals", "backing_vocals"})
+    wants_vocal_route = bool(requested & {"instrumental", "vocals", "lead_vocals", "backing_vocals"})
+
+    steps: list[PipelineStepDefinition] = []
+    generated: set[str] = set()
+
+    if wants_band_stems:
+        steps.append(
+            PipelineStepDefinition(
+                key="band-stems",
+                model_filename=_FULL_STEMS_MODEL,
+            )
+        )
+        generated.update(_FULL_STEMS)
+
+    # The full-band route does not emit an explicit instrumental stem. Run the
+    # vocal route when users ask for that exact output or for vocal detail.
+    if wants_vocal_route and ("instrumental" in requested or wants_vocal_detail or not wants_band_stems):
+        steps.append(
+            PipelineStepDefinition(
+                key="vocal-instrumental",
+                model_filename=_vocal_model_for_quality(quality),
+            )
+        )
+        generated.update(_VOCAL_STEMS)
+
+    if wants_vocal_detail:
+        steps.append(
+            PipelineStepDefinition(
+                key="vocal-detail",
+                model_filename=_VOCAL_DETAIL_MODEL,
+                source_stem="vocals",
+            )
+        )
+        generated.update(_VOCAL_DETAIL_STEMS)
+
+    if not steps:
+        raise ValueError("Choose at least one stem.")
+
+    key = "+".join(step.key for step in steps)
+    return PipelineDefinition(
+        key=f"{key}:{quality}",
+        quality=quality,
+        steps=tuple(steps),
+        generated_stems=tuple(stem for stem in PUBLIC_STEMS if stem in generated),
+    )

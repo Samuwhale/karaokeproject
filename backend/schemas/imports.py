@@ -4,9 +4,10 @@ from enum import StrEnum
 from pydantic import BaseModel, Field, field_validator
 
 from backend.schemas.tracks import (
-    ProcessingProfileResponse,
+    QualityOptionResponse,
     RunProcessingConfigRequest,
     RunProcessingConfigResponse,
+    StemOptionResponse,
     TrackSummaryResponse,
 )
 from backend.schemas.validation import normalize_unique_string_list
@@ -80,13 +81,15 @@ class ResolveYouTubeImportResponse(BaseModel):
     source_kind: str
     source_title: str
     drafts: list[ImportDraftResponse]
-    profiles: list[ProcessingProfileResponse]
+    stem_options: list[StemOptionResponse]
+    quality_options: list[QualityOptionResponse]
     default_processing: RunProcessingConfigResponse
 
 
 class ResolveLocalImportResponse(BaseModel):
     drafts: list[ImportDraftResponse]
-    profiles: list[ProcessingProfileResponse]
+    stem_options: list[StemOptionResponse]
+    quality_options: list[QualityOptionResponse]
     default_processing: RunProcessingConfigResponse
 
 

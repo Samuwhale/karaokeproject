@@ -145,16 +145,20 @@ def _iter_orphaned_output_entries(
             orphans.append(track_dir)
             continue
 
-        live_children = 0
+        resolved_track_dir = track_dir.resolve()
+        live_children = {
+            child.resolve()
+            for child in track_dir.iterdir()
+            if child.resolve() in live_output_dirs
+        }
+        if not live_children and not any(path.parent == resolved_track_dir for path in live_output_dirs):
+            orphans.append(track_dir)
+            continue
+
         for child in sorted(track_dir.iterdir()):
-            if child.resolve() in live_output_dirs:
-                live_children += 1
+            if child.resolve() in live_children:
                 continue
             orphans.append(child)
-
-        if live_children == 0 and not any(child.resolve() in live_output_dirs for child in [track_dir]):
-            if not any(path.parent == track_dir.resolve() for path in live_output_dirs):
-                orphans.append(track_dir)
 
     # A parent may have been queued after its children; delete children first.
     unique = {path.resolve(): path for path in orphans}
@@ -326,7 +330,7 @@ def collect_storage_overview(
         ),
         StorageBucketResponse(
             key=StorageBucketKey.model_cache,
-            label="Model cache",
+            label="Processing cache",
             path=str(paths.model_cache_dir),
             total_bytes=directory_size(paths.model_cache_dir),
             reclaimable_bytes=0,

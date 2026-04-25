@@ -26,7 +26,7 @@ from backend.services.tracks import (
     assign_run_metadata,
     is_cancellation_requested,
     mark_run_cancelled,
-    replace_terminal_runs_for_completed_profile,
+    replace_terminal_runs_for_completed_pipeline,
     set_run_state,
     write_metadata_file,
 )
@@ -149,99 +149,67 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         session.commit()
 
         _check_cancellation(session, run)
-        profile_label = processing.profile_label or processing.profile_key or "stem model"
-        followup = processing.followup
+        steps = processing.steps
+        raw_stems: dict[str, Path] = {}
+        if not steps:
+            raise SeparationError("No processing route was selected.")
 
-        # Total separating work spans 0.10 → 0.85 of the run. Split evenly
-        # across the primary (and optional followup) passes so sub-progress
-        # from tqdm maps into an honest global percentage.
-        if followup is not None:
-            primary_range = (0.10, 0.48)
-            followup_range = (0.48, 0.85)
-        else:
-            primary_range = (0.10, 0.85)
-            followup_range = None
+        separating_start = 0.10
+        separating_end = 0.85
+        step_span = (separating_end - separating_start) / len(steps)
 
-        primary_message = f"Splitting with {profile_label}{' (1/2)' if followup else ''}"
-        set_run_state(
-            run,
-            status=RunStatus.separating,
-            progress=primary_range[0],
-            status_message=primary_message,
-        )
-        session.commit()
+        for index, step in enumerate(steps):
+            step_start = separating_start + (step_span * index)
+            step_end = step_start + step_span
+            step_number = f" ({index + 1}/{len(steps)})" if len(steps) > 1 else ""
+            step_message = f"Creating {processing.label}{step_number}"
 
-        primary_separation = separator_adapter.run(
-            source_path=normalized_path,
-            output_dir=raw_stems_directory / "primary",
-            model_cache_dir=storage_paths.model_cache_dir,
-            model_filename=processing.model_filename,
-            progress_callback=_stage_progress_updater(
-                session,
-                run,
-                stage=RunStatus.separating,
-                stage_range=primary_range,
-                status_message=primary_message,
-            ),
-        )
+            source_for_step = normalized_path
+            if step.source_stem is not None:
+                source_for_step = raw_stems.get(step.source_stem)
+                if source_for_step is None:
+                    raise SeparationError(
+                        f"Could not create requested stems because {step.source_stem} was not produced."
+                    )
 
-        # stem_name → raw WAV path. The followup pass (if any) replaces the
-        # input stem with two or more new stems; we keep a single flat map so
-        # the downstream "move into stems/ and register artifacts" loop stays
-        # model-agnostic.
-        raw_stems: dict[str, Path] = dict(primary_separation.stems)
-        if not raw_stems:
-            raise SeparationError("Separation produced no stems.")
-
-        if followup is not None:
-            input_stem = followup.input_stem
-            input_path = raw_stems.get(input_stem)
-            if input_path is None:
-                raise SeparationError(
-                    f"Primary separation did not produce a '{input_stem}' stem needed by the followup pass."
-                )
-
-            _check_cancellation(session, run)
-            assert followup_range is not None
-            followup_message = f"Splitting with {profile_label} (2/2)"
             set_run_state(
                 run,
                 status=RunStatus.separating,
-                progress=followup_range[0],
-                status_message=followup_message,
+                progress=step_start,
+                status_message=step_message,
             )
             session.commit()
 
-            followup_separation = separator_adapter.run(
-                source_path=input_path,
-                output_dir=raw_stems_directory / "followup",
+            separation = separator_adapter.run(
+                source_path=source_for_step,
+                output_dir=raw_stems_directory / step.key,
                 model_cache_dir=storage_paths.model_cache_dir,
-                model_filename=followup.model_filename,
+                model_filename=step.model_filename,
                 progress_callback=_stage_progress_updater(
                     session,
                     run,
                     stage=RunStatus.separating,
-                    stage_range=followup_range,
-                    status_message=followup_message,
+                    stage_range=(step_start, step_end),
+                    status_message=step_message,
                 ),
             )
-            if not followup_separation.stems:
-                raise SeparationError("Followup separation produced no stems.")
+            if not separation.stems:
+                raise SeparationError("Separation produced no stems.")
 
-            # Replace the consumed input stem with whatever the followup emitted.
-            del raw_stems[input_stem]
-            for name, path in followup_separation.stems.items():
-                if name in raw_stems:
-                    # Collision — followup emitted something sharing a name with
-                    # another primary stem. Suffix it so both survive.
-                    collision = 2
-                    while f"{name}-{collision}" in raw_stems:
-                        collision += 1
-                    name = f"{name}-{collision}"
+            for name, path in separation.stems.items():
+                previous = raw_stems.get(name)
+                if previous is not None and previous != path:
+                    previous.unlink(missing_ok=True)
                 raw_stems[name] = path
 
         if not raw_stems:
             raise SeparationError("Separation finished without any usable stems.")
+
+        metadata = dict(run.metadata_json or {})
+        processing_metadata = dict(metadata.get("processing") or {})
+        processing_metadata["generated_stems"] = sorted(raw_stems.keys(), key=lambda name: (stem_display_order(name), name))
+        metadata["processing"] = processing_metadata
+        run.metadata_json = metadata
 
         stems_directory.mkdir(parents=True, exist_ok=True)
 
@@ -327,7 +295,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             status_message="",
             error_message=None,
         )
-        replace_terminal_runs_for_completed_profile(session, run)
+        replace_terminal_runs_for_completed_pipeline(session, run)
         session.commit()
         apply_storage_retention(session, runtime_settings)
 

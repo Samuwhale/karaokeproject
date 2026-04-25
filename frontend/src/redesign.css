@@ -4,6 +4,18 @@
    modal, dropzone, segmented, spinner, toast, progress).
    ======================================================================= */
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Shell ------------------------------------------------------------------ */
 
 .shell {
@@ -113,7 +125,7 @@
 /* Non-scrolling top area: queue strip + search/sort/filter controls */
 .library-header {
   flex: 0 0 auto;
-  padding: 20px 40px 0;
+  padding: var(--space-lg) clamp(var(--space-lg), 4vw, 56px) 0;
   background: var(--bg);
 }
 
@@ -122,7 +134,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0 40px 40px;
+  padding: 0 clamp(var(--space-lg), 4vw, 56px) var(--space-2xl);
 }
 
 .library-queue {
@@ -173,10 +185,13 @@
 
 .library-queue-aggregate-fill {
   display: block;
+  width: 100%;
   height: 100%;
   background: var(--accent);
   border-radius: inherit;
-  transition: width 320ms ease;
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 320ms ease;
 }
 
 .library-queue-list {
@@ -276,10 +291,13 @@
 
 .library-queue-item-fill {
   display: block;
+  width: 100%;
   height: 100%;
   background: var(--accent);
   border-radius: inherit;
-  transition: width 320ms ease;
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 320ms ease;
 }
 
 .library-queue-item-pct {
@@ -525,17 +543,13 @@
   margin-top: 16px;
   border: 1.5px dashed var(--border-soft);
   border-radius: var(--radius-md);
-  background:
-    radial-gradient(ellipse at 50% 30%, color-mix(in oklch, var(--accent) 6%, transparent), transparent 65%);
   gap: 16px;
-  transition: border-color 200ms ease, background 200ms ease;
+  transition: border-color 200ms ease;
   animation: onboard-in 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .library-empty-onboard:hover {
   border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
-  background:
-    radial-gradient(ellipse at 50% 30%, color-mix(in oklch, var(--accent) 9%, transparent), transparent 65%);
 }
 
 .library-onboard-icon {
@@ -562,7 +576,6 @@
 
 .song-row.is-active {
   background: var(--accent-dim);
-  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .song-row.is-active:hover {
@@ -757,10 +770,13 @@
 
 .song-row-progress-fill {
   display: block;
+  width: 100%;
   height: 100%;
   background: var(--accent);
   border-radius: inherit;
-  transition: width 320ms ease;
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 320ms ease;
 }
 
 .song-row-status {
@@ -834,7 +850,7 @@
   min-width: 72px;
 }
 
-.song-row-split-action {
+.song-row-stem-action {
   padding: 5px 12px;
   font-size: 13px;
   font-weight: 500;
@@ -847,19 +863,19 @@
   transition: background 120ms, color 120ms, border-color 120ms;
 }
 
-.song-row:hover .song-row-split-action {
+.song-row:hover .song-row-stem-action {
   background: var(--accent);
   color: var(--accent-ink);
   border-color: var(--accent);
   font-weight: 600;
 }
 
-.song-row-split-action:hover {
+.song-row-stem-action:hover {
   background: var(--accent-press);
   border-color: var(--accent-press);
 }
 
-.song-row-split-action:focus-visible {
+.song-row-stem-action:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1243,12 +1259,12 @@
 }
 
 /* Mix workspace ---------------------------------------------------------- */
-/*  Full-height, no-scroll layout. Header + presets at top, stem rows fill the
+/*  Full-height, no-scroll layout. Header at top, stem rows fill the
     available height (one waveform per stem), transport pinned at the bottom. */
 
 .mix {
   display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
+  grid-template-rows: auto 1fr auto auto;
   height: 100%;
   min-height: 0;
   background: var(--bg);
@@ -1594,102 +1610,12 @@ button.mix-top-title-copy:hover .mix-top-edit-icon {
   transform: rotate(180deg);
 }
 
-/* Presets --------------------------------------------------------------- */
-
-.mix-presets {
-  grid-row: 2;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 24px;
-  border-bottom: 1px solid var(--border-soft);
-  min-width: 0;
-}
-
-.mix-preset-group {
-  display: inline-flex;
-  gap: 4px;
-  padding: 3px;
-  background: var(--surface-2);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-}
-
-.mix-preset {
-  padding: 8px 14px;
-  border-radius: var(--radius-xs);
-  font-size: 13px;
-  color: var(--text-muted);
-  background: transparent;
-  font-weight: 500;
-  transition: color 120ms, background 120ms, transform 80ms;
-}
-
-.mix-preset:hover:not(.is-active) {
-  color: var(--text);
-  background: var(--surface-hover);
-}
-
-.mix-preset:active {
-  transform: scale(0.95);
-  transition-duration: 50ms;
-}
-
-.mix-preset.is-active {
-  color: var(--accent);
-  background: var(--accent-dim);
-  font-weight: 600;
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 28%, transparent);
-}
-
-.mix-preset:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* Separator before the "All stems" reset button */
-.mix-preset-sep {
-  width: 1px;
-  height: 14px;
-  background: var(--border-soft);
-  align-self: center;
-  flex-shrink: 0;
-  margin: 0 2px;
-}
-
-/* Description of the currently active preset — inline, below the group */
-.mix-preset-description {
-  font-size: var(--t-xs);
-  color: var(--text-muted);
-  align-self: center;
-  padding-left: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  animation: preset-desc-in 150ms ease-out both;
-}
-
-@keyframes preset-desc-in {
-  from { opacity: 0; transform: translateX(-4px); }
-}
-
-/* "All stems" reset — visually distinct from named presets */
-.mix-preset-reset {
-  color: var(--text-faint);
-}
-
-.mix-preset-reset:hover:not(.is-active) {
-  color: var(--text-muted);
-  background: var(--surface-hover);
-}
-
 /* Rows canvas ----------------------------------------------------------- */
 /*  Each stem row fills an equal share of the available height. Waveforms
     stretch to fill both axes — this is the primary visual. */
 
 .mix-rows {
-  grid-row: 3;
+  grid-row: 2;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -2000,13 +1926,13 @@ button.stem-row-gain:focus-visible {
 
 .stem-row-toggles {
   display: inline-flex;
-  gap: 4px;
+  gap: 6px;
   align-items: center;
 }
 
 .stem-toggle {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2066,7 +1992,7 @@ button.stem-row-gain:focus-visible {
 /* Transport ------------------------------------------------------------- */
 
 .mix-transport {
-  grid-row: 4;
+  grid-row: 3;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -2235,7 +2161,7 @@ button.stem-row-gain:focus-visible {
 /* Footer (errors only) --------------------------------------------------- */
 
 .mix-footer {
-  grid-row: 5;
+  grid-row: 4;
   padding: 4px 24px 12px;
   font-size: 12px;
 }
@@ -2266,7 +2192,7 @@ button.stem-row-gain:focus-visible {
 /* Blocked / empty states ------------------------------------------------- */
 
 .mix-blocked, .mix-empty {
-  grid-row: 3;
+  grid-row: 2;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -2350,7 +2276,6 @@ button.stem-row-gain:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .mix-progress-fill::after { display: none; }
   .stem-row,
-  .mix-profile-option,
   .library-empty-onboard { animation: none; }
 }
 
@@ -2373,8 +2298,7 @@ button.stem-row-gain:focus-visible {
 .popover {
   position: absolute;
   top: calc(100% + 8px);
-  min-width: 280px;
-  max-width: 420px;
+  width: clamp(280px, 90vw, 420px);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -2401,8 +2325,7 @@ button.stem-row-gain:focus-visible {
 }
 
 .popover-wide {
-  min-width: 360px;
-  max-width: 480px;
+  width: clamp(360px, 92vw, 480px);
 }
 
 @keyframes popover-in {
@@ -2508,12 +2431,10 @@ button.stem-row-gain:focus-visible {
   flex-shrink: 0;
 }
 
-/* "Split" state on unprocessed profiles: hint it's actionable */
 .popover-row:not(.is-active):not(.is-preferred):not([disabled]) .popover-row-state {
   color: var(--text-faint);
 }
 
-/* On hover, make the CTA label more visible */
 .popover-row:hover .popover-row-state {
   color: var(--accent);
 }
@@ -2617,7 +2538,6 @@ button.stem-row-gain:focus-visible {
 
 .export-pop-row.is-on {
   background: color-mix(in oklch, var(--accent) 14%, var(--surface));
-  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .export-pop-row.is-disabled {
@@ -2710,16 +2630,16 @@ button.stem-row-gain:focus-visible {
   color: color-mix(in oklch, var(--accent) 70%, var(--text-muted));
 }
 
-/* Batch split overlay */
+/* Batch stem overlay */
 
-.batch-split {
+.batch-stems {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
 
-.batch-split-reason {
+.batch-stems-reason {
   font-size: var(--t-xs);
   color: var(--text-muted);
   padding: 0 4px 4px;
@@ -2962,162 +2882,65 @@ button.stem-row-gain:focus-visible {
   font-size: 12px;
 }
 
-/* Import panel: profile tab picker ----------------------------------------- */
+/* Stem selection ----------------------------------------------------------- */
 
-.import-profile-tabs {
-  display: flex;
-  gap: 4px;
-  background: var(--surface-2);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  padding: 3px;
-}
-
-.import-profile-tab {
-  flex: 1 1 0;
-  padding: 5px 10px;
-  border-radius: calc(var(--radius-sm) - 2px);
-  border: none;
-  background: transparent;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-2);
-  cursor: pointer;
-  transition: background 100ms, color 100ms;
-  white-space: nowrap;
-}
-
-.import-profile-tab:hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.import-profile-tab.is-selected {
-  background: var(--surface);
-  color: var(--accent);
-  font-weight: 600;
-  box-shadow: 0 1px 3px color-mix(in oklch, var(--text) 12%, transparent);
-}
-
-.import-profile-tab:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.import-profile-tab:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Mix workspace: inline profile picker in zero state ----------------------- */
-
-.mix-profile-picker {
+.stem-selection-picker {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 10px;
-  width: 100%;
-  max-width: 640px;
 }
 
-@keyframes profile-option-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.98);
-  }
+.stem-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
 }
 
-.mix-profile-option {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 16px 18px;
-  text-align: left;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  cursor: pointer;
-  transition: border-color 100ms, background 100ms, box-shadow 100ms, transform 80ms;
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 4%, transparent);
-  animation: profile-option-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.mix-profile-option:nth-child(2) { animation-delay: 70ms; }
-.mix-profile-option:nth-child(3) { animation-delay: 140ms; }
-
-.mix-profile-option.is-default {
-  border-color: color-mix(in oklch, var(--accent) 55%, var(--border));
-  background: color-mix(in oklch, var(--accent) 6%, var(--surface));
-  box-shadow:
-    0 0 0 3px color-mix(in oklch, var(--accent) 8%, transparent),
-    0 2px 6px color-mix(in srgb, var(--text) 5%, transparent);
-}
-
-.mix-profile-option:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: color-mix(in oklch, var(--accent) 3%, var(--surface));
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 10%, transparent), 0 2px 8px color-mix(in srgb, var(--text) 6%, transparent);
-  transform: translateY(-1px);
-}
-
-.mix-profile-option:active:not(:disabled) {
-  background: color-mix(in oklch, var(--accent) 7%, var(--surface));
-  transform: translateY(0);
-}
-
-.mix-profile-option:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.mix-profile-option:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.mix-profile-option-label {
-  font-weight: 600;
-  font-size: var(--t-md);
-  color: var(--text);
-  line-height: 1.3;
+.stem-check {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: var(--t-sm);
+  color: var(--text-2);
 }
 
-.mix-profile-option-badge {
-  font-size: var(--t-micro);
-  font-weight: 600;
-  font-family: var(--font-sans);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--accent);
-  background: var(--accent-dim);
-  border: 1px solid color-mix(in oklch, var(--accent) 28%, transparent);
-  border-radius: var(--radius-xs);
-  padding: 1px 5px;
-  line-height: 1.5;
-  flex-shrink: 0;
+.stem-check.is-selected {
+  border-color: color-mix(in oklch, var(--accent) 42%, var(--border));
+  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
+  color: var(--text);
 }
 
-.mix-profile-option-hint {
-  font-size: var(--t-xs);
-  color: var(--text-muted);
-  line-height: 1.4;
+.stem-check input {
+  accent-color: var(--accent);
 }
 
-.mix-profile-option-stems {
-  font-size: var(--t-xs);
-  font-family: var(--font-mono);
-  color: var(--text-faint);
-  line-height: 1.4;
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.stem-quality {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  justify-self: start;
 }
 
-.mix-profile-option:hover:not(:disabled) .mix-profile-option-stems {
-  color: color-mix(in oklch, var(--accent) 55%, var(--text-faint));
+.popover-section {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.mix-stem-select {
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
 }
 
 .mix-blocked-icon {
@@ -3137,7 +2960,7 @@ button.stem-row-gain:focus-visible {
 /* Staggered entry for each bar — transform-origin at bottom of each rect */
 .mix-blocked-icon-bar {
   transform-origin: center bottom;
-  animation: icon-bar-in 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: icon-bar-in 320ms ease-out both;
 }
 .mix-blocked-icon-bar-1 { animation-delay: 40ms; }
 .mix-blocked-icon-bar-2 { animation-delay: 0ms; }
@@ -3148,19 +2971,6 @@ button.stem-row-gain:focus-visible {
 .mix-blocked-hint {
   font-size: var(--t-sm);
   color: var(--text-muted);
-}
-
-/* Single-profile picker: one prominent CTA instead of a card grid */
-.mix-profile-single {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.mix-profile-single .button-primary {
-  padding: 10px 24px;
-  font-size: var(--t-base);
 }
 
 .mix-blocked-actions {
@@ -3196,15 +3006,13 @@ button.stem-row-gain:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--text) 24%, transparent);
-  backdrop-filter: blur(3px);
+  background: color-mix(in srgb, var(--text) 40%, transparent);
   animation: kbd-fade-in 160ms ease-out;
 }
 
 @keyframes kbd-fade-in {
   from {
     opacity: 0;
-    backdrop-filter: blur(0px);
   }
 }
 
@@ -3369,7 +3177,7 @@ button.stem-row-gain:focus-visible {
   vertical-align: 1px;
 }
 
-/* Processing wave icon (active split) -------------------------------------- */
+/* Processing wave icon (active output) ------------------------------------- */
 
 .mix-processing-icon {
   color: color-mix(in oklch, var(--accent) 55%, var(--text-faint));
@@ -3450,4 +3258,3 @@ button.stem-row-gain:focus-visible {
     opacity: 0.4;
   }
 }
-

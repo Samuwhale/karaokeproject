@@ -9,7 +9,7 @@ import { ImportPanel } from './components/imports/ImportPanel'
 import { BatchExportOverlay } from './components/export/BatchExportOverlay'
 import { SettingsDrawer } from './components/SettingsDrawer'
 import { ToastStack } from './components/feedback/ToastStack'
-import { BatchSplitOverlay } from './components/mix/BatchSplitOverlay'
+import { BatchStemOverlay } from './components/mix/BatchStemOverlay'
 import { MixWorkspace } from './components/mix/MixWorkspace'
 import { SongsPage } from './components/songs/SongsPage'
 import { applySongBrowse } from './components/trackListView'
@@ -117,9 +117,9 @@ function App() {
   )
   const [importPanelOpen, setImportPanelOpen] = useState(false)
   const [batchExportIds, setBatchExportIds] = useState<string[] | null>(null)
-  const [batchSplitIds, setBatchSplitIds] = useState<string[] | null>(null)
+  const [batchStemIds, setBatchStemIds] = useState<string[] | null>(null)
   const [dragOverlayActive, setDragOverlayActive] = useState(false)
-  const anyDialogOpen = settingsOpen || importPanelOpen || !!batchExportIds || !!batchSplitIds || shortcutsOpen
+  const anyDialogOpen = settingsOpen || importPanelOpen || !!batchExportIds || !!batchStemIds || shortcutsOpen
   const dragCounterRef = useRef(0)
 
   const browseTracks = useMemo(
@@ -135,9 +135,13 @@ function App() {
   const trackPosition = currentBrowseIndex >= 0 && browseTracks.length > 0
     ? { index: currentBrowseIndex, total: browseTracks.length }
     : null
-  const defaultProcessing: RunProcessingConfigInput = {
-    profile_key: settings?.default_profile ?? 'karaoke',
-  }
+  const defaultProcessing: RunProcessingConfigInput = useMemo(
+    () => ({
+      stems: settings?.default_stem_selection.stems ?? ['instrumental', 'vocals'],
+      quality: settings?.default_stem_selection.quality ?? 'balanced',
+    }),
+    [settings?.default_stem_selection.quality, settings?.default_stem_selection.stems],
+  )
   const defaultBitrate = settings?.export_mp3_bitrate ?? '320k'
   const hasFirstSync = connection.lastSyncAt > 0
   const setupRequired = hasFirstSync && diagnostics ? !diagnostics.app_ready : false
@@ -325,7 +329,7 @@ function App() {
       if (settingsOpen) { setSettingsOpen(false); return }
       if (importPanelOpen) { setImportPanelOpen(false); return }
       if (batchExportIds) { setBatchExportIds(null); return }
-      if (batchSplitIds) setBatchSplitIds(null)
+      if (batchStemIds) setBatchStemIds(null)
     },
   })
 
@@ -411,14 +415,14 @@ function App() {
                     })
                   }
                   onOpenTrack={openTrackWorkspace}
-                  onSplitTrack={(trackId) => {
+                  onCreateStemsForTrack={(trackId) => {
                     discardRejection(() => handleCreateRun(trackId, defaultProcessing))
                   }}
                   onAddSongs={revealImportPanel}
                   onReviewImports={revealImportPanel}
                   onCancelRun={handleCancelRun}
                   onRetryRun={handleRetryRun}
-                  onBatchSplit={(ids) => setBatchSplitIds(ids)}
+                  onBatchCreateStems={(ids) => setBatchStemIds(ids)}
                   onBatchExport={(ids) => setBatchExportIds(ids)}
                   onBatchDelete={handleBatchDeleteTracks}
                 />
@@ -430,8 +434,9 @@ function App() {
                 <MixWorkspace
                   track={selectedTrack}
                   selectedRunId={mixRunId}
-                  profiles={settings?.profiles ?? []}
-                  defaultProfileKey={defaultProcessing.profile_key}
+                  stemOptions={settings?.stem_options ?? []}
+                  qualityOptions={settings?.quality_options ?? []}
+                  defaultSelection={defaultProcessing}
                   defaultBitrate={defaultBitrate}
                   creatingRun={creatingRun}
                   cancellingRunId={cancellingRunId}
@@ -493,8 +498,9 @@ function App() {
         <ImportPanel
           open={importPanelOpen}
           drafts={drafts}
-          profiles={settings?.profiles ?? []}
-          defaultProfileKey={defaultProcessing.profile_key}
+          stemOptions={settings?.stem_options ?? []}
+          qualityOptions={settings?.quality_options ?? []}
+          defaultSelection={defaultProcessing}
           resolvingYoutubeImport={resolvingYoutubeImport}
           resolvingLocalImport={resolvingLocalImport}
           confirming={confirmingDrafts}
@@ -519,17 +525,18 @@ function App() {
           onError={(message) => pushToast('error', message)}
         />
 
-        <BatchSplitOverlay
-          open={!!batchSplitIds}
+        <BatchStemOverlay
+          open={!!batchStemIds}
           tracks={tracks}
-          selectedTrackIds={batchSplitIds ?? []}
-          profiles={settings?.profiles ?? []}
-          defaultProfileKey={defaultProcessing.profile_key}
+          selectedTrackIds={batchStemIds ?? []}
+          stemOptions={settings?.stem_options ?? []}
+          qualityOptions={settings?.quality_options ?? []}
+          defaultSelection={defaultProcessing}
           busy={creatingRun}
-          onClose={() => setBatchSplitIds(null)}
+          onClose={() => setBatchStemIds(null)}
           onConfirm={async (ids, processing) => {
             await handleBatchCreateRun(ids, processing)
-            setBatchSplitIds(null)
+            setBatchStemIds(null)
           }}
         />
 
@@ -539,7 +546,7 @@ function App() {
 
         {dragOverlayActive ? (
           <div className="drop-overlay" role="presentation">
-            <div className="drop-overlay-panel">
+            <div className="drop-overlay-panel" role="status" aria-live="polite">
               <strong>Drop to import</strong>
               <span>Audio or video files only.</span>
             </div>
@@ -569,9 +576,9 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     section: 'Mix workspace',
     entries: [
       { key: 'Space', desc: 'Play / Pause' },
-      { key: 'r', desc: 'Re-split with default split type' },
-      { key: '1 – 9', desc: 'Switch to split by index' },
-      { key: 'v', desc: 'Open split picker' },
+      { key: 'r', desc: 'Create default stems again' },
+      { key: '1 – 9', desc: 'Switch output by index' },
+      { key: 'v', desc: 'Open stem picker' },
       { key: 'e', desc: 'Open export panel' },
       { key: '← →', desc: 'Adjust fader', note: '0.5 dB' },
       { key: 'Shift + ← →', desc: 'Fine fader', note: '0.1 dB' },

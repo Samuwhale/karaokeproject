@@ -35,7 +35,7 @@ export const RUN_STATUS_SHORT_LABELS: Record<string, string> = {
 export const RUN_STAGE_DESCRIPTIONS: Record<string, string> = {
   queued: 'waiting for a worker',
   preparing: 'decoding + normalising',
-  separating: 'running the stem model',
+  separating: 'creating stems',
   exporting: 'writing stem exports',
 }
 

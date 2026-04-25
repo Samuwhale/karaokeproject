@@ -5,7 +5,6 @@ from pathlib import Path
 from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from backend.core.constants import PROFILE_KEY_ALIASES
 from backend.core.config import get_runtime_settings
 
 
@@ -20,6 +19,7 @@ engine = create_engine(
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 _PENDING_PATH_CLEANUPS_KEY = "pending_path_cleanups"
+_DEFAULT_STEM_SELECTION = {"stems": ["instrumental", "vocals"], "quality": "balanced"}
 
 
 _COLUMN_ADDITIONS: tuple[tuple[str, str, str], ...] = (
@@ -33,21 +33,8 @@ _COLUMN_ADDITIONS: tuple[tuple[str, str, str], ...] = (
     ("app_settings", "temp_directory", "VARCHAR(512) NULL"),
     ("app_settings", "temp_max_age_hours", "INTEGER NULL"),
     ("app_settings", "export_bundle_max_age_days", "INTEGER NULL"),
+    ("app_settings", "default_stem_selection", "JSON NULL"),
 )
-
-
-_PROFILE_LABEL_RENAMES: dict[str, str] = {
-    "Fast Preview": "Karaoke",
-    "Preview": "Karaoke",
-    "Balanced": "Karaoke",
-    "Standard": "Karaoke",
-    "Clean Instrumental": "Karaoke",
-    "High": "Karaoke",
-    "Maximum": "Karaoke",
-    "Vocal focus": "Karaoke",
-    "Vocal split": "Lead vocal split",
-    "Karaoke stems": "Lead vocal split",
-}
 
 
 def _existing_columns(connection, table: str) -> set[str]:
@@ -63,53 +50,13 @@ def _apply_schema_migrations(engine: Engine) -> None:
             connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
 
 
-def _migrate_profile_keys(engine: Engine) -> None:
+def _seed_default_stem_selection(engine: Engine) -> None:
     with engine.begin() as connection:
-        for legacy, current in PROFILE_KEY_ALIASES.items():
-            connection.execute(
-                text("UPDATE runs SET preset = :current WHERE preset = :legacy"),
-                {"current": current, "legacy": legacy},
-            )
-            connection.execute(
-                text("UPDATE app_settings SET default_preset = :current WHERE default_preset = :legacy"),
-                {"current": current, "legacy": legacy},
-            )
-
-        rows = connection.exec_driver_sql(
-            "SELECT id, metadata_json FROM runs WHERE metadata_json IS NOT NULL"
-        ).fetchall()
-        for run_id, raw_metadata in rows:
-            if raw_metadata in (None, "", "null"):
-                continue
-            try:
-                metadata = json.loads(raw_metadata) if isinstance(raw_metadata, str) else raw_metadata
-            except (TypeError, ValueError):
-                continue
-            if not isinstance(metadata, dict):
-                continue
-            processing = metadata.get("processing")
-            if not isinstance(processing, dict):
-                continue
-            changed = False
-            legacy_key = processing.get("profile_key")
-            if isinstance(legacy_key, str) and legacy_key in PROFILE_KEY_ALIASES:
-                processing["profile_key"] = PROFILE_KEY_ALIASES[legacy_key]
-                changed = True
-            legacy_label = processing.get("profile_label")
-            if isinstance(legacy_label, str) and legacy_label in _PROFILE_LABEL_RENAMES:
-                processing["profile_label"] = _PROFILE_LABEL_RENAMES[legacy_label]
-                changed = True
-            # Stale export_mp3_bitrate is harmless but noise; strip it.
-            if "export_mp3_bitrate" in processing:
-                processing.pop("export_mp3_bitrate")
-                changed = True
-            if not changed:
-                continue
-            metadata["processing"] = processing
-            connection.execute(
-                text("UPDATE runs SET metadata_json = :metadata WHERE id = :id"),
-                {"metadata": json.dumps(metadata), "id": run_id},
-            )
+        default_selection = json.dumps(_DEFAULT_STEM_SELECTION)
+        connection.execute(
+            text("UPDATE app_settings SET default_stem_selection = :selection WHERE default_stem_selection IS NULL"),
+            {"selection": default_selection},
+        )
 
 
 def schedule_path_cleanup(session: Session, *paths: Path | None) -> None:
@@ -153,4 +100,4 @@ def init_database() -> None:
 
     Base.metadata.create_all(bind=engine)
     _apply_schema_migrations(engine)
-    _migrate_profile_keys(engine)
+    _seed_default_stem_selection(engine)

@@ -448,7 +448,7 @@ function StemStatusRow({ hint }: { hint: string }) {
     <div className="export-pop-row is-disabled" aria-disabled>
       <span aria-hidden />
       <div className="export-pop-row-copy">
-        <strong>Raw stems</strong>
+        <strong>Stems</strong>
         <span>{hint}</span>
       </div>
     </div>
@@ -528,7 +528,7 @@ const ManifestRow = memo(function ManifestRow({ track, artifactList, stemOptions
     <li className={`export-manifest-row ${track.skip_reason ? 'export-manifest-row-skipped' : ''}`}>
       <div className="export-manifest-head">
         <strong>{track.track_title}</strong>
-        {track.split_label ? <span>{track.split_label}</span> : null}
+        {track.output_label ? <span>{track.output_label}</span> : null}
       </div>
       {track.skip_reason ? (
         <div className="export-manifest-skip">{track.skip_reason}</div>

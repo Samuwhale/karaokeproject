@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { discardRejection } from '../../async'
+import { useLibraryQuery } from '../../hooks/useLibraryQuery'
 import { formatDuration } from '../metrics'
 import { describeRun, isActiveRunStatus, RUN_STATUS_LABELS } from '../runStatus'
-import { SONG_BROWSE_SORT_OPTIONS, applySongBrowse, trackStageSummary } from '../trackListView'
+import { SONG_BROWSE_SORT_OPTIONS, trackStageSummary } from '../trackListView'
 import type { TrackStageSummary } from '../trackListView'
-import type { SongsFilter, SongsView } from '../../routes'
+import type { SongsView } from '../../routes'
 import type { QueueRunEntry, RunSummary, TrackSummary } from '../../types'
 
 type SongsPageProps = {
@@ -18,12 +19,12 @@ type SongsPageProps = {
   retryingRunId: string | null
   onViewChange: (view: SongsView) => void
   onOpenTrack: (track: TrackSummary, options?: { runId?: string | null }) => void
-  onSplitTrack: (trackId: string) => void
+  onCreateStemsForTrack: (trackId: string) => void
   onAddSongs: () => void
   onReviewImports: () => void
   onCancelRun: (runId: string) => Promise<void>
   onRetryRun: (runId: string) => Promise<unknown>
-  onBatchSplit: (trackIds: string[]) => void
+  onBatchCreateStems: (trackIds: string[]) => void
   onBatchExport: (trackIds: string[]) => void
   onBatchDelete: (trackIds: string[]) => void
 }
@@ -42,18 +43,18 @@ function rowStatusFromStage(stage: TrackStageSummary, track: TrackSummary): RowS
     if (run && run.status !== 'queued' && run.progress > 0) {
       return { text: `${Math.round(run.progress * 100)}%`, tone: 'processing', count: null, preferred: false }
     }
-    const stageLabel = run ? (RUN_STATUS_LABELS[run.status] ?? 'Splitting') : 'Splitting'
+    const stageLabel = run ? (RUN_STATUS_LABELS[run.status] ?? 'Creating stems') : 'Creating stems'
     return { text: stageLabel, tone: 'processing', count: null, preferred: false }
   }
   if (stage.key === 'needs-attention') {
     return {
-      text: track.latest_run?.status === 'cancelled' ? 'Cancelled' : 'Split failed',
+      text: track.latest_run?.status === 'cancelled' ? 'Cancelled' : 'Stem job failed',
       tone: 'attn',
       count: null,
       preferred: false,
     }
   }
-  if (stage.key === 'needs-split') return { text: null, tone: null, count: null, preferred: false }
+  if (stage.key === 'needs-stems') return { text: null, tone: null, count: null, preferred: false }
   if (stage.key === 'final' || stage.key === 'ready') {
     return {
       text: track.has_custom_mix ? 'Mix saved' : 'Ready',
@@ -115,7 +116,7 @@ function RowProgressBar({ run }: { run: RunSummary }) {
       aria-valuenow={Math.round(fraction * 100)}
       aria-label={describeRun(run)}
     >
-      <span className="song-row-progress-fill" style={{ width: `${fraction * 100}%` }} />
+      <span className="song-row-progress-fill" style={{ transform: `scaleX(${fraction})` }} />
     </span>
   )
 }
@@ -153,7 +154,7 @@ function QueueStrip({
   const showHead = draftsCount > 0 || failedCount > 0 || activeCount > 1
   const summary: string[] = []
   if (draftsCount > 0) summary.push(`${draftsCount} import${draftsCount === 1 ? '' : 's'} to review`)
-  if (showHead && activeCount > 0) summary.push(`${activeCount} split${activeCount === 1 ? '' : 's'} running`)
+  if (showHead && activeCount > 0) summary.push(`${activeCount} stem job${activeCount === 1 ? '' : 's'} running`)
   if (failedCount > 0) summary.push(`${failedCount} need${failedCount === 1 ? 's' : ''} attention`)
 
   const compact = !showHead && activeCount === 1 && failedCount === 0
@@ -180,9 +181,9 @@ function QueueStrip({
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(aggregate * 100)}
-              aria-label="Overall split progress"
+              aria-label="Overall stem creation progress"
             >
-              <span className="library-queue-aggregate-fill" style={{ width: `${aggregate * 100}%` }} />
+              <span className="library-queue-aggregate-fill" style={{ transform: `scaleX(${aggregate})` }} />
             </div>
           ) : null}
           <ul className="library-queue-list">
@@ -199,7 +200,7 @@ function QueueStrip({
                     </span>
                     <span className="library-queue-item-stage">{label}</span>
                     <span className="library-queue-item-bar" aria-hidden>
-                      <span className="library-queue-item-fill" style={{ width: `${fraction * 100}%` }} />
+                      <span className="library-queue-item-fill" style={{ transform: `scaleX(${fraction})` }} />
                     </span>
                     <span className="library-queue-item-pct">{pct}%</span>
                   </button>
@@ -208,7 +209,7 @@ function QueueStrip({
                     className="library-queue-cancel"
                     disabled={cancelling}
                     onClick={() => discardRejection(() => onCancelRun(entry.run.id))}
-                    aria-label={`Cancel split for ${entry.track_title}`}
+                    aria-label={`Cancel stem creation for ${entry.track_title}`}
                   >
                     {cancelling ? 'Cancelling…' : 'Cancel'}
                   </button>
@@ -241,7 +242,7 @@ function QueueStrip({
                   className="library-queue-cancel"
                   disabled={retrying}
                   onClick={() => discardRejection(() => onRetryRun(entry.run.id))}
-                  aria-label={`Retry split for ${entry.track_title}`}
+                  aria-label={`Retry stem creation for ${entry.track_title}`}
                 >
                   {retrying ? 'Retrying…' : 'Retry'}
                 </button>
@@ -303,8 +304,6 @@ function TrackWaveThumb({ track }: { track: TrackSummary }) {
   )
 }
 
-type FilterTab = { value: SongsFilter; label: string; count: number }
-
 export function SongsPage({
   view,
   tracks,
@@ -315,12 +314,12 @@ export function SongsPage({
   retryingRunId,
   onViewChange,
   onOpenTrack,
-  onSplitTrack,
+  onCreateStemsForTrack,
   onAddSongs,
   onReviewImports,
   onCancelRun,
   onRetryRun,
-  onBatchSplit,
+  onBatchCreateStems,
   onBatchExport,
   onBatchDelete,
 }: SongsPageProps) {
@@ -338,68 +337,26 @@ export function SongsPage({
     return () => window.removeEventListener('keydown', handleKey)
   }, [selected.size])
 
-  const browseTracks = useMemo(
-    () => applySongBrowse(tracks, { search: view.search, sort: view.sort, filter: view.filter }),
-    [tracks, view.search, view.sort, view.filter],
-  )
-  const activeRuns = useMemo(
-    () => queueRuns.filter((entry) => isActiveRunStatus(entry.run.status)),
-    [queueRuns],
-  )
-  const failedRuns = useMemo(
-    () => queueRuns.filter((entry) => entry.run.status === 'failed' || entry.run.status === 'cancelled'),
-    [queueRuns],
-  )
+  const {
+    browseTracks,
+    browseTrackIds,
+    activeRuns,
+    failedRuns,
+    filterTabs,
+    stemmableIds,
+    exportableIds,
+  } = useLibraryQuery(tracks, view, queueRuns)
   const showQueue = stagedImportsCount > 0 || activeRuns.length > 0 || failedRuns.length > 0
-
-  // Counts per filter bucket (always computed from full tracks list, not filtered)
-  const filterCounts = useMemo(() => {
-    const counts = { 'needs-split': 0, processing: 0, attention: 0, ready: 0 }
-    for (const track of tracks) {
-      const stage = trackStageSummary(track)
-      if (stage.key === 'needs-split') counts['needs-split']++
-      else if (stage.key === 'processing') counts.processing++
-      else if (stage.key === 'needs-attention') counts.attention++
-      else if (stage.key === 'ready' || stage.key === 'final') counts.ready++
-    }
-    return counts
-  }, [tracks])
-
-  const filterTabs = useMemo<FilterTab[]>(() => {
-    const tabs: FilterTab[] = [{ value: 'all', label: 'All', count: tracks.length }]
-    if (filterCounts.processing > 0)
-      tabs.push({ value: 'processing', label: 'Splitting', count: filterCounts.processing })
-    if (filterCounts['needs-split'] > 0)
-      tabs.push({ value: 'needs-split', label: 'Unsplit', count: filterCounts['needs-split'] })
-    if (filterCounts.attention > 0)
-      tabs.push({ value: 'attention', label: 'Issues', count: filterCounts.attention })
-    if (filterCounts.ready > 0)
-      tabs.push({ value: 'ready', label: 'Ready', count: filterCounts.ready })
-    return tabs
-  }, [tracks.length, filterCounts])
-
   const showFilterTabs = filterTabs.length > 2 // only show when at least 2 distinct stages are present
 
-  const { exportableIds, splittableIds } = useMemo(() => {
-    const exportable = new Set<string>()
-    const splittable = new Set<string>()
-    for (const track of browseTracks) {
-      const stage = trackStageSummary(track)
-      if (stage.key === 'ready' || stage.key === 'final') exportable.add(track.id)
-      if (stage.key !== 'processing') splittable.add(track.id)
-    }
-    return { exportableIds: exportable, splittableIds: splittable }
-  }, [browseTracks])
-
-  const browseTrackIds = useMemo(() => new Set(browseTracks.map((track) => track.id)), [browseTracks])
-  const { selectedIds, splitEligible, exportEligible } = useMemo(() => {
+  const { selectedIds, stemEligible, exportEligible } = useMemo(() => {
     const ids = Array.from(selected).filter((id) => browseTrackIds.has(id))
     return {
       selectedIds: ids,
-      splitEligible: ids.filter((id) => splittableIds.has(id)),
+      stemEligible: ids.filter((id) => stemmableIds.has(id)),
       exportEligible: ids.filter((id) => exportableIds.has(id)),
     }
-  }, [browseTrackIds, selected, splittableIds, exportableIds])
+  }, [browseTrackIds, selected, stemmableIds, exportableIds])
   const selectionKey = useMemo(() => selectedIds.slice().sort().join('|'), [selectedIds])
   const deleteArmed = selectionKey.length > 0 && deleteArmedSelectionKey === selectionKey
   const selectedCount = selectedIds.length
@@ -432,10 +389,10 @@ export function SongsPage({
     setSelected(new Set())
   }
 
-  function handleSplit() {
-    if (!splitEligible.length) return
+  function handleCreateStems() {
+    if (!stemEligible.length) return
     setDeleteArmedSelectionKey(null)
-    onBatchSplit(splitEligible)
+    onBatchCreateStems(stemEligible)
     setSelected(new Set())
   }
 
@@ -597,7 +554,7 @@ export function SongsPage({
                     style={{ '--art-hue': String(trackHue(track.title)) } as React.CSSProperties}
                   >
                     {track.thumbnail_url ? <img src={track.thumbnail_url} alt="" loading="lazy" /> : initials}
-                    {stage.key !== 'needs-split' ? (
+                    {stage.key !== 'needs-stems' ? (
                       <span className="song-row-art-dot" aria-hidden />
                     ) : null}
                   </span>
@@ -610,14 +567,14 @@ export function SongsPage({
                   </span>
                 </button>
                 <div className="song-row-meta">
-                  {stage.key === 'needs-split' ? (
+                  {stage.key === 'needs-stems' ? (
                     <button
                       type="button"
-                      className="song-row-split-action"
-                      onClick={() => onSplitTrack(track.id)}
-                      aria-label={`Split ${track.title}`}
+                      className="song-row-stem-action"
+                      onClick={() => onCreateStemsForTrack(track.id)}
+                      aria-label={`Create stems for ${track.title}`}
                     >
-                      Split
+                      Create stems
                     </button>
                   ) : stage.key === 'needs-attention' && track.latest_run ? (
                     <button
@@ -625,18 +582,18 @@ export function SongsPage({
                       className="song-row-retry-action"
                       disabled={retryingRunId === track.latest_run.id}
                       onClick={() => discardRejection(() => onRetryRun(track.latest_run!.id))}
-                      aria-label={`Retry split for ${track.title}`}
+                      aria-label={`Retry stem creation for ${track.title}`}
                     >
                       {retryingRunId === track.latest_run.id ? 'Retrying…' : 'Retry'}
                     </button>
                   ) : status.text ? (
                     <span className={`song-row-status ${status.tone ? `is-${status.tone}` : ''} ${status.preferred ? 'is-preferred' : ''}`}>
                       {status.preferred ? (
-                        <span className="song-row-status-star" aria-label="Preferred split" title="Preferred split">★</span>
+                        <span className="song-row-status-star" aria-label="Preferred output" title="Preferred output">★</span>
                       ) : null}
                       {status.text}
                       {status.count ? (
-                        <span className="song-row-status-count" aria-label={`${status.count} splits`}>
+                        <span className="song-row-status-count" aria-label={`${status.count} outputs`}>
                           {status.count}
                         </span>
                       ) : null}
@@ -677,7 +634,7 @@ export function SongsPage({
         <div className="library-empty library-empty-onboard">
           <WaveformIcon />
           <strong>Add your first song</strong>
-          <p>Drop audio files or paste a YouTube URL to split a song into stems — then balance levels, mute parts, and export your mix.</p>
+          <p>Drop audio files or paste a YouTube URL to create stems, balance levels, mute parts, and export your mix.</p>
           <button type="button" className="button-primary" onClick={onAddSongs}>
             Add songs
           </button>
@@ -700,9 +657,9 @@ export function SongsPage({
               <button type="button" className="button-link" onClick={clearSelection}>
                 Clear
               </button>
-              {splitEligible.length > 0 ? (
-                <button type="button" className="button-primary" onClick={handleSplit}>
-                  Split {splitEligible.length}
+              {stemEligible.length > 0 ? (
+                <button type="button" className="button-primary" onClick={handleCreateStems}>
+                  Create stems for {stemEligible.length}
                 </button>
               ) : null}
               {exportEligible.length > 0 ? (

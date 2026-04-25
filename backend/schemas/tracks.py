@@ -9,30 +9,38 @@ MIX_GAIN_DB_MIN = -24.0
 MIX_GAIN_DB_MAX = 12.0
 
 
-class ProcessingProfileResponse(BaseModel):
+class StemOptionResponse(BaseModel):
+    name: str
+    label: str
+
+
+class QualityOptionResponse(BaseModel):
     key: str
     label: str
-    strength: str
-    best_for: str
-    tradeoff: str
-    stems: list[str] = Field(default_factory=list)
 
 
 class RunProcessingConfigRequest(BaseModel):
-    profile_key: str
+    stems: list[str] = Field(min_length=1)
+    quality: str
 
-    @field_validator("profile_key")
+    @field_validator("stems")
     @classmethod
-    def validate_profile_key(cls, value: str) -> str:
-        cleaned = value.strip()
+    def validate_stems(cls, value: list[str]) -> list[str]:
+        return normalize_unique_string_list(value, label="Stems")
+
+    @field_validator("quality")
+    @classmethod
+    def validate_quality(cls, value: str) -> str:
+        cleaned = value.strip().lower()
         if not cleaned:
-            raise ValueError("Profile key cannot be blank.")
+            raise ValueError("Quality cannot be blank.")
         return cleaned
 
 
 class RunProcessingConfigResponse(BaseModel):
-    profile_key: str
-    profile_label: str
+    stems: list[str]
+    quality: str
+    label: str
 
 
 class ArtifactMetricsResponse(BaseModel):

@@ -831,47 +831,6 @@ code {
   color: var(--text-muted);
 }
 
-/* -------- Track detail ----------------------------------------------- */
-
-.model-picker {
-  display: grid;
-  gap: var(--space-xs);
-}
-
-.model-picker-meta {
-  display: grid;
-  gap: 2px;
-  font-size: var(--t-xs);
-  color: var(--text-muted);
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.model-picker-meta-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  margin: 0;
-}
-
-.model-picker-meta-line > span {
-  flex: 1;
-  min-width: 0;
-}
-
-.model-picker-meta-stems {
-  margin: 0;
-}
-
-.model-picker-meta-note {
-  font-size: var(--t-xs);
-  color: var(--text-muted);
-  line-height: 1.5;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
 .export-bitrate-field {
   margin-top: var(--space-sm);
   max-width: 140px;
@@ -1298,4 +1257,3 @@ code {
     transition: none !important;
   }
 }
-

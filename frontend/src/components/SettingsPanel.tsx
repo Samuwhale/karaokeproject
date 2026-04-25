@@ -5,7 +5,7 @@ import { Spinner } from './feedback/Spinner'
 import { Skeleton } from './feedback/Skeleton'
 import { ConfirmInline } from './feedback/ConfirmInline'
 import { formatSize } from './metrics'
-import { ModelPicker } from './ModelPicker'
+import { StemSelectionPicker } from './StemSelectionPicker'
 
 type SettingsPanelProps = {
   settings: Settings | null
@@ -15,13 +15,13 @@ type SettingsPanelProps = {
   cleaningExportBundles: boolean
   cleaningLibraryRuns: boolean
   view: 'preferences' | 'maintenance' | 'storage'
-  onSave: (settings: Omit<Settings, 'profiles'>) => Promise<void>
+  onSave: (settings: Omit<Settings, 'stem_options' | 'quality_options'>) => Promise<void>
   onCleanupTempStorage: () => Promise<void>
   onCleanupExportBundles: () => Promise<void>
   onCleanupLibraryRuns: () => void
 }
 
-type SettingsDraft = Omit<Settings, 'profiles'>
+type SettingsDraft = Omit<Settings, 'stem_options' | 'quality_options'>
 type DraftState = {
   sourceKey: string
   values: SettingsDraft
@@ -45,7 +45,11 @@ function createDraft(settings: Settings | null): SettingsDraft {
       temp_max_age_hours: settings?.retention.temp_max_age_hours ?? 24,
       export_bundle_max_age_days: settings?.retention.export_bundle_max_age_days ?? 7,
     },
-    default_profile: settings?.default_profile ?? 'karaoke',
+    default_stem_selection: settings?.default_stem_selection ?? {
+      stems: ['instrumental', 'vocals'],
+      quality: 'balanced',
+      label: 'Instrumental + Vocals',
+    },
     export_mp3_bitrate: settings?.export_mp3_bitrate ?? '320k',
   }
 }
@@ -81,7 +85,8 @@ export function SettingsPanel({
         settings.storage.model_cache_directory,
         settings.retention.temp_max_age_hours,
         settings.retention.export_bundle_max_age_days,
-        settings.default_profile,
+        settings.default_stem_selection.stems.join(','),
+        settings.default_stem_selection.quality,
         settings.export_mp3_bitrate,
       ].join('|')
     : 'settings'
@@ -159,13 +164,24 @@ export function SettingsPanel({
         <form className="import-form" onSubmit={handleSubmit}>
           <div className="processing-grid">
             <div className="field">
-              <ModelPicker
-                profileKey={draft.default_profile}
-                profiles={settings.profiles}
-                labelId="default-model"
-                onProfileChange={(nextKey) => updateDraft({ ...draft, default_profile: nextKey })}
+              <span>Default stems</span>
+              <StemSelectionPicker
+                value={draft.default_stem_selection}
+                stemOptions={settings.stem_options}
+                qualityOptions={settings.quality_options}
+                onChange={(next) =>
+                  updateDraft({
+                    ...draft,
+                    default_stem_selection: {
+                      ...next,
+                      label: next.stems
+                        .map((stem) => settings.stem_options.find((option) => option.name === stem)?.label ?? stem)
+                        .join(' + '),
+                    },
+                  })
+                }
               />
-              <span className="field-hint">Used for new splits unless you choose a different split type for a song.</span>
+              <span className="field-hint">Used when creating stems from song rows, imports, and batch actions.</span>
             </div>
 
             <label className="field">
@@ -218,7 +234,7 @@ export function SettingsPanel({
               <div className="storage-action-row">
                 <div className="storage-action-copy">
                   <strong>Delete export downloads</strong>
-                  <p>Removes built export files only. Your saved songs, splits, and source files stay intact.</p>
+                  <p>Removes built export files only. Your saved songs, outputs, and source files stay intact.</p>
                 </div>
                 <ConfirmInline
                   label={cleaningExportBundles ? 'Working…' : formatSize(exportBundles?.reclaimable_bytes ?? 0) ?? '0 B'}
@@ -234,15 +250,15 @@ export function SettingsPanel({
 
               <div className="storage-action-row">
                 <div className="storage-action-copy">
-                  <strong>Purge non-preferred splits</strong>
-                  <p>Deletes split outputs that are not marked as preferred. Use this only after you have chosen winners.</p>
+                  <strong>Purge non-preferred outputs</strong>
+                  <p>Deletes outputs that are not marked as preferred. Use this only after you have chosen winners.</p>
                 </div>
                 <ConfirmInline
                   label={cleaningLibraryRuns ? 'Working…' : formatSize(outputs?.reclaimable_bytes ?? 0) ?? '0 B'}
                   pendingLabel="Working…"
-                  confirmLabel="Purge non-preferred splits"
-                  cancelLabel="Keep all splits"
-                  prompt="Delete non-preferred split outputs across the library?"
+                  confirmLabel="Purge non-preferred outputs"
+                  cancelLabel="Keep all outputs"
+                  prompt="Delete non-preferred outputs across the library?"
                   pending={cleaningLibraryRuns}
                   disabled={(outputs?.reclaimable_bytes ?? 0) === 0}
                   onConfirm={async () => onCleanupLibraryRuns()}
@@ -361,7 +377,7 @@ export function SettingsPanel({
               </label>
 
               <label className="field">
-                <span>Model cache directory</span>
+                <span>Processing cache directory</span>
                 <input
                   type="text"
                   value={draft.storage.model_cache_directory}

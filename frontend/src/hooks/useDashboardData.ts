@@ -128,8 +128,8 @@ function describeBatchDeleteResult(result: BatchDeleteResponse): { tone: ToastTo
   if (blocked > 0) {
     details.push(
       blocked === 1
-        ? '1 blocked by a queued or running split'
-        : `${blocked} blocked by queued or running splits`,
+        ? '1 blocked by queued or running stem creation'
+        : `${blocked} blocked by queued or running stem creation`,
     )
   }
   if (missing > 0) details.push(missing === 1 ? '1 already missing' : `${missing} already missing`)
@@ -282,7 +282,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
         listImportDrafts(),
         getActiveRuns(),
       ])
-      // Detect split completions/failures to surface a toast notification.
+      // Detect stem creation completions/failures to surface a toast notification.
       const prevActive = prevQueueRunsRef.current.filter((e) => isActiveRunStatus(e.run.status))
       for (const entry of prevActive) {
         const stillActive = nextQueue.some((q) => q.run.id === entry.run.id && isActiveRunStatus(q.run.status))
@@ -292,7 +292,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
           if (track.latest_run.status === 'completed') {
             pushToast('success', `${entry.track_title} is ready to mix.`)
           } else if (track.latest_run.status === 'failed') {
-            pushToast('error', `Split failed for ${entry.track_title}.`)
+            pushToast('error', `Stem creation failed for ${entry.track_title}.`)
           }
         }
       }
@@ -457,7 +457,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
         ? `${result.reused_track_count} reused`
         : ''
       const queuedMsg = result.queued_run_count
-        ? `${result.queued_run_count} split${result.queued_run_count === 1 ? '' : 's'} queued`
+        ? `${result.queued_run_count} stem job${result.queued_run_count === 1 ? '' : 's'} queued`
         : 'imported without queueing'
       const parts = [createdMsg, reusedMsg, queuedMsg].filter(Boolean)
       pushToast('success', `Imported: ${parts.join(' · ')}.`)
@@ -477,7 +477,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     setCreatingRun(true)
     try {
       const result = await createRun(trackId, processing)
-      pushToast('success', `Queued a split for ${findTrackLabel(trackId)}.`)
+      pushToast('success', `Queued stems for ${findTrackLabel(trackId)}.`)
       await refreshDashboard()
       return result
     } catch (error) {
@@ -501,7 +501,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
       const ok = results.filter((result) => result.status === 'fulfilled').length
       const failed = results.length - ok
       if (failed === 0) {
-        pushToast('success', `Queued ${ok} split${ok === 1 ? '' : 's'}.`)
+        pushToast('success', `Queued ${ok} stem job${ok === 1 ? '' : 's'}.`)
       } else if (ok === 0) {
         const firstError = results.find(
           (result): result is PromiseRejectedResult => result.status === 'rejected',
@@ -542,7 +542,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     setRetryingRunId(runId)
     try {
       const result = await retryRun(runId)
-      pushToast('success', `Queued another split for ${findRunTrackLabel(runId)} with the same setup.`)
+      pushToast('success', `Queued stems for ${findRunTrackLabel(runId)} with the same setup.`)
       await refreshDashboard()
       return result
     } catch (error) {
@@ -557,7 +557,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     setDeletingRunId(runId)
     try {
       await deleteRun(runId)
-      pushToast('success', 'Deleted split.')
+      pushToast('success', 'Deleted output.')
       await refreshDashboard()
     } catch (error) {
       pushToast('error', getErrorMessage(error))
@@ -571,7 +571,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     setSettingKeeper(true)
     try {
       await setKeeperRun(trackId, runId)
-      pushToast('success', runId ? 'Marked as preferred split.' : 'Cleared preferred split.')
+      pushToast('success', runId ? 'Marked as preferred output.' : 'Cleared preferred output.')
       await refreshDashboard()
     } catch (error) {
       pushToast('error', getErrorMessage(error))
@@ -638,19 +638,30 @@ export function useDashboardData(selection: { trackId: string | null }) {
     setPendingDeleteIds(next)
   }
 
+  function removePendingDeleteIds(trackIds: string[]) {
+    if (!trackIds.length) return
+
+    const next = new Set(pendingDeleteIdsRef.current)
+    let changed = false
+    for (const id of trackIds) {
+      if (!next.delete(id)) continue
+      changed = true
+    }
+    if (!changed) return
+    setPendingDeleteIdsImmediate(next)
+  }
+
   async function commitTrackDelete(trackIds: string[]) {
     if (!trackIds.length) return
     try {
       const result = await batchDeleteTracks({ track_ids: trackIds })
-      setPendingDeleteIdsImmediate(new Set())
+      removePendingDeleteIds(trackIds)
       const feedback = describeBatchDeleteResult(result)
       pushToast(feedback.tone, feedback.message)
       await refreshDashboard()
     } catch (error) {
       pushToast('error', getErrorMessage(error))
-      const next = new Set(pendingDeleteIdsRef.current)
-      for (const id of trackIds) next.delete(id)
-      setPendingDeleteIdsImmediate(next)
+      removePendingDeleteIds(trackIds)
     }
   }
 
@@ -690,7 +701,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     }, DELETE_UNDO_MS)
   }
 
-  async function handleSaveSettings(payload: Omit<Settings, 'profiles'>) {
+  async function handleSaveSettings(payload: Omit<Settings, 'stem_options' | 'quality_options'>) {
     setSavingSettings(true)
     try {
       await updateSettings(payload)

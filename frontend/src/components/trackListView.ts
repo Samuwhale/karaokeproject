@@ -5,7 +5,7 @@ import { isActiveRunStatus } from './runStatus'
 export type SongBrowseSort = 'recent' | 'created' | 'title' | 'runs'
 
 export type TrackStageSummary = {
-  key: 'processing' | 'needs-attention' | 'needs-split' | 'ready' | 'final'
+  key: 'processing' | 'needs-attention' | 'needs-stems' | 'ready' | 'final'
   label: string
   description: string
   actionLabel: string
@@ -15,7 +15,7 @@ export const SONG_BROWSE_SORT_OPTIONS: { value: SongBrowseSort; label: string; s
   { value: 'recent', label: 'Recently updated', shortLabel: 'Recent' },
   { value: 'created', label: 'Recently added', shortLabel: 'Added' },
   { value: 'title', label: 'Title A–Z', shortLabel: 'A–Z' },
-  { value: 'runs', label: 'Most splits', shortLabel: 'Splits' },
+  { value: 'runs', label: 'Most outputs', shortLabel: 'Outputs' },
 ]
 
 export function trackStageSummary(track: TrackSummary): TrackStageSummary {
@@ -25,7 +25,7 @@ export function trackStageSummary(track: TrackSummary): TrackStageSummary {
     return {
       key: 'final',
       label: 'Ready',
-      description: track.has_custom_mix ? 'Saved custom mix on the preferred split.' : 'Preferred split ready to export.',
+      description: track.has_custom_mix ? 'Saved custom mix on the preferred output.' : 'Preferred output ready to export.',
       actionLabel: 'Open mix',
     }
   }
@@ -34,16 +34,16 @@ export function trackStageSummary(track: TrackSummary): TrackStageSummary {
     return {
       key: 'needs-attention',
       label: 'Needs attention',
-      description: 'The latest split failed or was cancelled.',
-      actionLabel: 'Review split',
+      description: 'The latest stem job failed or was cancelled.',
+      actionLabel: 'Review output',
     }
   }
 
   if (latestStatus && isActiveRunStatus(latestStatus)) {
     return {
       key: 'processing',
-      label: 'Splitting now',
-      description: track.latest_run?.status_message || 'The latest split is still running.',
+      label: 'Creating stems',
+      description: track.latest_run?.status_message || 'Stems are still being created.',
       actionLabel: 'Open workspace',
     }
   }
@@ -52,15 +52,15 @@ export function trackStageSummary(track: TrackSummary): TrackStageSummary {
     return {
       key: 'ready',
       label: track.has_custom_mix ? 'Mix saved' : 'Ready',
-      description: track.has_custom_mix ? 'A saved stem balance is ready to reopen.' : 'The latest completed split is ready in Mix.',
+      description: track.has_custom_mix ? 'A saved stem balance is ready to reopen.' : 'The latest output is ready in Mix.',
       actionLabel: 'Open mix',
     }
   }
 
   return {
-    key: 'needs-split',
-    label: 'Needs split',
-    description: 'The source is imported, but no split has been queued yet.',
+    key: 'needs-stems',
+    label: 'Needs stems',
+    description: 'The source is imported, but no stems have been queued yet.',
     actionLabel: 'Open workspace',
   }
 }
@@ -83,7 +83,7 @@ export function applySongBrowse(
     }
     if (filter !== 'all') {
       const stage = trackStageSummary(track)
-      if (filter === 'needs-split') return stage.key === 'needs-split'
+      if (filter === 'needs-stems') return stage.key === 'needs-stems'
       if (filter === 'processing') return stage.key === 'processing'
       if (filter === 'attention') return stage.key === 'needs-attention'
       if (filter === 'ready') return stage.key === 'ready' || stage.key === 'final'

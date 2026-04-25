@@ -12,7 +12,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, object_session, selectinload
 
 from backend.core.config import RuntimeSettings
-from backend.core.stems import is_stem_kind
+from backend.core.stems import is_stem_kind, parse_export_stem_kind, stem_name_from_kind
 from backend.db.models import (
     ACTIVE_RUN_STATUSES,
     IN_PROGRESS_RUN_STATUSES,
@@ -40,6 +40,7 @@ from backend.services.processing import (
     ProcessingConfig,
     resolve_run_processing,
     serialize_processing_config,
+    update_visible_stems,
 )
 
 UNSET = object()
@@ -164,23 +165,55 @@ def serialize_run_summary(run: Run) -> RunSummaryResponse:
     )
 
 
+def visible_stem_names(run: Run) -> set[str]:
+    return set(resolve_run_processing(run).visible_stems)
+
+
+def generated_stem_names(run: Run) -> set[str]:
+    return set(resolve_run_processing(run).generated_stems)
+
+
+def _artifact_visible(run: Run, artifact: RunArtifact) -> bool:
+    stem_name = stem_name_from_kind(artifact.kind)
+    if stem_name is not None:
+        return stem_name in visible_stem_names(run)
+    parsed_export_stem = parse_export_stem_kind(artifact.kind)
+    if parsed_export_stem is not None:
+        return parsed_export_stem[1] in visible_stem_names(run)
+    return True
+
+
+def visible_artifacts(run: Run) -> list[RunArtifact]:
+    return [artifact for artifact in run.artifacts if _artifact_visible(run, artifact)]
+
+
 def mixable_artifacts(run: Run) -> list[RunArtifact]:
-    return [artifact for artifact in run.artifacts if is_stem_kind(artifact.kind)]
+    visible_stems = visible_stem_names(run)
+    return [
+        artifact
+        for artifact in run.artifacts
+        if is_stem_kind(artifact.kind)
+        and (stem_name_from_kind(artifact.kind) in visible_stems)
+    ]
+
+
+def mixable_artifact_ids(run: Run) -> set[str]:
+    return {artifact.id for artifact in mixable_artifacts(run)}
 
 
 def _run_has_mixable_stems(run: Run) -> bool:
     return bool(mixable_artifacts(run))
 
 
-def _run_profile_key(run: Run) -> str:
-    return resolve_run_processing(run).profile_key
+def _run_pipeline_key(run: Run) -> str:
+    return resolve_run_processing(run).pipeline_key
 
 
-def _profile_runs(track: Track, profile_key: str, *, exclude_run_id: str | None = None) -> list[Run]:
+def _pipeline_runs(track: Track, pipeline_key: str, *, exclude_run_id: str | None = None) -> list[Run]:
     return [
         run
         for run in track.runs
-        if run.id != exclude_run_id and _run_profile_key(run) == profile_key
+        if run.id != exclude_run_id and _run_pipeline_key(run) == pipeline_key
     ]
 
 
@@ -208,6 +241,7 @@ def _is_default_stem(entry: dict[str, Any] | RunMixStemEntry) -> bool:
 def serialize_run_mix(run: Run) -> RunMixState:
     raw = run.mix_json or {}
     stems_raw = raw.get("stems") if isinstance(raw, dict) else None
+    visible_ids = mixable_artifact_ids(run)
     stems: list[RunMixStemEntry] = []
     if isinstance(stems_raw, list):
         for entry in stems_raw:
@@ -215,6 +249,8 @@ def serialize_run_mix(run: Run) -> RunMixState:
                 continue
             artifact_id = entry.get("artifact_id")
             if not isinstance(artifact_id, str):
+                continue
+            if artifact_id not in visible_ids:
                 continue
             gain = float(entry.get("gain_db") or 0.0)
             gain = max(MIX_GAIN_DB_MIN, min(MIX_GAIN_DB_MAX, gain))
@@ -233,7 +269,7 @@ def serialize_run_detail(run: Run) -> RunDetailResponse:
     return RunDetailResponse(
         **serialize_run_summary(run).model_dump(),
         metadata_json=run.metadata_json or {},
-        artifacts=[serialize_run_artifact(artifact) for artifact in run.artifacts],
+        artifacts=[serialize_run_artifact(artifact) for artifact in visible_artifacts(run)],
         mix=serialize_run_mix(run),
     )
 
@@ -264,7 +300,7 @@ def set_run_mix(session: Session, track_id: str, run_id: str, payload: RunMixInp
     if run.status != RunStatus.completed.value:
         raise ValueError("Only completed runs can have a mix.")
 
-    mixable_ids = {artifact.id for artifact in mixable_artifacts(run)}
+    mixable_ids = mixable_artifact_ids(run)
     seen: set[str] = set()
     normalized: list[dict[str, Any]] = []
     for entry in payload.stems:
@@ -280,6 +316,10 @@ def set_run_mix(session: Session, track_id: str, run_id: str, payload: RunMixInp
                 "muted": bool(entry.muted),
             }
         )
+
+    missing = mixable_ids - seen
+    if missing:
+        raise ValueError("Mix must include every stem in the run.")
 
     run.mix_json = {"version": 1, "stems": normalized}
     _touch_track(track)
@@ -413,23 +453,39 @@ def create_run(track: Track, processing: ProcessingConfig) -> Run:
     session = object_session(track)
     if session is not None:
         prune_terminal_runs_without_stems(session, track)
-        deduplicate_terminal_runs_by_profile(session, track)
+        deduplicate_terminal_runs_by_pipeline(session, track)
 
-    active_same_profile = next(
+        requested = set(processing.visible_stems)
+        reusable = next(
+            (
+                run
+                for run in track.runs
+                if run.status == RunStatus.completed.value
+                and resolve_run_processing(run).quality == processing.quality
+                and requested.issubset(generated_stem_names(run))
+            ),
+            None,
+        )
+        if reusable is not None:
+            update_visible_stems(reusable, processing.visible_stems)
+            _touch_track(track)
+            return reusable
+
+    active_same_pipeline = next(
         (
             run
-            for run in _profile_runs(track, processing.profile_key)
+            for run in _pipeline_runs(track, processing.pipeline_key)
             if _run_is_active(run)
         ),
         None,
     )
-    if active_same_profile is not None:
-        raise ValueError(f"{processing.profile_label} is already queued or running for this song.")
+    if active_same_pipeline is not None:
+        raise ValueError(f"{processing.label} is already queued or running for this song.")
 
     _touch_track(track)
     run = Run(
         track_id=track.id,
-        profile_key=processing.profile_key,
+        pipeline_key=processing.pipeline_key,
         status=RunStatus.queued.value,
         progress=0.0,
         status_message="",
@@ -580,7 +636,7 @@ def delete_run(session: Session, run_id: str) -> None:
     if run.status not in TERMINAL_RUN_STATUSES:
         raise ValueError("Only completed, failed, or cancelled runs can be deleted.")
     if run.track and run.track.keeper_run_id == run.id:
-        raise ValueError("Clear the preferred split before deleting this run.")
+        raise ValueError("Clear the preferred output before deleting this run.")
 
     if run.track is not None:
         _touch_track(run.track)
@@ -627,12 +683,12 @@ def prune_terminal_runs_without_stems(session: Session, track: Track) -> int:
     return deleted
 
 
-def deduplicate_terminal_runs_by_profile(session: Session, track: Track) -> int:
+def deduplicate_terminal_runs_by_pipeline(session: Session, track: Track) -> int:
     deleted = 0
-    profile_keys = {_run_profile_key(run) for run in track.runs}
+    pipeline_keys = {_run_pipeline_key(run) for run in track.runs}
 
-    for profile_key in profile_keys:
-        matching_runs = _profile_runs(track, profile_key)
+    for pipeline_key in pipeline_keys:
+        matching_runs = _pipeline_runs(track, pipeline_key)
         if any(_run_is_active(run) for run in matching_runs):
             continue
 
@@ -653,7 +709,7 @@ def deduplicate_terminal_runs_by_profile(session: Session, track: Track) -> int:
     return deleted
 
 
-def replace_terminal_runs_for_completed_profile(session: Session, completed_run: Run) -> int:
+def replace_terminal_runs_for_completed_pipeline(session: Session, completed_run: Run) -> int:
     track = session.get(
         Track,
         completed_run.track_id,
@@ -664,7 +720,7 @@ def replace_terminal_runs_for_completed_profile(session: Session, completed_run:
 
     replaced_keeper = False
     deleted = 0
-    for run in _profile_runs(track, _run_profile_key(completed_run), exclude_run_id=completed_run.id):
+    for run in _pipeline_runs(track, _run_pipeline_key(completed_run), exclude_run_id=completed_run.id):
         if run.status not in TERMINAL_RUN_STATUSES:
             continue
         if track.keeper_run_id == run.id:
@@ -680,10 +736,10 @@ def replace_terminal_runs_for_completed_profile(session: Session, completed_run:
     return deleted
 
 
-def backfill_split_run_deduplication(session: Session) -> int:
+def backfill_pipeline_run_deduplication(session: Session) -> int:
     deleted = 0
     for track in list_tracks(session):
-        deleted += deduplicate_terminal_runs_by_profile(session, track)
+        deleted += deduplicate_terminal_runs_by_pipeline(session, track)
     if deleted:
         session.commit()
     return deleted
@@ -796,7 +852,7 @@ def _prepare_track_delete(
         raise LookupError(f"Track '{track_id}' does not exist.")
 
     if any(_run_is_active(run) for run in track.runs):
-        raise ValueError("Cancel or wait for queued or running splits before deleting this track.")
+        raise ValueError("Cancel or wait for queued or running stem jobs before deleting this track.")
 
     for run in list(track.runs):
         schedule_path_cleanup(session, *_run_file_paths(run, include_source=False))
@@ -886,7 +942,7 @@ def write_metadata_file(track: Track, run: Run, target_path: Path) -> None:
                 },
                 "run": {
                     "id": run.id,
-                    "profile_key": run.profile_key,
+                    "pipeline_key": run.pipeline_key,
                     "status": run.status,
                     "progress": run.progress,
                     "status_message": run.status_message,

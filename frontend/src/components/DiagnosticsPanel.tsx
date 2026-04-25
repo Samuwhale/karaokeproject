@@ -13,7 +13,7 @@ const REMEDIATION: { pattern: RegExp; hint: string }[] = [
   { pattern: /yt-dlp/i, hint: 'Install with `brew install yt-dlp` and restart the worker.' },
   { pattern: /ffmpeg|ffprobe/i, hint: 'Install with `brew install ffmpeg`.' },
   { pattern: /audio-separator/i, hint: 'Install with `pip install -e ".[processing]"` inside the venv.' },
-  { pattern: /disk/i, hint: 'Free up space in the output or model cache directories.' },
+  { pattern: /disk/i, hint: 'Free up space in the output or processing cache directories.' },
 ]
 
 function remediationFor(issue: string): string | null {

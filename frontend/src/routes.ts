@@ -1,6 +1,6 @@
 import type { SongBrowseSort } from './components/trackListView'
 
-export type SongsFilter = 'all' | 'needs-split' | 'processing' | 'attention' | 'ready'
+export type SongsFilter = 'all' | 'needs-stems' | 'processing' | 'attention' | 'ready'
 
 export type SongsView = {
   search: string
@@ -9,7 +9,7 @@ export type SongsView = {
 }
 
 const SONG_SORTS = new Set<SongBrowseSort>(['recent', 'created', 'title', 'runs'])
-const SONG_FILTERS = new Set<SongsFilter>(['all', 'needs-split', 'processing', 'attention', 'ready'])
+const SONG_FILTERS = new Set<SongsFilter>(['all', 'needs-stems', 'processing', 'attention', 'ready'])
 
 export function parseSongsView(searchParams: URLSearchParams): SongsView {
   const sort = searchParams.get('sort')

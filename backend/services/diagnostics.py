@@ -74,7 +74,7 @@ def collect_diagnostics(session: Session, runtime_settings: RuntimeSettings) -> 
     if not storage_paths.outputs_dir.exists():
         issues.append("Configured output directory does not exist.")
     if not storage_paths.model_cache_dir.exists():
-        issues.append("Configured model cache directory does not exist.")
+        issues.append("Configured processing cache directory does not exist.")
 
     disk_usage = shutil.disk_usage(storage_paths.outputs_dir)
     return DiagnosticsResponse(

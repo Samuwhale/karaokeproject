@@ -34,7 +34,8 @@ from backend.services.processing import (
     ProcessingConfig,
     build_processing_from_request,
     serialize_processing_config,
-    serialize_processing_profiles,
+    serialize_quality_options,
+    serialize_stem_options,
 )
 from backend.services.settings import get_or_create_settings
 from backend.services.storage import resolve_storage_paths
@@ -134,7 +135,8 @@ def resolve_youtube_import(
         source_kind=resolved.source_kind,
         source_title=resolved.title,
         drafts=[serialize_draft(session, draft) for draft in drafts],
-        profiles=serialize_processing_profiles(),
+        stem_options=serialize_stem_options(),
+        quality_options=serialize_quality_options(),
         default_processing=serialize_processing_config(processing),
     )
 
@@ -206,7 +208,8 @@ def resolve_local_import(
 
     return ResolveLocalImportResponse(
         drafts=[serialize_draft(session, draft) for draft in drafts],
-        profiles=serialize_processing_profiles(),
+        stem_options=serialize_stem_options(),
+        quality_options=serialize_quality_options(),
         default_processing=serialize_processing_config(processing),
     )
 

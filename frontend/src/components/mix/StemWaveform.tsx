@@ -1,5 +1,7 @@
 import { useRef, type PointerEvent as ReactPointerEvent } from 'react'
 
+import { formatDuration } from '../metrics'
+
 type StemWaveformProps = {
   peaks: number[]
   currentTime: number
@@ -79,6 +81,9 @@ export function StemWaveform({
       aria-valuemin={interactive ? 0 : undefined}
       aria-valuemax={interactive ? Math.max(1, Math.round(safeDuration)) : undefined}
       aria-valuenow={interactive ? Math.round(currentTime) : undefined}
+      aria-valuetext={
+        interactive ? `${formatDuration(currentTime)} of ${formatDuration(safeDuration)}` : undefined
+      }
       aria-hidden={interactive ? undefined : true}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

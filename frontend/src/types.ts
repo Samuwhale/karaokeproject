@@ -1,20 +1,25 @@
-export type ProcessingProfile = {
-  key: string
+export type StemOption = {
+  name: string
   label: string
-  strength: string
-  best_for: string
-  tradeoff: string
-  stems: string[]
+}
+
+export type QualityOption = {
+  key: StemQuality
+  label: string
 }
 
 export type RunProcessingConfig = {
-  profile_key: string
-  profile_label: string
+  stems: string[]
+  quality: StemQuality
+  label: string
 }
 
 export type RunProcessingConfigInput = {
-  profile_key: string
+  stems: string[]
+  quality: StemQuality
 }
+
+export type StemQuality = 'fast' | 'balanced' | 'best'
 
 export type Settings = {
   storage: {
@@ -29,9 +34,10 @@ export type Settings = {
     temp_max_age_hours: number
     export_bundle_max_age_days: number
   }
-  default_profile: string
+  default_stem_selection: RunProcessingConfig
   export_mp3_bitrate: string
-  profiles: ProcessingProfile[]
+  stem_options: StemOption[]
+  quality_options: QualityOption[]
 }
 
 export type StorageBucketKey =
@@ -207,13 +213,15 @@ export type ResolveYouTubeImportResponse = {
   source_kind: string
   source_title: string
   drafts: ImportDraft[]
-  profiles: ProcessingProfile[]
+  stem_options: StemOption[]
+  quality_options: QualityOption[]
   default_processing: RunProcessingConfig
 }
 
 export type ResolveLocalImportResponse = {
   drafts: ImportDraft[]
-  profiles: ProcessingProfile[]
+  stem_options: StemOption[]
+  quality_options: QualityOption[]
   default_processing: RunProcessingConfig
 }
 
@@ -336,7 +344,7 @@ export type ExportPlanTrack = {
   track_id: string
   track_title: string
   run_id: string | null
-  split_label: string | null
+  output_label: string | null
   artifacts: ExportPlanArtifact[]
   skip_reason: string | null
 }

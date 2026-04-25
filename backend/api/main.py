@@ -13,7 +13,7 @@ from backend.api.routes.tracks import router as tracks_router
 from backend.core.config import get_runtime_settings
 from backend.db.session import SessionLocal, init_database
 from backend.services.storage import apply_storage_retention
-from backend.services.tracks import backfill_content_hashes, backfill_split_run_deduplication
+from backend.services.tracks import backfill_content_hashes, backfill_pipeline_run_deduplication
 
 
 @asynccontextmanager
@@ -24,7 +24,7 @@ async def lifespan(_: FastAPI):
     with SessionLocal() as session:
         apply_storage_retention(session, runtime_settings)
         backfill_content_hashes(session)
-        backfill_split_run_deduplication(session)
+        backfill_pipeline_run_deduplication(session)
     yield
 
 

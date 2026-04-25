@@ -182,7 +182,7 @@ export function getSettings() {
   return fetchApi<Settings>('/api/settings')
 }
 
-export function updateSettings(settings: Omit<Settings, 'profiles'>) {
+export function updateSettings(settings: Omit<Settings, 'stem_options' | 'quality_options'>) {
   return putApi<Settings>('/api/settings', settings)
 }
 

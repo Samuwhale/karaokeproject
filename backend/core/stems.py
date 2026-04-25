@@ -31,7 +31,7 @@ CANONICAL_STEMS: tuple[StemRole, ...] = (
     StemRole("vocals", "Vocals", ("vocals", "vocal", "voice"), 1),
     # audio-separator's UVR-BVE model emits filenames containing "(Lead Vocals)"
     # and "(Backing Vocals)" — spaces are preserved, not underscored — so the
-    # space-forms below are load-bearing for the vocal-split profile. The
+    # space-forms below are load-bearing for the vocal-detail route. The
     # longer aliases (with spaces) must beat plain "vocals" during the
     # longest-match sort in _ALIAS_LOOKUP.
     StemRole("lead_vocals", "Lead vocals", ("lead vocals", "lead_vocals", "lead-vocals", "main vocals", "main_vocals", "leadvocals"), 2),

@@ -4,7 +4,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.core.config import RuntimeSettings
-from backend.core.constants import DEFAULT_PROFILE_KEY, PROFILE_LOOKUP
 from backend.db.models import AppSettings
 from backend.schemas.settings import (
     RetentionSettingsResponse,
@@ -12,7 +11,15 @@ from backend.schemas.settings import (
     SettingsUpdateRequest,
     StorageSettingsResponse,
 )
-from backend.services.processing import normalize_export_bitrate, serialize_processing_profiles
+from backend.services.processing import (
+    build_processing_config,
+    default_stem_selection_metadata,
+    normalize_export_bitrate,
+    serialize_processing_config,
+    serialize_quality_options,
+    serialize_stem_options,
+    settings_default_selection,
+)
 from backend.services.storage import resolve_storage_paths
 
 DEFAULT_TEMP_MAX_AGE_HOURS = 24
@@ -38,7 +45,7 @@ def get_or_create_settings(session: Session, runtime_settings: RuntimeSettings) 
             model_cache_directory=str(runtime_settings.model_cache_dir.resolve()),
             temp_max_age_hours=DEFAULT_TEMP_MAX_AGE_HOURS,
             export_bundle_max_age_days=DEFAULT_EXPORT_BUNDLE_MAX_AGE_DAYS,
-            default_profile=DEFAULT_PROFILE_KEY,
+            default_stem_selection=default_stem_selection_metadata(),
             export_mp3_bitrate="320k",
         )
         session.add(settings)
@@ -73,9 +80,8 @@ def _backfill_settings(settings: AppSettings, runtime_settings: RuntimeSettings)
         if getattr(settings, field_name) is None:
             setattr(settings, field_name, value)
             changed = True
-    # Keep settings pinned to the current canonical split keys.
-    if settings.default_profile not in PROFILE_LOOKUP:
-        settings.default_profile = DEFAULT_PROFILE_KEY
+    if not isinstance(settings.default_stem_selection, dict):
+        settings.default_stem_selection = default_stem_selection_metadata()
         changed = True
     normalized_bitrate = normalize_export_bitrate(settings.export_mp3_bitrate)
     if settings.export_mp3_bitrate != normalized_bitrate:
@@ -99,9 +105,15 @@ def serialize_settings(settings: AppSettings, runtime_settings: RuntimeSettings)
             temp_max_age_hours=settings.temp_max_age_hours or DEFAULT_TEMP_MAX_AGE_HOURS,
             export_bundle_max_age_days=settings.export_bundle_max_age_days or DEFAULT_EXPORT_BUNDLE_MAX_AGE_DAYS,
         ),
-        default_profile=settings.default_profile,
+        default_stem_selection=serialize_processing_config(
+            build_processing_config(
+                tuple(settings_default_selection(settings)["stems"]),
+                settings_default_selection(settings)["quality"],
+            )
+        ),
         export_mp3_bitrate=normalize_export_bitrate(settings.export_mp3_bitrate),
-        profiles=serialize_processing_profiles(),
+        stem_options=serialize_stem_options(),
+        quality_options=serialize_quality_options(),
     )
 
 
@@ -110,8 +122,6 @@ def update_settings(
     runtime_settings: RuntimeSettings,
     payload: SettingsUpdateRequest,
 ) -> SettingsResponse:
-    if payload.default_profile not in PROFILE_LOOKUP:
-        raise ValueError(f"Unknown profile '{payload.default_profile}'.")
     if payload.retention.temp_max_age_hours < 1:
         raise ValueError("Temp retention must be at least 1 hour.")
     if payload.retention.export_bundle_max_age_days < 1:
@@ -125,7 +135,11 @@ def update_settings(
     settings.model_cache_directory = _resolve_storage_directory(payload.storage.model_cache_directory)
     settings.temp_max_age_hours = payload.retention.temp_max_age_hours
     settings.export_bundle_max_age_days = payload.retention.export_bundle_max_age_days
-    settings.default_profile = payload.default_profile
+    selection = build_processing_config(tuple(payload.default_stem_selection.stems), payload.default_stem_selection.quality)
+    settings.default_stem_selection = {
+        "stems": list(selection.visible_stems),
+        "quality": selection.quality,
+    }
     settings.export_mp3_bitrate = normalize_export_bitrate(payload.export_mp3_bitrate)
 
     resolve_storage_paths(runtime_settings, settings)

@@ -61,7 +61,7 @@ class AppSettings(TimestampMixin, Base):
     model_cache_directory: Mapped[str] = mapped_column(String(512))
     temp_max_age_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     export_bundle_max_age_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    default_profile: Mapped[str] = mapped_column("default_preset", String(64))
+    default_stem_selection: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     export_mp3_bitrate: Mapped[str] = mapped_column(String(32), default="320k")
 
 
@@ -90,7 +90,7 @@ class Run(TimestampMixin, Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_identifier)
     track_id: Mapped[str] = mapped_column(ForeignKey("tracks.id", ondelete="CASCADE"))
-    profile_key: Mapped[str] = mapped_column("preset", String(64))
+    pipeline_key: Mapped[str] = mapped_column("preset", String(128))
     status: Mapped[str] = mapped_column(String(32), default=RunStatus.queued.value)
     progress: Mapped[float] = mapped_column(Float, default=0.0)
     status_message: Mapped[str] = mapped_column(String(255), default="")

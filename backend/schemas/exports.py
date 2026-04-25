@@ -145,7 +145,7 @@ class ExportPlanTrack(BaseModel):
     track_id: str
     track_title: str
     run_id: str | None
-    split_label: str | None = None
+    output_label: str | None = None
     artifacts: list[ExportPlanArtifact]
     skip_reason: str | None = None
 

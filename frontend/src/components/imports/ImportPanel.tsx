@@ -4,7 +4,7 @@ import type { DragEvent } from 'react'
 import { discardRejection } from '../../async'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { filterImportableMediaFiles } from '../../importableMedia'
-import { stemLabel } from '../../stems'
+import { StemSelectionPicker, stemSelectionLabel } from '../StemSelectionPicker'
 import { formatDuration, formatSize } from '../metrics'
 import { Spinner } from '../feedback/Spinner'
 import type {
@@ -12,15 +12,18 @@ import type {
   DraftDuplicateAction,
   ExistingTrackDuplicate,
   ImportDraft,
-  ProcessingProfile,
+  QualityOption,
+  RunProcessingConfigInput,
+  StemOption,
   UpdateImportDraftInput,
 } from '../../types'
 
 export type ImportPanelProps = {
   open: boolean
   drafts: ImportDraft[]
-  profiles: ProcessingProfile[]
-  defaultProfileKey: string
+  stemOptions: StemOption[]
+  qualityOptions: QualityOption[]
+  defaultSelection: RunProcessingConfigInput
   resolvingYoutubeImport: boolean
   resolvingLocalImport: boolean
   confirming: boolean
@@ -163,22 +166,24 @@ const ImportRow = forwardRef<ImportRowHandle, ImportRowProps>(function ImportRow
       </div>
 
       <div className="import-row-fields">
+        <label className="visually-hidden" htmlFor={`import-title-${draft.id}`}>Title</label>
         <input
+          id={`import-title-${draft.id}`}
           type="text"
           value={title ?? draft.title}
           onChange={(event) => setTitle(event.target.value)}
           onBlur={() => discardRejection(flushPendingEdits)}
           placeholder="Title"
-          aria-label="Title"
           disabled={busy}
         />
+        <label className="visually-hidden" htmlFor={`import-artist-${draft.id}`}>Artist</label>
         <input
+          id={`import-artist-${draft.id}`}
           type="text"
           value={artist ?? (draft.artist ?? '')}
           onChange={(event) => setArtist(event.target.value)}
           onBlur={() => discardRejection(flushPendingEdits)}
           placeholder="Artist"
-          aria-label="Artist"
           disabled={busy}
         />
       </div>
@@ -210,7 +215,7 @@ const ImportRow = forwardRef<ImportRowHandle, ImportRowProps>(function ImportRow
                   : draft.existing_track_id,
               }))}
             >
-              Add split
+              Add output
             </button>
             <button
               type="button"
@@ -255,8 +260,9 @@ export function ImportPanel(props: ImportPanelProps) {
 
 function ImportPanelContent({
   drafts,
-  profiles,
-  defaultProfileKey,
+  stemOptions,
+  qualityOptions,
+  defaultSelection,
   resolvingYoutubeImport,
   resolvingLocalImport,
   confirming,
@@ -358,16 +364,9 @@ function ImportPanelContent({
 
   // ---- Review section state -----------------------------------------------
 
-  const activeProfile = profiles.some((p) => p.key === defaultProfileKey)
-    ? defaultProfileKey
-    : profiles[0]?.key ?? defaultProfileKey
-  const [selectedProfileKey, setSelectedProfileKey] = useState<string | null>(null)
+  const [selection, setSelection] = useState(defaultSelection)
   const [pendingDraftActions, setPendingDraftActions] = useState<Record<string, number>>({})
   const rowRefs = useRef<Record<string, ImportRowHandle | null>>({})
-  const profileKey =
-    selectedProfileKey && profiles.some((p) => p.key === selectedProfileKey)
-      ? selectedProfileKey
-      : activeProfile
   const hasPendingDraftActions = Object.keys(pendingDraftActions).length > 0
 
   const unresolved = drafts.filter(needsDuplicateDecision).length
@@ -422,7 +421,7 @@ function ImportPanelContent({
     await onConfirm({
       draft_ids: drafts.map((item) => item.id),
       queue,
-      processing: queue ? { profile_key: profileKey } : undefined,
+      processing: queue ? selection : undefined,
     })
   }
 
@@ -608,35 +607,20 @@ function ImportPanelContent({
 
         {drafts.length > 0 ? (
           <footer className="overlay-foot">
-            {profiles.length > 1 ? (
-              <div className="import-profile-tabs" role="group" aria-label="Split profile">
-                {profiles.map((profile) => {
-                  const isSelected = profile.key === profileKey
-                  return (
-                    <button
-                      key={profile.key}
-                      type="button"
-                      className={`import-profile-tab ${isSelected ? 'is-selected' : ''}`}
-                      aria-pressed={isSelected}
-                      disabled={confirming}
-                      title={profile.stems.length > 0 ? profile.stems.map((s) => stemLabel(s)).join(' · ') : undefined}
-                      onClick={() => setSelectedProfileKey(profile.key)}
-                    >
-                      {profile.label}
-                    </button>
-                  )
-                })}
-              </div>
-            ) : null}
+            <StemSelectionPicker
+              value={selection}
+              stemOptions={stemOptions}
+              qualityOptions={qualityOptions}
+              disabled={confirming}
+              onChange={setSelection}
+            />
             <div className="overlay-foot-bottom">
               <div className="overlay-foot-copy">
                 {hasPendingDraftActions
                   ? 'Saving…'
                   : unresolved > 0
                     ? `${unresolved} duplicate${unresolved === 1 ? '' : 's'} to resolve`
-                    : profiles.length === 1
-                      ? `Split with: ${profiles[0].label}`
-                      : null}
+                    : stemSelectionLabel(selection.stems, stemOptions)}
               </div>
               <div className="overlay-foot-actions">
                 <button
@@ -644,20 +628,18 @@ function ImportPanelContent({
                   className="button-secondary"
                   disabled={!canConfirm}
                   onClick={() => discardRejection(() => confirm(false))}
-                  title="Add to your library without queueing a split. You can split later from the song."
+                  title="Add to your library without creating stems. You can create stems later from the song."
                 >
-                  Add without splitting
+                  Add without stems
                 </button>
-                {profiles.length > 0 ? (
-                  <button
-                    type="button"
-                    className="button-primary"
-                    disabled={!canConfirm}
-                    onClick={() => discardRejection(() => confirm(true))}
-                  >
-                    {confirming ? <><Spinner /> Adding…</> : 'Add and split'}
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className="button-primary"
+                  disabled={!canConfirm || selection.stems.length === 0}
+                  onClick={() => discardRejection(() => confirm(true))}
+                >
+                  {confirming ? <><Spinner /> Adding…</> : 'Add and create stems'}
+                </button>
               </div>
             </div>
           </footer>

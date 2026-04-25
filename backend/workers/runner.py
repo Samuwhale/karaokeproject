@@ -6,7 +6,7 @@ import time
 from backend.core.config import get_runtime_settings
 from backend.db.session import SessionLocal, init_database
 from backend.services.tracks import (
-    backfill_split_run_deduplication,
+    backfill_pipeline_run_deduplication,
     claim_next_run,
     recover_orphaned_runs,
 )
@@ -34,11 +34,11 @@ def main() -> None:
 
     with SessionLocal() as session:
         recovered = recover_orphaned_runs(session)
-        deduplicated = backfill_split_run_deduplication(session)
+        deduplicated = backfill_pipeline_run_deduplication(session)
         if recovered:
             print(f"[worker] recovered {recovered} orphaned run(s) from previous session", flush=True)
         if deduplicated:
-            print(f"[worker] removed {deduplicated} redundant split run(s)", flush=True)
+            print(f"[worker] removed {deduplicated} redundant output run(s)", flush=True)
 
     while not shutdown_requested:
         with SessionLocal() as session:

@@ -2,7 +2,7 @@ import re
 
 from pydantic import BaseModel, field_validator
 
-from backend.schemas.tracks import ProcessingProfileResponse
+from backend.schemas.tracks import QualityOptionResponse, RunProcessingConfigRequest, RunProcessingConfigResponse, StemOptionResponse
 
 
 _BITRATE_PATTERN = re.compile(r"^\d{2,3}k$")
@@ -58,15 +58,16 @@ class RetentionSettingsUpdateRequest(BaseModel):
 class SettingsResponse(BaseModel):
     storage: StorageSettingsResponse
     retention: RetentionSettingsResponse
-    default_profile: str
+    default_stem_selection: RunProcessingConfigResponse
     export_mp3_bitrate: str
-    profiles: list[ProcessingProfileResponse]
+    stem_options: list[StemOptionResponse]
+    quality_options: list[QualityOptionResponse]
 
 
 class SettingsUpdateRequest(BaseModel):
     storage: StorageSettingsUpdateRequest
     retention: RetentionSettingsUpdateRequest
-    default_profile: str
+    default_stem_selection: RunProcessingConfigRequest
     export_mp3_bitrate: str
 
     @field_validator("export_mp3_bitrate", mode="after")

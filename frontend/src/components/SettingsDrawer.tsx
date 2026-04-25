@@ -17,7 +17,7 @@ type SettingsDrawerProps = {
   cleaningLibraryRuns: boolean
   backfillingMetrics: boolean
   onClose: () => void
-  onSaveSettings: (settings: Omit<Settings, 'profiles'>) => Promise<void>
+  onSaveSettings: (settings: Omit<Settings, 'stem_options' | 'quality_options'>) => Promise<void>
   onCleanupTempStorage: () => Promise<void>
   onCleanupExportBundles: () => Promise<void>
   onCleanupLibraryRuns: () => void
@@ -71,7 +71,7 @@ function SettingsDrawerContent({
     view === 'maintenance' && readinessBlocked ? 'Finish setup' : 'Settings'
   const drawerDescription =
     view === 'preferences'
-      ? 'Set the defaults used when you start new splits or exports.'
+      ? 'Set the defaults used when you create stems or export.'
       : view === 'maintenance'
         ? readinessBlocked
           ? 'Processing is blocked. Fix the setup issue first, then return to the workspace.'

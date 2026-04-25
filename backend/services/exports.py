@@ -152,10 +152,14 @@ def _artifact_export_label(kind: str, *, stem_name: str | None = None) -> str:
     return "Export"
 
 
-def _split_export_label(run: Run | None) -> str | None:
+def _output_export_label(run: Run | None) -> str | None:
     if run is None:
         return None
-    return resolve_run_processing(run).profile_label
+    return resolve_run_processing(run).label
+
+
+def _run_visible_stems(run: Run) -> set[str]:
+    return set(resolve_run_processing(run).visible_stems)
 
 
 def _artifact_export_filename(
@@ -164,17 +168,17 @@ def _artifact_export_filename(
     suffix: str,
     *,
     stem_name: str | None = None,
-    split_label: str | None = None,
+    output_label: str | None = None,
 ) -> str:
     track_label = _clean_filename_component(_track_export_label(track), fallback="Track")
     artifact_label = _clean_filename_component(
         _artifact_export_label(kind, stem_name=stem_name),
         fallback="Export",
     )
-    split_suffix = ""
-    if kind != "source" and split_label:
-        split_suffix = f" ({_clean_filename_component(split_label, fallback='Split')})"
-    return f"{track_label} - {artifact_label}{split_suffix}{suffix}"
+    output_suffix = ""
+    if kind != "source" and output_label:
+        output_suffix = f" ({_clean_filename_component(output_label, fallback='Output')})"
+    return f"{track_label} - {artifact_label}{output_suffix}{suffix}"
 
 
 def _resolve_artifact(
@@ -203,16 +207,16 @@ def _resolve_artifact(
         )
 
     if run is None:
-        return _ResolvedArtifact(kind, None, None, False, None, "no preferred or completed split yet")
+        return _ResolvedArtifact(kind, None, None, False, None, "no preferred or completed output yet")
 
-    split_label = _split_export_label(run)
+    output_label = _output_export_label(run)
 
     if kind in _MIX_KINDS:
         return _resolve_mix_artifact(
             track,
             run,
             kind,
-            split_label=split_label,
+            output_label=output_label,
             render_error=(mix_errors or {}).get(kind),
         )
 
@@ -225,7 +229,7 @@ def _resolve_artifact(
             kind,
             stem_name=stem_name,
             fmt=fmt,
-            split_label=split_label,
+            output_label=output_label,
             encode_error=(stem_mp3_errors or {}).get(stem_name) if fmt == "mp3" else None,
         )
 
@@ -241,7 +245,7 @@ def _resolve_artifact(
     if not artifact_path.is_file():
         return _ResolvedArtifact(kind, None, None, False, None, "file missing on disk")
 
-    filename = _artifact_export_filename(track, kind, artifact_path.suffix, split_label=split_label)
+    filename = _artifact_export_filename(track, kind, artifact_path.suffix, output_label=output_label)
     return _ResolvedArtifact(
         kind,
         _ResolvedFile(
@@ -262,12 +266,14 @@ def _resolve_stem_artifact(
     *,
     stem_name: str,
     fmt: str,
-    split_label: str | None = None,
+    output_label: str | None = None,
     encode_error: str | None = None,
 ) -> _ResolvedArtifact:
     from backend.core.stems import export_stem_kind
 
     if fmt == "wav":
+        if stem_name not in _run_visible_stems(run):
+            return _ResolvedArtifact(kind, None, None, False, None, "stem is not selected for this output")
         target_kind = export_stem_kind(stem_name, fmt="wav")
         artifact = next((a for a in run.artifacts if a.kind == target_kind), None)
         if artifact is None:
@@ -280,7 +286,7 @@ def _resolve_stem_artifact(
             kind,
             artifact_path.suffix,
             stem_name=stem_name,
-            split_label=split_label,
+            output_label=output_label,
         )
         return _ResolvedArtifact(
             kind,
@@ -295,6 +301,8 @@ def _resolve_stem_artifact(
         )
 
     wav_kind = export_stem_kind(stem_name, fmt="wav")
+    if stem_name not in _run_visible_stems(run):
+        return _ResolvedArtifact(kind, None, None, False, None, "stem is not selected for this output")
     wav_artifact = next((a for a in run.artifacts if a.kind == wav_kind), None)
     if wav_artifact is None:
         return _ResolvedArtifact(kind, None, None, False, None, f"run has no {stem_name} stem")
@@ -313,7 +321,7 @@ def _resolve_stem_artifact(
             kind,
             mp3_path.suffix,
             stem_name=stem_name,
-            split_label=split_label,
+            output_label=output_label,
         )
         return _ResolvedArtifact(
             kind,
@@ -330,7 +338,7 @@ def _resolve_stem_artifact(
     return _ResolvedArtifact(
         kind,
         None,
-        _artifact_export_filename(track, kind, ".mp3", stem_name=stem_name, split_label=split_label),
+        _artifact_export_filename(track, kind, ".mp3", stem_name=stem_name, output_label=output_label),
         True,
         None,
         None,
@@ -342,7 +350,7 @@ def _resolve_mix_artifact(
     run: Run,
     kind: str,
     *,
-    split_label: str | None = None,
+    output_label: str | None = None,
     render_error: str | None = None,
 ) -> _ResolvedArtifact:
     if not mixable_artifacts(run):
@@ -364,7 +372,7 @@ def _resolve_mix_artifact(
                 track,
                 kind,
                 ".wav" if kind == "mix-wav" else ".mp3",
-                split_label=split_label,
+                output_label=output_label,
             ),
             True,
             None,
@@ -372,7 +380,7 @@ def _resolve_mix_artifact(
         )
 
     assert existing_path is not None
-    filename = _artifact_export_filename(track, kind, existing_path.suffix, split_label=split_label)
+    filename = _artifact_export_filename(track, kind, existing_path.suffix, output_label=output_label)
     return _ResolvedArtifact(
         kind,
         _ResolvedFile(
@@ -693,7 +701,7 @@ def plan_export_bundle(
                     track_id=track_id,
                     track_title="(deleted)",
                     run_id=None,
-                    split_label=None,
+                    output_label=None,
                     artifacts=[],
                     skip_reason="track no longer exists",
                 )
@@ -750,7 +758,7 @@ def plan_export_bundle(
                 track_id=track_id,
                 track_title=track.title,
                 run_id=run.id if run is not None else None,
-                split_label=_split_export_label(run),
+                output_label=_output_export_label(run),
                 artifacts=resolved_artifacts,
                 skip_reason=skip_reason,
             )
@@ -788,6 +796,8 @@ def list_export_stems(
         for artifact in run.artifacts:
             stem_name = stem_name_from_kind(artifact.kind)
             if stem_name is None or stem_name in seen_in_run:
+                continue
+            if stem_name not in _run_visible_stems(run):
                 continue
             seen_in_run.add(stem_name)
             counts[stem_name] = counts.get(stem_name, 0) + 1

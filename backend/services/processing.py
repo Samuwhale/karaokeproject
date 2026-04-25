@@ -4,46 +4,51 @@ from dataclasses import dataclass
 from typing import Any
 
 from backend.core.constants import (
-    DEFAULT_PROFILE_KEY,
-    PROFILE_DEFINITIONS,
-    PROFILE_LOOKUP,
-    resolve_profile_key,
+    DEFAULT_QUALITY,
+    DEFAULT_STEMS,
+    PUBLIC_STEMS,
+    QUALITY_OPTIONS,
+    STEM_OPTIONS,
+    STEM_QUALITY_KEYS,
+    build_pipeline_definition,
 )
+from backend.core.stems import stem_display_label
 from backend.db.models import AppSettings, Run
 from backend.schemas.tracks import (
-    ProcessingProfileResponse,
+    QualityOptionResponse,
     RunProcessingConfigRequest,
     RunProcessingConfigResponse,
+    StemOptionResponse,
 )
 
 DEFAULT_MP3_BITRATE = "320k"
 
 
 @dataclass(frozen=True)
-class FollowupProcessingConfig:
-    input_stem: str
+class ProcessingStepConfig:
+    key: str
     model_filename: str
+    source_stem: str | None = None
 
 
 @dataclass(frozen=True)
 class ProcessingConfig:
-    profile_key: str
-    profile_label: str
-    model_filename: str
-    followup: FollowupProcessingConfig | None = None
+    requested_stems: tuple[str, ...]
+    visible_stems: tuple[str, ...]
+    generated_stems: tuple[str, ...]
+    quality: str
+    label: str
+    pipeline_key: str
+    steps: tuple[ProcessingStepConfig, ...]
 
     def to_metadata(self) -> dict[str, Any]:
-        metadata: dict[str, Any] = {
-            "profile_key": self.profile_key,
-            "profile_label": self.profile_label,
-            "model_filename": self.model_filename,
+        return {
+            "requested_stems": list(self.requested_stems),
+            "visible_stems": list(self.visible_stems),
+            "generated_stems": list(self.generated_stems),
+            "quality": self.quality,
+            "pipeline_key": self.pipeline_key,
         }
-        if self.followup is not None:
-            metadata["followup"] = {
-                "input_stem": self.followup.input_stem,
-                "model_filename": self.followup.model_filename,
-            }
-        return metadata
 
 
 def normalize_export_bitrate(value: str | None, fallback: str = DEFAULT_MP3_BITRATE) -> str:
@@ -51,25 +56,74 @@ def normalize_export_bitrate(value: str | None, fallback: str = DEFAULT_MP3_BITR
     return normalized or fallback
 
 
-def build_processing_config(profile_key: str) -> ProcessingConfig:
-    resolved_key = resolve_profile_key(profile_key)
-    if resolved_key not in PROFILE_LOOKUP:
-        raise ValueError(f"Unknown processing profile '{profile_key}'.")
+def normalize_stem_selection(stems: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:
+    allowed = set(PUBLIC_STEMS)
+    seen: set[str] = set()
+    normalized: list[str] = []
+    for stem in stems or DEFAULT_STEMS:
+        cleaned = stem.strip() if isinstance(stem, str) else ""
+        if not cleaned:
+            continue
+        if cleaned not in allowed:
+            raise ValueError(f"Unknown stem '{cleaned}'.")
+        if cleaned in seen:
+            continue
+        seen.add(cleaned)
+        normalized.append(cleaned)
+    if not normalized:
+        raise ValueError("Choose at least one stem.")
+    return tuple(stem for stem in PUBLIC_STEMS if stem in seen)
 
-    profile = PROFILE_LOOKUP[resolved_key]
-    followup = (
-        FollowupProcessingConfig(
-            input_stem=profile.followup.input_stem,
-            model_filename=profile.followup.model_filename,
-        )
-        if profile.followup is not None
-        else None
+
+def normalize_quality(quality: str | None) -> str:
+    cleaned = (quality or DEFAULT_QUALITY).strip().lower()
+    if cleaned not in STEM_QUALITY_KEYS:
+        raise ValueError(f"Unknown quality '{cleaned}'.")
+    return cleaned
+
+
+def default_stem_selection_metadata() -> dict[str, Any]:
+    return {"stems": list(DEFAULT_STEMS), "quality": DEFAULT_QUALITY}
+
+
+def settings_default_selection(settings: AppSettings) -> dict[str, Any]:
+    raw = settings.default_stem_selection
+    if isinstance(raw, dict):
+        try:
+            stems = list(normalize_stem_selection(raw.get("stems")))
+            quality = normalize_quality(str(raw.get("quality") or DEFAULT_QUALITY))
+            return {"stems": stems, "quality": quality}
+        except ValueError:
+            return default_stem_selection_metadata()
+    return default_stem_selection_metadata()
+
+
+def selection_label(stems: tuple[str, ...]) -> str:
+    return " + ".join(stem_display_label(stem) for stem in stems)
+
+
+def build_processing_config(stems: tuple[str, ...], quality: str) -> ProcessingConfig:
+    normalized_stems = normalize_stem_selection(stems)
+    normalized_quality = normalize_quality(quality)
+    pipeline = build_pipeline_definition(
+        requested_stems=normalized_stems,
+        quality=normalized_quality,
     )
     return ProcessingConfig(
-        profile_key=profile.key,
-        profile_label=profile.label,
-        model_filename=profile.model_filename,
-        followup=followup,
+        requested_stems=normalized_stems,
+        visible_stems=normalized_stems,
+        generated_stems=pipeline.generated_stems,
+        quality=pipeline.quality,
+        label=selection_label(normalized_stems),
+        pipeline_key=pipeline.key,
+        steps=tuple(
+            ProcessingStepConfig(
+                key=step.key,
+                model_filename=step.model_filename,
+                source_stem=step.source_stem,
+            )
+            for step in pipeline.steps
+        ),
     )
 
 
@@ -78,39 +132,74 @@ def build_processing_from_request(
     settings: AppSettings,
 ) -> ProcessingConfig:
     if request is None:
-        return build_processing_config(settings.default_profile)
-    return build_processing_config(request.profile_key)
+        selection = settings_default_selection(settings)
+        return build_processing_config(tuple(selection["stems"]), selection["quality"])
+    return build_processing_config(tuple(request.stems), request.quality)
 
 
 def resolve_run_processing(run: Run) -> ProcessingConfig:
     metadata = run.metadata_json or {}
     processing = metadata.get("processing")
     if isinstance(processing, dict):
-        profile_key = str(processing.get("profile_key") or run.profile_key or DEFAULT_PROFILE_KEY)
-    else:
-        profile_key = run.profile_key or DEFAULT_PROFILE_KEY
-    try:
-        return build_processing_config(profile_key)
-    except ValueError:
-        return build_processing_config(DEFAULT_PROFILE_KEY)
+        try:
+            config = build_processing_config(
+                tuple(processing.get("visible_stems") or processing.get("requested_stems") or DEFAULT_STEMS),
+                str(processing.get("quality") or DEFAULT_QUALITY),
+            )
+        except ValueError:
+            config = build_processing_config(DEFAULT_STEMS, DEFAULT_QUALITY)
+        generated = processing.get("generated_stems")
+        if isinstance(generated, list):
+            generated_stems = tuple(
+                stem for stem in PUBLIC_STEMS if stem in {item for item in generated if isinstance(item, str)}
+            )
+            return ProcessingConfig(
+                requested_stems=config.requested_stems,
+                visible_stems=config.visible_stems,
+                generated_stems=generated_stems or config.generated_stems,
+                quality=config.quality,
+                label=config.label,
+                pipeline_key=str(processing.get("pipeline_key") or config.pipeline_key),
+                steps=config.steps,
+            )
+        return config
+
+    return build_processing_config(DEFAULT_STEMS, DEFAULT_QUALITY)
 
 
 def serialize_processing_config(config: ProcessingConfig) -> RunProcessingConfigResponse:
     return RunProcessingConfigResponse(
-        profile_key=config.profile_key,
-        profile_label=config.profile_label,
+        stems=list(config.visible_stems),
+        quality=config.quality,
+        label=config.label,
     )
 
 
-def serialize_processing_profiles() -> list[ProcessingProfileResponse]:
+def serialize_stem_options() -> list[StemOptionResponse]:
     return [
-        ProcessingProfileResponse(
-            key=profile.key,
-            label=profile.label,
-            strength=profile.strength,
-            best_for=profile.best_for,
-            tradeoff=profile.tradeoff,
-            stems=list(profile.stems),
-        )
-        for profile in PROFILE_DEFINITIONS
+        StemOptionResponse(name=option.name, label=option.label)
+        for option in STEM_OPTIONS
     ]
+
+
+def serialize_quality_options() -> list[QualityOptionResponse]:
+    return [
+        QualityOptionResponse(key=option.key, label=option.label)
+        for option in QUALITY_OPTIONS
+    ]
+
+
+def update_visible_stems(run: Run, stems: tuple[str, ...]) -> None:
+    metadata = dict(run.metadata_json or {})
+    processing = dict(metadata.get("processing") or {})
+    visible = normalize_stem_selection(stems)
+    generated = processing.get("generated_stems")
+    if isinstance(generated, list):
+        generated_set = {item for item in generated if isinstance(item, str)}
+        missing = [stem for stem in visible if stem not in generated_set]
+        if missing:
+            raise ValueError(f"Run has not produced: {', '.join(missing)}.")
+    processing["requested_stems"] = list(visible)
+    processing["visible_stems"] = list(visible)
+    metadata["processing"] = processing
+    run.metadata_json = metadata
