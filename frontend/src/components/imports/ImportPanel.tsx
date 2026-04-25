@@ -432,7 +432,7 @@ function ImportPanelContent({
                   ref={urlInputRef}
                   type="url"
                   className="import-panel-url-input"
-                  placeholder="Paste a YouTube URL…"
+                  placeholder="Paste a YouTube URL or playlist…"
                   value={youtubeUrl}
                   onChange={(event) => {
                     setYoutubeUrl(event.target.value)
@@ -472,7 +472,7 @@ function ImportPanelContent({
             {playlistHint ? (
               <p className="import-panel-hint">{playlistHint}</p>
             ) : !youtubeUrl && !drafts.length ? (
-              <p className="import-panel-hint">Paste a YouTube URL from anywhere — this panel opens automatically. Press <kbd>a</kbd> to get back here.</p>
+              <p className="import-panel-hint">Paste a YouTube URL from anywhere in the app to auto-import. Press <kbd>a</kbd> to reopen this panel.</p>
             ) : null}
 
             <div className="import-panel-or" aria-hidden>or</div>

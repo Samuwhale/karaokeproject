@@ -921,7 +921,6 @@ function MixWorkspaceContent({
             <>
               <StemSplitIcon />
               <strong>Split this song into stems</strong>
-              <p>Choose a split type below to separate it into individual stems.</p>
               <InlineProfilePicker
                 profiles={profiles}
                 defaultProfileKey={defaultProfileKey}

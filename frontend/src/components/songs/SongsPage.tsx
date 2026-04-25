@@ -486,7 +486,7 @@ export function SongsPage({
                 <input
                   type="search"
                   className="library-search"
-                  placeholder="Search"
+                  placeholder="Search songs"
                   aria-label="Search songs"
                   value={view.search}
                   onChange={(event) => onViewChange({ ...view, search: event.target.value })}
