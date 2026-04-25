@@ -17,7 +17,7 @@ from backend.services.diagnostics import collect_diagnostics
 from backend.services.exports import export_job_path
 from backend.services.settings import get_or_create_settings
 from backend.services.storage import resolve_storage_paths
-from backend.services.tracks import get_track
+from backend.services.tracks import get_track, track_output_root
 
 router = APIRouter(tags=["system"])
 
@@ -60,8 +60,7 @@ def _resolve_reveal_target(
     track = get_track(session, payload.track_id)
     if track is None:
         raise HTTPException(status_code=404, detail="Track not found.")
-    source_slug = (track.metadata_json or {}).get("source_slug") or track.id
-    return storage_paths.outputs_dir / source_slug, False
+    return track_output_root(track, storage_paths.outputs_dir), False
 
 
 @router.post("/system/reveal", response_model=RevealFolderResponse)

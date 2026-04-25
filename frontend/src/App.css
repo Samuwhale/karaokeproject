@@ -470,11 +470,18 @@ h1, h2, h3, h4, p {
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
-  transition: background-color 80ms ease, border-color 80ms ease, color 80ms ease, box-shadow 80ms ease;
+  transition: background-color 80ms ease, border-color 80ms ease, color 80ms ease, box-shadow 80ms ease, transform 80ms ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-xs);
+}
+
+.button-primary:active:not(:disabled),
+.button-secondary:active:not(:disabled),
+.button-danger:active:not(:disabled) {
+  transform: scale(0.97);
+  transition-duration: 50ms;
 }
 
 .button-primary {
@@ -1272,5 +1279,20 @@ code {
 
 .export-result-extra-action {
   display: inline-flex;
+}
+
+/* -------- Theme transition -------------------------------------------- */
+
+/* Applied briefly during theme toggle — crossfades surface colors smoothly */
+.theme-transitioning,
+.theme-transitioning * {
+  transition: background-color 250ms ease, color 250ms ease, border-color 250ms ease, box-shadow 250ms ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-transitioning,
+  .theme-transitioning * {
+    transition: none !important;
+  }
 }
 

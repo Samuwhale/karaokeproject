@@ -136,7 +136,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
                 "sample_rate": metadata.sample_rate,
                 "channels": metadata.channels,
                 "normalized_source": str(normalized_path.resolve()),
-                "processing": processing,
+                "processing": processing.to_metadata(),
             },
         )
         add_run_artifact(

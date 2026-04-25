@@ -69,6 +69,19 @@ def _track_source_download_url(track_id: str) -> str:
     return f"/api/tracks/{track_id}/source"
 
 
+def track_source_path(track: Track) -> Path:
+    return Path(track.source_path)
+
+
+def track_output_root(track: Track, outputs_dir: Path) -> Path:
+    for run in _sorted_runs(track):
+        if run.output_directory:
+            return Path(run.output_directory).resolve().parent
+
+    source_slug = (track.metadata_json or {}).get("source_slug") or track.id
+    return outputs_dir / str(source_slug)
+
+
 def _source_format(source_filename: str) -> str:
     return Path(source_filename).suffix.lstrip(".").upper() or "FILE"
 
@@ -723,9 +736,6 @@ def update_track(
             raise ValueError("Title cannot be empty.")
         if clean_title != track.title:
             track.title = clean_title
-            metadata = dict(track.metadata_json or {})
-            metadata["source_slug"] = _slugify(clean_title)
-            track.metadata_json = metadata
             did_change = True
 
     if artist is not UNSET:
@@ -834,9 +844,15 @@ def batch_delete_tracks(session: Session, track_ids: list[str]) -> tuple[int, li
     return deleted, blocked, missing
 
 
-def _directory_size(path: Path) -> int:
+def _path_size(path: Path) -> int:
     if not path.exists():
         return 0
+    if path.is_file():
+        try:
+            return path.stat().st_size
+        except OSError:
+            return 0
+
     total = 0
     for entry in path.rglob("*"):
         if entry.is_file():
@@ -849,7 +865,7 @@ def _directory_size(path: Path) -> int:
 
 def _measure_paths(paths: Iterable[Path]) -> int:
     unique_paths = {path.resolve() for path in paths if path.exists()}
-    return sum(_directory_size(path) for path in unique_paths)
+    return sum(_path_size(path) for path in unique_paths)
 
 
 def _run_file_paths(run: Run, *, include_source: bool) -> set[Path]:

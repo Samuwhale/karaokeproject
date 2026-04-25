@@ -38,6 +38,7 @@ from backend.services.tracks import (
     serialize_track_summary,
     set_keeper_run,
     set_run_mix,
+    track_source_path,
     update_track,
 )
 
@@ -94,8 +95,11 @@ def download_track_source(track_id: str, session: Session = Depends(get_db_sessi
     track = get_track(session, track_id)
     if track is None:
         raise HTTPException(status_code=404, detail="Track not found.")
+    source_path = track_source_path(track)
+    if not source_path.is_file():
+        raise HTTPException(status_code=404, detail="Source file is missing on disk.")
     return FileResponse(
-        path=track.source_path,
+        path=source_path,
         filename=track.source_filename,
         content_disposition_type="attachment",
     )

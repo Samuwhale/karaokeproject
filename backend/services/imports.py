@@ -71,6 +71,17 @@ class DraftCommitResult:
     rollback_actions: list[Callable[[], None]] = field(default_factory=list)
 
 
+def _unique_tracks(tracks: list[Track]) -> list[Track]:
+    seen_ids: set[str] = set()
+    unique: list[Track] = []
+    for track in tracks:
+        if track.id in seen_ids:
+            continue
+        seen_ids.add(track.id)
+        unique.append(track)
+    return unique
+
+
 # ---------------------------------------------------------------------------
 # Resolve endpoints: create drafts
 # ---------------------------------------------------------------------------
@@ -321,6 +332,8 @@ def confirm_import_drafts(
         raise
 
     _run_cleanup_actions(side_effects.post_commit_actions)
+
+    affected_tracks = _unique_tracks(affected_tracks)
 
     for track in affected_tracks:
         session.refresh(track)

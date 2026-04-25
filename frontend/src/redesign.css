@@ -77,12 +77,17 @@
   justify-content: center;
   color: var(--text-muted);
   border-radius: var(--radius-sm);
-  transition: background 120ms, color 120ms;
+  transition: background 120ms, color 120ms, transform 80ms;
 }
 
 .icon-button:hover {
   background: var(--surface-2);
   color: var(--text);
+}
+
+.icon-button:active:not(:disabled) {
+  transform: scale(0.88);
+  transition-duration: 50ms;
 }
 
 .icon-button:focus-visible {
@@ -602,6 +607,12 @@
   background: transparent;
   width: 100%;
   cursor: pointer;
+  transition: background 120ms;
+}
+
+.song-row-open:active {
+  background: var(--surface-active);
+  transition-duration: 50ms;
 }
 
 .song-row-open:focus-visible {
@@ -1583,12 +1594,17 @@ button.mix-top-title-copy:hover .mix-top-edit-icon {
   color: var(--text-muted);
   background: transparent;
   font-weight: 500;
-  transition: color 120ms, background 120ms;
+  transition: color 120ms, background 120ms, transform 80ms;
 }
 
 .mix-preset:hover:not(.is-active) {
   color: var(--text);
   background: var(--surface-hover);
+}
+
+.mix-preset:active {
+  transform: scale(0.95);
+  transition-duration: 50ms;
 }
 
 .mix-preset.is-active {
@@ -2170,6 +2186,14 @@ button.stem-row-gain:focus-visible {
 
 .mix-transport-save.is-saved {
   color: var(--ok);
+}
+
+.mix-transport-save:not(.is-saved) {
+  animation: mix-save-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mix-transport-save:not(.is-saved) { animation: none; }
 }
 
 /* Footer (errors only) --------------------------------------------------- */
@@ -2908,7 +2932,7 @@ button.stem-row-gain:focus-visible {
   background: var(--surface);
   color: var(--accent);
   font-weight: 600;
-  box-shadow: 0 1px 3px color-mix(in oklch, var(--shadow) 12%, transparent);
+  box-shadow: 0 1px 3px color-mix(in oklch, var(--text) 12%, transparent);
 }
 
 .import-profile-tab:focus-visible {
@@ -3081,18 +3105,9 @@ button.stem-row-gain:focus-visible {
 
 /* Save state indicators ---------------------------------------------------- */
 
-.mix-save-state.is-saving {
-  color: var(--text-muted);
-  animation: mix-save-pulse 1.4s ease-in-out infinite;
-}
-
 @keyframes mix-save-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mix-save-state.is-saving { animation: none; }
 }
 
 .mix-save-state.is-saved {
