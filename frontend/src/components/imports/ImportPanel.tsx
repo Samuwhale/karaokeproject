@@ -472,7 +472,7 @@ function ImportPanelContent({
             {playlistHint ? (
               <p className="import-panel-hint">{playlistHint}</p>
             ) : !youtubeUrl && !drafts.length ? (
-              <p className="import-panel-hint">You can also paste a YouTube URL from any screen — this panel opens automatically.</p>
+              <p className="import-panel-hint">Paste a YouTube URL from anywhere — this panel opens automatically. Press <kbd>a</kbd> to get back here.</p>
             ) : null}
 
             <div className="import-panel-or" aria-hidden>or</div>
@@ -515,7 +515,7 @@ function ImportPanelContent({
               ) : (
                 <span className="import-panel-drop-label">
                   <strong>Drop files here</strong>
-                  <span>Audio or video · or click to browse</span>
+                  <span>Audio or video — or click to browse</span>
                 </span>
               )}
             </div>

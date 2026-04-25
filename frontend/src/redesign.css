@@ -2244,6 +2244,10 @@ button.stem-row-gain:focus-visible {
   margin: 0 auto;
 }
 
+.mix-empty {
+  max-width: 420px;
+}
+
 .mix-blocked strong, .mix-empty strong {
   font-family: var(--font-display);
   font-size: 20px;
@@ -3265,5 +3269,18 @@ button.stem-row-gain:focus-visible {
   opacity: 1;
 }
 
-
+/* Inline keyboard shortcut hint (e.g. in import panel copy) */
+.import-panel-hint kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  padding: 1px 5px;
+  line-height: 1.6;
+  vertical-align: 1px;
+}
 

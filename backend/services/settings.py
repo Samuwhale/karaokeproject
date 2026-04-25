@@ -12,11 +12,18 @@ from backend.schemas.settings import (
     SettingsUpdateRequest,
     StorageSettingsResponse,
 )
-from backend.services.processing import serialize_processing_profiles
+from backend.services.processing import normalize_export_bitrate, serialize_processing_profiles
 from backend.services.storage import resolve_storage_paths
 
 DEFAULT_TEMP_MAX_AGE_HOURS = 24
 DEFAULT_EXPORT_BUNDLE_MAX_AGE_DAYS = 7
+
+
+def _resolve_storage_directory(raw_value: str) -> str:
+    cleaned = raw_value.strip()
+    if not cleaned:
+        raise ValueError("Storage directories cannot be empty.")
+    return str(Path(cleaned).expanduser().resolve())
 
 
 def get_or_create_settings(session: Session, runtime_settings: RuntimeSettings) -> AppSettings:
@@ -70,6 +77,10 @@ def _backfill_settings(settings: AppSettings, runtime_settings: RuntimeSettings)
     if settings.default_profile not in PROFILE_LOOKUP:
         settings.default_profile = DEFAULT_PROFILE_KEY
         changed = True
+    normalized_bitrate = normalize_export_bitrate(settings.export_mp3_bitrate)
+    if settings.export_mp3_bitrate != normalized_bitrate:
+        settings.export_mp3_bitrate = normalized_bitrate
+        changed = True
     return changed
 
 
@@ -89,7 +100,7 @@ def serialize_settings(settings: AppSettings, runtime_settings: RuntimeSettings)
             export_bundle_max_age_days=settings.export_bundle_max_age_days or DEFAULT_EXPORT_BUNDLE_MAX_AGE_DAYS,
         ),
         default_profile=settings.default_profile,
-        export_mp3_bitrate=settings.export_mp3_bitrate,
+        export_mp3_bitrate=normalize_export_bitrate(settings.export_mp3_bitrate),
         profiles=serialize_processing_profiles(),
     )
 
@@ -107,15 +118,15 @@ def update_settings(
         raise ValueError("Export bundle retention must be at least 1 day.")
 
     settings = get_or_create_settings(session, runtime_settings)
-    settings.uploads_directory = str(Path(payload.storage.uploads_directory).expanduser().resolve())
-    settings.outputs_directory = str(Path(payload.storage.outputs_directory).expanduser().resolve())
-    settings.exports_directory = str(Path(payload.storage.exports_directory).expanduser().resolve())
-    settings.temp_directory = str(Path(payload.storage.temp_directory).expanduser().resolve())
-    settings.model_cache_directory = str(Path(payload.storage.model_cache_directory).expanduser().resolve())
+    settings.uploads_directory = _resolve_storage_directory(payload.storage.uploads_directory)
+    settings.outputs_directory = _resolve_storage_directory(payload.storage.outputs_directory)
+    settings.exports_directory = _resolve_storage_directory(payload.storage.exports_directory)
+    settings.temp_directory = _resolve_storage_directory(payload.storage.temp_directory)
+    settings.model_cache_directory = _resolve_storage_directory(payload.storage.model_cache_directory)
     settings.temp_max_age_hours = payload.retention.temp_max_age_hours
     settings.export_bundle_max_age_days = payload.retention.export_bundle_max_age_days
     settings.default_profile = payload.default_profile
-    settings.export_mp3_bitrate = payload.export_mp3_bitrate.strip() or "320k"
+    settings.export_mp3_bitrate = normalize_export_bitrate(payload.export_mp3_bitrate)
 
     resolve_storage_paths(runtime_settings, settings)
 

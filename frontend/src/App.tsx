@@ -119,6 +119,7 @@ function App() {
   const [batchExportIds, setBatchExportIds] = useState<string[] | null>(null)
   const [batchSplitIds, setBatchSplitIds] = useState<string[] | null>(null)
   const [dragOverlayActive, setDragOverlayActive] = useState(false)
+  const anyDialogOpen = settingsOpen || importPanelOpen || !!batchExportIds || !!batchSplitIds || shortcutsOpen
   const dragCounterRef = useRef(0)
 
   const browseTracks = useMemo(
@@ -290,6 +291,10 @@ function App() {
   useKeyboardShortcuts({
     onNavigateNext: () => selectAdjacentTrack(1),
     onNavigatePrev: () => selectAdjacentTrack(-1),
+    onAddSongs: () => {
+      if (anyDialogOpen) return
+      revealImportPanel()
+    },
     onRerun: () => {
       if (!mixActive || !selectedTrack || creatingRun) return
       discardRejection(() => handleCreateRun(selectedTrack.id, defaultProcessing))
@@ -313,8 +318,6 @@ function App() {
       if (batchSplitIds) setBatchSplitIds(null)
     },
   })
-
-  const anyDialogOpen = settingsOpen || importPanelOpen || !!batchExportIds || !!batchSplitIds || shortcutsOpen
 
   return (
     <ErrorBoundary>
@@ -368,7 +371,7 @@ function App() {
               >
                 <GearIcon />
               </button>
-              <button type="button" className="button-primary" onClick={() => setImportPanelOpen(true)}>
+              <button type="button" className="button-primary" title="Add songs (a)" onClick={() => setImportPanelOpen(true)}>
                 Add songs
               </button>
             </div>
@@ -540,6 +543,7 @@ function App() {
 type ShortcutEntry = { key: string; desc: string; note?: string }
 
 const SHORTCUT_ENTRIES: ShortcutEntry[] = [
+  { key: 'a', desc: 'Add songs' },
   { key: 'j / ↓', desc: 'Next track' },
   { key: 'k / ↑', desc: 'Previous track' },
   { key: 'r', desc: 'Re-split with default split type', note: 'Mix workspace' },

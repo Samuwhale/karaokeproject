@@ -29,6 +29,7 @@ type DraftState = {
 
 const BITRATE_PATTERN = /^\d{2,3}k$/
 const BITRATE_HINT = 'Use a value like 192k or 320k.'
+const STORAGE_PATH_HINT = 'Choose a concrete folder path. Blank values are not allowed.'
 
 function createDraft(settings: Settings | null): SettingsDraft {
   return {
@@ -51,6 +52,10 @@ function createDraft(settings: Settings | null): SettingsDraft {
 
 function bucketFor(storageOverview: StorageOverview | null, key: StorageBucket['key']) {
   return storageOverview?.items.find((item) => item.key === key) ?? null
+}
+
+function hasText(value: string) {
+  return value.trim().length > 0
 }
 
 export function SettingsPanel({
@@ -113,6 +118,12 @@ export function SettingsPanel({
   const draft = draftState.sourceKey === settingsKey ? draftState.values : createDraft(settings)
   const currentSettings = settings
   const bitrateValid = BITRATE_PATTERN.test(draft.export_mp3_bitrate)
+  const storagePathsValid =
+    hasText(draft.storage.uploads_directory) &&
+    hasText(draft.storage.outputs_directory) &&
+    hasText(draft.storage.exports_directory) &&
+    hasText(draft.storage.temp_directory) &&
+    hasText(draft.storage.model_cache_directory)
   const exportBundles = bucketFor(storageOverview, 'export_bundles')
   const outputs = bucketFor(storageOverview, 'outputs')
   const temp = bucketFor(storageOverview, 'temp')
@@ -127,6 +138,7 @@ export function SettingsPanel({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!bitrateValid) return
+    if (view === 'storage' && !storagePathsValid) return
     try {
       await onSave({
         ...draft,
@@ -281,6 +293,7 @@ export function SettingsPanel({
                 <input
                   type="text"
                   value={draft.storage.uploads_directory}
+                  aria-invalid={!hasText(draft.storage.uploads_directory)}
                   onChange={(event) =>
                     updateDraft({
                       ...draft,
@@ -288,6 +301,9 @@ export function SettingsPanel({
                     })
                   }
                 />
+                {!hasText(draft.storage.uploads_directory) ? (
+                  <span className="field-error">{STORAGE_PATH_HINT}</span>
+                ) : null}
               </label>
 
               <label className="field">
@@ -295,6 +311,7 @@ export function SettingsPanel({
                 <input
                   type="text"
                   value={draft.storage.outputs_directory}
+                  aria-invalid={!hasText(draft.storage.outputs_directory)}
                   onChange={(event) =>
                     updateDraft({
                       ...draft,
@@ -302,6 +319,9 @@ export function SettingsPanel({
                     })
                   }
                 />
+                {!hasText(draft.storage.outputs_directory) ? (
+                  <span className="field-error">{STORAGE_PATH_HINT}</span>
+                ) : null}
               </label>
 
               <label className="field">
@@ -309,6 +329,7 @@ export function SettingsPanel({
                 <input
                   type="text"
                   value={draft.storage.exports_directory}
+                  aria-invalid={!hasText(draft.storage.exports_directory)}
                   onChange={(event) =>
                     updateDraft({
                       ...draft,
@@ -316,6 +337,9 @@ export function SettingsPanel({
                     })
                   }
                 />
+                {!hasText(draft.storage.exports_directory) ? (
+                  <span className="field-error">{STORAGE_PATH_HINT}</span>
+                ) : null}
               </label>
 
               <label className="field">
@@ -323,6 +347,7 @@ export function SettingsPanel({
                 <input
                   type="text"
                   value={draft.storage.temp_directory}
+                  aria-invalid={!hasText(draft.storage.temp_directory)}
                   onChange={(event) =>
                     updateDraft({
                       ...draft,
@@ -330,6 +355,9 @@ export function SettingsPanel({
                     })
                   }
                 />
+                {!hasText(draft.storage.temp_directory) ? (
+                  <span className="field-error">{STORAGE_PATH_HINT}</span>
+                ) : null}
               </label>
 
               <label className="field">
@@ -337,6 +365,7 @@ export function SettingsPanel({
                 <input
                   type="text"
                   value={draft.storage.model_cache_directory}
+                  aria-invalid={!hasText(draft.storage.model_cache_directory)}
                   onChange={(event) =>
                     updateDraft({
                       ...draft,
@@ -344,6 +373,9 @@ export function SettingsPanel({
                     })
                   }
                 />
+                {!hasText(draft.storage.model_cache_directory) ? (
+                  <span className="field-error">{STORAGE_PATH_HINT}</span>
+                ) : null}
               </label>
             </div>
 
@@ -389,7 +421,7 @@ export function SettingsPanel({
 
           <div className="import-footer">
             <span>{savedAt ? <span className="field-saved">Storage settings saved.</span> : null}</span>
-            <button type="submit" className="button-primary" disabled={saving || !bitrateValid}>
+            <button type="submit" className="button-primary" disabled={saving || !bitrateValid || !storagePathsValid}>
               {saving ? <><Spinner /> Saving…</> : 'Save Storage Settings'}
             </button>
           </div>

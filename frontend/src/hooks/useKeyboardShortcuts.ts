@@ -4,6 +4,7 @@ type Shortcuts = {
   onNavigatePrev?: () => void
   onNavigateNext?: () => void
   onRerun?: () => void
+  onAddSongs?: () => void
   onToggleSettings?: () => void
   onToggleShortcuts?: () => void
   onEscape?: () => void
@@ -54,6 +55,12 @@ export function useKeyboardShortcuts(shortcuts: Shortcuts) {
     if (event.key === 'r') {
       event.preventDefault()
       shortcuts.onRerun?.()
+      return
+    }
+
+    if (event.key === 'a') {
+      event.preventDefault()
+      shortcuts.onAddSongs?.()
       return
     }
 

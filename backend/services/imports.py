@@ -69,6 +69,7 @@ class ConfirmSideEffects:
 class DraftCommitResult:
     track: Track
     rollback_actions: list[Callable[[], None]] = field(default_factory=list)
+    post_commit_actions: list[Callable[[], None]] = field(default_factory=list)
 
 
 def _unique_tracks(tracks: list[Track]) -> list[Track]:
@@ -316,6 +317,7 @@ def confirm_import_drafts(
                 )
                 track = commit_result.track
                 side_effects.rollback_actions.extend(commit_result.rollback_actions)
+                side_effects.post_commit_actions.extend(commit_result.post_commit_actions)
                 created += 1
 
             if queued_processing is not None:
@@ -510,6 +512,7 @@ def _commit_draft_as_new_track(
         return DraftCommitResult(
             track=track,
             rollback_actions=[rollback],
+            post_commit_actions=[lambda path=pending_path: _cleanup_pending_path(path)],
         )
 
     raise ValueError(f"Unknown source type '{draft.source_type}'.")
