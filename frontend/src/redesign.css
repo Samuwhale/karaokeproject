@@ -1326,8 +1326,8 @@
 }
 
 .mix-top-art {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 6px;
   background: color-mix(in oklch, var(--accent) 8%, var(--surface-2));
   display: flex;
@@ -1335,7 +1335,7 @@
   justify-content: center;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14px;
   color: color-mix(in oklch, var(--accent) 60%, var(--text-2));
   flex-shrink: 0;
   overflow: hidden;
@@ -3108,16 +3108,6 @@ button.stem-row-gain:focus-visible {
 @keyframes mix-save-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
-}
-
-.mix-save-state.is-saved {
-  color: var(--ok);
-}
-
-.mix-save-state.is-saved > span::before {
-  content: '✓\00a0';
-  font-size: 10px;
-  font-weight: 700;
 }
 
 /* Play button: loading state ----------------------------------------------- */

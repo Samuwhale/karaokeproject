@@ -639,8 +639,7 @@ export function SongsPage({
         <div className="library-empty">
           {view.filter !== 'all' ? (
             <>
-              <strong>Nothing here</strong>
-              <p>No songs match this filter.</p>
+              <strong>No songs match this filter</strong>
               <button
                 type="button"
                 className="button-secondary"

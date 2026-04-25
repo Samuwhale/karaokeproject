@@ -6,6 +6,7 @@ import { RunStepper } from '../feedback/RunStepper'
 import { MixExportPopover } from './MixExportPopover'
 import { MixPanel } from './MixPanel'
 import { OutputIntentPicker } from './OutputIntent'
+import { formatDuration } from '../metrics'
 import { RUN_STATUS_SHORT_LABELS, isActiveRunStatus } from '../runStatus'
 import { resolveSelectedRun } from '../../runSelection'
 import { isStemKind, stemLabel } from '../../stems'
@@ -717,7 +718,11 @@ function MixWorkspaceContent({
             >
               <strong>{track.title}</strong>
               <span className="mix-top-title-sub">
-                {track.artist ? <span className="mix-top-artist">{track.artist}</span> : null}
+                {(track.artist || track.duration_seconds) ? (
+                  <span className="mix-top-artist">
+                    {[track.artist, formatDuration(track.duration_seconds)].filter(Boolean).join(' · ')}
+                  </span>
+                ) : null}
                 <span className="mix-top-edit-icon" aria-hidden><PencilIcon /></span>
               </span>
             </button>
