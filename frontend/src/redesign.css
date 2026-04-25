@@ -774,10 +774,14 @@
 }
 
 .song-row-status-star {
-  color: var(--accent);
   font-size: 11px;
   line-height: 1;
   flex-shrink: 0;
+  color: var(--accent);
+}
+
+.song-row-status.is-preferred .song-row-status-star {
+  color: var(--ok);
 }
 
 .song-row-status.is-processing {
@@ -1517,6 +1521,10 @@ button.mix-top-title-copy:hover .mix-top-edit-icon {
   flex: none;
 }
 
+.mix-version-pill.is-keeper .mix-version-star {
+  color: color-mix(in oklch, var(--ok) 90%, var(--text));
+}
+
 .mix-version-chevron {
   display: inline-flex;
   flex: none;
@@ -1738,6 +1746,7 @@ button.stem-row-gain:focus-visible {
 
 .stem-row.is-muted .stem-row-dot, .stem-row.is-silenced .stem-row-dot {
   background: var(--text-faint);
+  box-shadow: none;
 }
 
 .stem-row-wave {
@@ -1887,7 +1896,8 @@ button.stem-row-gain:focus-visible {
 
 .stem-fader-center {
   position: absolute;
-  left: 50%;
+  /* 0 dB sits at 66.6667% because range is -24 to +12 dB: (0-(-24))/(12-(-24)) */
+  left: 66.6667%;
   top: 10px;
   bottom: 10px;
   width: 2px;
@@ -2333,12 +2343,16 @@ button.stem-row-gain:focus-visible {
 .popover-row-star {
   font-size: 11px;
   line-height: 1;
-  color: var(--accent);
+  color: var(--ok);
   flex: none;
 }
 
 .popover-row.is-preferred .popover-row-copy strong {
   color: color-mix(in oklch, var(--ok) 75%, var(--text));
+}
+
+.popover-row.is-preferred.is-active {
+  background: color-mix(in oklch, var(--ok) 8%, var(--surface-2));
 }
 
 .popover-row-copy span {
@@ -2612,8 +2626,8 @@ button.stem-row-gain:focus-visible {
 }
 
 .import-panel-source.is-compact .import-panel-drop {
-  min-height: 44px;
-  padding: 8px 12px;
+  min-height: 52px;
+  padding: 10px 14px;
   text-align: left;
 }
 
@@ -2899,9 +2913,47 @@ button.stem-row-gain:focus-visible {
   color: color-mix(in oklch, var(--accent) 55%, var(--text-faint));
 }
 
+.mix-blocked-icon {
+  color: color-mix(in oklch, var(--accent) 55%, var(--text-faint));
+  opacity: 0.75;
+  flex-shrink: 0;
+  margin-bottom: -6px;
+}
+
+@keyframes icon-bar-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0.3);
+  }
+}
+
+/* Staggered entry for each bar — transform-origin at bottom of each rect */
+.mix-blocked-icon-bar {
+  transform-origin: center bottom;
+  animation: icon-bar-in 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.mix-blocked-icon-bar-1 { animation-delay: 40ms; }
+.mix-blocked-icon-bar-2 { animation-delay: 0ms; }
+.mix-blocked-icon-bar-3 { animation-delay: 100ms; }
+.mix-blocked-icon-bar-4 { animation-delay: 20ms; }
+.mix-blocked-icon-bar-5 { animation-delay: 60ms; }
+
 .mix-blocked-hint {
   font-size: var(--t-sm);
   color: var(--text-muted);
+}
+
+/* Single-profile picker: one prominent CTA instead of a card grid */
+.mix-profile-single {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.mix-profile-single .button-primary {
+  padding: 10px 24px;
+  font-size: var(--t-base);
 }
 
 .mix-blocked-actions {
@@ -2961,17 +3013,6 @@ button.stem-row-gain:focus-visible {
 .stem-toggle-dl:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 2px;
-}
-
-/* Popover profile hint (shown below detail line when run exists) ------------ */
-
-.popover-row-hint {
-  font-size: 12px;
-  color: var(--text-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  line-height: 1.4;
 }
 
 /* Keyboard shortcuts modal ------------------------------------------------- */
@@ -3139,26 +3180,20 @@ button.stem-row-gain:focus-visible {
 }
 
 .mix-profile-option.is-default {
-  border-color: color-mix(in oklch, var(--accent) 28%, var(--border));
-  background: color-mix(in oklch, var(--accent) 2%, var(--surface));
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 4%, var(--surface));
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--accent) 20%, transparent),
+    0 1px 4px color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .mix-profile-option.is-default:hover:not(:disabled) {
-  border-color: color-mix(in oklch, var(--accent) 55%, var(--border));
-  background: color-mix(in oklch, var(--accent) 5%, var(--surface));
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 7%, var(--surface));
+  box-shadow:
+    0 0 0 3px color-mix(in oklch, var(--accent) 14%, transparent),
+    0 2px 8px color-mix(in srgb, var(--text) 8%, transparent);
 }
 
-/* Presets row: "Preset" label ------------------------------------------------ */
 
-.mix-presets-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-faint);
-  letter-spacing: 0.02em;
-  margin-right: 12px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  user-select: none;
-  align-self: center;
-}
 

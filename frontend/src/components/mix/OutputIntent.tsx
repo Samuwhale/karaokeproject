@@ -60,7 +60,6 @@ export function OutputIntentPicker({ run, saving, onApplyTemplate }: OutputInten
 
   return (
     <div className="mix-presets" role="group" aria-label="Output preset">
-      <span className="mix-presets-label" aria-hidden>Preset</span>
       <div className="mix-preset-group">
         {supported.map((spec) => {
           const active = activeIntent === spec.value

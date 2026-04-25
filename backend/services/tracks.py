@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, object_session, selectinload
 from backend.core.config import RuntimeSettings
 from backend.core.stems import is_stem_kind
 from backend.db.models import (
+    ACTIVE_RUN_STATUSES,
     IN_PROGRESS_RUN_STATUSES,
     TERMINAL_RUN_STATUSES,
     Run,
@@ -128,6 +129,10 @@ def serialize_run_artifact(artifact: RunArtifact) -> RunArtifactResponse:
 def _touch_track(track: Track | None) -> None:
     if track is not None:
         track.updated_at = datetime.utcnow()
+
+
+def _run_is_active(run: Run) -> bool:
+    return run.status in ACTIVE_RUN_STATUSES
 
 
 def serialize_run_summary(run: Run) -> RunSummaryResponse:
@@ -401,7 +406,7 @@ def create_run(track: Track, processing: dict[str, Any]) -> Run:
         (
             run
             for run in _profile_runs(track, str(processing["profile_key"]))
-            if run.status == RunStatus.queued.value or run.status in IN_PROGRESS_RUN_STATUSES
+            if _run_is_active(run)
         ),
         None,
     )
@@ -613,7 +618,7 @@ def deduplicate_terminal_runs_by_profile(session: Session, track: Track) -> int:
 
     for profile_key in profile_keys:
         matching_runs = _profile_runs(track, profile_key)
-        if any(run.status == RunStatus.queued.value or run.status in IN_PROGRESS_RUN_STATUSES for run in matching_runs):
+        if any(_run_is_active(run) for run in matching_runs):
             continue
 
         terminal_runs = [run for run in matching_runs if run.status in TERMINAL_RUN_STATUSES]
@@ -775,8 +780,8 @@ def delete_track(
     if track is None:
         raise LookupError(f"Track '{track_id}' does not exist.")
 
-    if any(run.status in IN_PROGRESS_RUN_STATUSES for run in track.runs):
-        raise ValueError("Cancel or wait for in-progress runs before deleting this track.")
+    if any(_run_is_active(run) for run in track.runs):
+        raise ValueError("Cancel or wait for queued or running splits before deleting this track.")
 
     source_path = Path(track.source_path) if track.source_path else None
 

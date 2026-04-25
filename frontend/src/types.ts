@@ -251,7 +251,8 @@ export type BatchTrackIdsInput = {
 
 export type BatchDeleteResponse = {
   deleted_track_count: number
-  skipped_track_ids: string[]
+  blocked_track_ids: string[]
+  missing_track_ids: string[]
 }
 
 export type TempCleanupResponse = {

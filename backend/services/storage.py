@@ -8,7 +8,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from backend.core.config import RuntimeSettings
-from backend.db.models import AppSettings, IN_PROGRESS_RUN_STATUSES, Track
+from backend.db.models import ACTIVE_RUN_STATUSES, AppSettings, Track
 from backend.schemas.storage import (
     ExportBundleCleanupResponse,
     NonKeeperCleanupResponse,
@@ -346,7 +346,7 @@ def cleanup_non_keeper_runs_library(
     skipped_track_count = 0
 
     for track in list_tracks(session):
-        if not track.keeper_run_id or any(run.status in IN_PROGRESS_RUN_STATUSES for run in track.runs):
+        if not track.keeper_run_id or any(run.status in ACTIVE_RUN_STATUSES for run in track.runs):
             skipped_track_count += 1
             continue
         deleted, reclaimed = purge_non_keeper_runs(session, track.id)

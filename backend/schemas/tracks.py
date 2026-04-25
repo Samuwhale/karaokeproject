@@ -196,4 +196,5 @@ class BatchTrackIdsRequest(BaseModel):
 
 class BatchDeleteResponse(BaseModel):
     deleted_track_count: int
-    skipped_track_ids: list[str] = Field(default_factory=list)
+    blocked_track_ids: list[str] = Field(default_factory=list)
+    missing_track_ids: list[str] = Field(default_factory=list)

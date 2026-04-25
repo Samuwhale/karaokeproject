@@ -106,6 +106,11 @@ const FADER_STEP = 0.5
 const FADER_STEP_FINE = 0.1
 const FADER_STEP_COARSE = 3
 
+// 0 dB sits at 66.6667% of the fader track because MIN=-24 and MAX=+12.
+// position% = (value - MIN) / (MAX - MIN) * 100
+const FADER_RANGE = MIX_GAIN_DB_MAX - MIX_GAIN_DB_MIN
+const FADER_CENTER_PCT = (-MIX_GAIN_DB_MIN / FADER_RANGE) * 100
+
 function mixableArtifacts(run: RunDetail): RunArtifact[] {
   return run.artifacts
     .filter((artifact) => isStemKind(artifact.kind))
@@ -195,14 +200,11 @@ function PauseGlyph() {
 }
 
 function faderFillStyle(gainDb: number): React.CSSProperties {
-  const center = 50
-  const denominator = gainDb >= 0 ? MIX_GAIN_DB_MAX : Math.abs(MIX_GAIN_DB_MIN)
-  const fraction = (gainDb / denominator) * 50
+  const thumbPct = ((gainDb - MIX_GAIN_DB_MIN) / FADER_RANGE) * 100
   if (gainDb >= 0) {
-    return { left: `${center}%`, width: `${Math.max(0, fraction)}%` }
+    return { left: `${FADER_CENTER_PCT}%`, width: `${thumbPct - FADER_CENTER_PCT}%` }
   }
-  const width = Math.max(0, Math.abs(fraction))
-  return { left: `${center - width}%`, width: `${width}%` }
+  return { left: `${thumbPct}%`, width: `${FADER_CENTER_PCT - thumbPct}%` }
 }
 
 function MixStateLabel({ stems, anySoloed }: { stems: StemRow[]; anySoloed: boolean }) {
@@ -210,8 +212,8 @@ function MixStateLabel({ stems, anySoloed }: { stems: StemRow[]; anySoloed: bool
     const soloed = stems.filter((s) => s.soloed)
     const label =
       soloed.length <= 2
-        ? `Soloing ${soloed.map((s) => s.label).join(', ')} · preview`
-        : `Soloing ${soloed.length} stems · preview`
+        ? `Soloing ${soloed.map((s) => s.label).join(', ')}`
+        : `Soloing ${soloed.length} stems`
     return (
       <>
         <span className="mix-transport-sep" aria-hidden>·</span>

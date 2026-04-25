@@ -36,6 +36,7 @@ import { discardRejection } from '../async'
 import type { Toast, ToastAction, ToastTone } from '../components/feedback/ToastStack'
 import { isActiveRunStatus } from '../components/runStatus'
 import type {
+  BatchDeleteResponse,
   ConfirmImportDraftsInput,
   Diagnostics,
   ExportBundleCleanupResponse,
@@ -108,6 +109,35 @@ async function loadTrackDetail(trackId: string) {
 
 function resolveRefreshInterval(track: TrackDetail | null, queueSize: number) {
   return hasActiveWork(track, queueSize) ? ACTIVE_REFRESH_MS : IDLE_REFRESH_MS
+}
+
+function describeBatchDeleteResult(result: BatchDeleteResponse): { tone: ToastTone; message: string } {
+  const deleted = result.deleted_track_count
+  const blocked = result.blocked_track_ids.length
+  const missing = result.missing_track_ids.length
+
+  if (blocked === 0 && missing === 0) {
+    return {
+      tone: 'success',
+      message: `Deleted ${deleted} track${deleted === 1 ? '' : 's'}.`,
+    }
+  }
+
+  const details: string[] = []
+  if (deleted > 0) details.push(`Deleted ${deleted}`)
+  if (blocked > 0) {
+    details.push(
+      blocked === 1
+        ? '1 blocked by a queued or running split'
+        : `${blocked} blocked by queued or running splits`,
+    )
+  }
+  if (missing > 0) details.push(missing === 1 ? '1 already missing' : `${missing} already missing`)
+
+  return {
+    tone: deleted > 0 ? 'info' : 'error',
+    message: `${details.join(' · ')}.`,
+  }
 }
 
 export function useDashboardData(selection: { trackId: string | null }) {
@@ -611,12 +641,10 @@ export function useDashboardData(selection: { trackId: string | null }) {
   async function commitTrackDelete(trackIds: string[]) {
     if (!trackIds.length) return
     try {
-      await batchDeleteTracks({ track_ids: trackIds })
+      const result = await batchDeleteTracks({ track_ids: trackIds })
       setPendingDeleteIdsImmediate(new Set())
-      pushToast(
-        'success',
-        `Deleted ${trackIds.length} track${trackIds.length === 1 ? '' : 's'}.`,
-      )
+      const feedback = describeBatchDeleteResult(result)
+      pushToast(feedback.tone, feedback.message)
       await refreshDashboard()
     } catch (error) {
       pushToast('error', getErrorMessage(error))

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.api.dependencies import get_db_session, get_settings_dependency
 from backend.core.config import RuntimeSettings
-from backend.db.models import IN_PROGRESS_RUN_STATUSES, Run, RunStatus, Track
+from backend.db.models import ACTIVE_RUN_STATUSES, Run, RunStatus, Track
 from backend.schemas.tracks import (
     BackfillMetricsResponse,
     BatchDeleteResponse,
@@ -195,13 +195,12 @@ def set_track_keeper(
 
 @router.get("/runs/active", response_model=list[QueueRunResponse])
 def list_active_runs(session: Session = Depends(get_db_session)) -> list[QueueRunResponse]:
-    active_statuses = [RunStatus.queued.value, *IN_PROGRESS_RUN_STATUSES]
     terminal_statuses = [RunStatus.failed.value, RunStatus.cancelled.value]
 
     active_statement = (
         select(Run)
         .options(selectinload(Run.track))
-        .where(Run.status.in_(active_statuses))
+        .where(Run.status.in_(ACTIVE_RUN_STATUSES))
         .order_by(Run.created_at.asc())
     )
     # Recently-terminal runs stay visible until the user dismisses them so
@@ -234,16 +233,21 @@ def batch_delete_tracks(
     session: Session = Depends(get_db_session),
 ) -> BatchDeleteResponse:
     deleted = 0
-    skipped: list[str] = []
+    blocked: list[str] = []
+    missing: list[str] = []
     for track_id in payload.track_ids:
         try:
             delete_track(session, track_id)
             deleted += 1
         except LookupError:
-            skipped.append(track_id)
+            missing.append(track_id)
         except ValueError:
-            skipped.append(track_id)
-    return BatchDeleteResponse(deleted_track_count=deleted, skipped_track_ids=skipped)
+            blocked.append(track_id)
+    return BatchDeleteResponse(
+        deleted_track_count=deleted,
+        blocked_track_ids=blocked,
+        missing_track_ids=missing,
+    )
 
 
 @router.post("/admin/backfill-metrics", response_model=BackfillMetricsResponse)

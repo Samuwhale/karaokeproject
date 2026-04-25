@@ -29,6 +29,10 @@ IN_PROGRESS_RUN_STATUSES: frozenset[str] = frozenset(
     {RunStatus.preparing.value, RunStatus.separating.value, RunStatus.exporting.value}
 )
 
+ACTIVE_RUN_STATUSES: frozenset[str] = frozenset(
+    {RunStatus.queued.value, *IN_PROGRESS_RUN_STATUSES}
+)
+
 TERMINAL_RUN_STATUSES: frozenset[str] = frozenset(
     {RunStatus.completed.value, RunStatus.failed.value, RunStatus.cancelled.value}
 )

@@ -61,40 +61,65 @@ type InlineProfilePickerProps = {
 }
 
 function InlineProfilePicker({ profiles, defaultProfileKey, creatingRun, onCreateRun }: InlineProfilePickerProps) {
+  if (profiles.length === 0) {
+    return <p className="mix-blocked-hint">No profiles configured. Check Settings → Maintenance.</p>
+  }
+
+  // Default profile first, then the rest in their configured order
+  const defaultProfile = profiles.find((p) => p.key === defaultProfileKey)
+  const otherProfiles = profiles.filter((p) => p.key !== defaultProfileKey)
+  const sorted = defaultProfile ? [defaultProfile, ...otherProfiles] : profiles
+
+  // Single profile: one prominent action, no card grid
+  if (sorted.length === 1) {
+    const profile = sorted[0]
+    return (
+      <div className="mix-profile-single">
+        <button
+          type="button"
+          className="button-primary"
+          disabled={creatingRun}
+          onClick={() => onCreateRun({ profile_key: profile.key })}
+        >
+          Split with {profile.label}
+        </button>
+        {profile.stems.length > 0 ? (
+          <span className="mix-blocked-hint">
+            {profile.stems.map((s) => stemLabel(s)).join(' · ')}
+          </span>
+        ) : null}
+      </div>
+    )
+  }
+
   return (
-    <>
-      {profiles.length > 0 ? (
-        <div className="mix-profile-picker">
-          {profiles.map((profile) => {
-            const isDefault = profile.key === defaultProfileKey
-            return (
-              <button
-                key={profile.key}
-                type="button"
-                className={`mix-profile-option ${isDefault ? 'is-default' : ''}`}
-                disabled={creatingRun}
-                onClick={() => onCreateRun({ profile_key: profile.key })}
-              >
-                <div className="mix-profile-option-top">
-                  <span className="mix-profile-option-label">{profile.label}</span>
-                  {isDefault ? <span className="mix-profile-option-default">Default</span> : null}
-                </div>
-                {profile.best_for ? (
-                  <span className="mix-profile-option-hint">{profile.best_for}</span>
-                ) : null}
-                {profile.stems.length > 0 ? (
-                  <span className="mix-profile-option-stems">
-                    {profile.stems.map((s) => stemLabel(s)).join(' · ')}
-                  </span>
-                ) : null}
-              </button>
-            )
-          })}
-        </div>
-      ) : (
-        <p className="mix-blocked-hint">No profiles configured. Check Settings → Maintenance.</p>
-      )}
-    </>
+    <div className="mix-profile-picker">
+      {sorted.map((profile) => {
+        const isDefault = profile.key === defaultProfileKey
+        return (
+          <button
+            key={profile.key}
+            type="button"
+            className={`mix-profile-option ${isDefault ? 'is-default' : ''}`}
+            disabled={creatingRun}
+            onClick={() => onCreateRun({ profile_key: profile.key })}
+          >
+            <div className="mix-profile-option-top">
+              <span className="mix-profile-option-label">{profile.label}</span>
+              {isDefault ? <span className="mix-profile-option-default">Default</span> : null}
+            </div>
+            {profile.best_for ? (
+              <span className="mix-profile-option-hint">{profile.best_for}</span>
+            ) : null}
+            {profile.stems.length > 0 ? (
+              <span className="mix-profile-option-stems">
+                {profile.stems.map((s) => stemLabel(s)).join(' · ')}
+              </span>
+            ) : null}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -167,6 +192,33 @@ function PencilIcon() {
   return (
     <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
       <path d="M7.5 1.5l2 2L3 10H1V8L7.5 1.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function StemSplitIcon() {
+  // Five bars representing isolated stem tracks — vocals, drums, bass, piano, other
+  const bars = [
+    { y: 8,  h: 20 }, // vocals — medium
+    { y: 2,  h: 32 }, // drums — tall
+    { y: 12, h: 12 }, // bass — short
+    { y: 0,  h: 36 }, // main — full height
+    { y: 6,  h: 24 }, // other — medium-tall
+  ]
+  return (
+    <svg width="56" height="36" viewBox="0 0 56 36" fill="none" aria-hidden className="mix-blocked-icon">
+      {bars.map(({ y, h }, i) => (
+        <rect
+          key={i}
+          x={i * 12}
+          y={y}
+          width="8"
+          height={h}
+          rx="2"
+          fill="currentColor"
+          className={`mix-blocked-icon-bar mix-blocked-icon-bar-${i + 1}`}
+        />
+      ))}
     </svg>
   )
 }
@@ -265,7 +317,7 @@ function VersionsPopover({
   }
 
   function stateLabel(run: RunDetail | null): string {
-    if (!run) return creatingRun ? 'Queueing…' : 'Generate'
+    if (!run) return creatingRun ? 'Queueing…' : 'Split'
     if (isActiveRunStatus(run.status)) return `${Math.round(run.progress * 100)}%`
     if (RETRYABLE_STATUSES.has(run.status)) {
       return retryingRunId === run.id ? 'Retrying…' : 'Retry'
@@ -304,7 +356,7 @@ function VersionsPopover({
                   <div key={profile.key} className="popover-row is-armed" role="group">
                     <span className="popover-row-copy">
                       <strong>{profile.label}</strong>
-                      <span>{isRetry ? 'Retry this split?' : 'Generate this split?'}</span>
+                      <span>{isRetry ? 'Retry this split?' : 'Start this split?'}</span>
                     </span>
                     <span className="popover-row-confirm">
                       <button
@@ -317,7 +369,7 @@ function VersionsPopover({
                           else discardRejection(() => generate(profile.key))
                         }}
                       >
-                        {isRetry ? 'Retry' : 'Generate'}
+                        {isRetry ? 'Retry' : 'Split'}
                       </button>
                       <button
                         type="button"
@@ -348,9 +400,6 @@ function VersionsPopover({
                       {profile.label}
                     </strong>
                     {detail ? <span>{detail}</span> : null}
-                    {run && profile.best_for ? (
-                      <span className="popover-row-hint">{profile.best_for}</span>
-                    ) : null}
                   </span>
                   <span className="popover-row-state">{stateLabel(run)}</span>
                 </button>
@@ -410,6 +459,8 @@ type OverflowMenuProps = {
 }
 
 function OverflowMenu({ track, onClose, onReveal, onDeleteTrack, onOpenShortcuts }: OverflowMenuProps) {
+  const hasActiveRun = track.runs.some((run) => isActiveRunStatus(run.status))
+
   return (
     <>
       <div className="popover-backdrop" onClick={onClose} aria-hidden />
@@ -434,11 +485,12 @@ function OverflowMenu({ track, onClose, onReveal, onDeleteTrack, onOpenShortcuts
           </button>
           <div className="menu-sep" aria-hidden />
           <ConfirmInline
-            label="Delete song…"
+            label={hasActiveRun ? 'Finish active split first' : 'Delete song…'}
             pendingLabel="Deleting…"
             confirmLabel={`Delete "${track.title}"`}
             cancelLabel="Keep"
             prompt={`Delete "${track.title}" and all its splits?`}
+            disabled={hasActiveRun}
             onConfirm={async () => {
               onDeleteTrack()
               onClose()
@@ -680,7 +732,7 @@ function MixWorkspaceContent({
                 onClick={() => setPopover(popover === 'versions' ? null : 'versions')}
                 aria-haspopup="dialog"
                 aria-expanded={popover === 'versions'}
-                title={selectedRunIsKeeper ? 'Preferred split — click for all split types (v)' : 'Split types — click to generate, switch, or manage (v)'}
+                title={selectedRunIsKeeper ? 'Preferred split — click for all split types (v)' : 'Split types — click to split, switch, or manage (v)'}
               >
                 {activeSplit ? <span className="mix-version-dot" data-state="active" aria-hidden /> : null}
                 {!activeSplit && selectedRunIsKeeper ? (
@@ -855,8 +907,9 @@ function MixWorkspaceContent({
             )
           ) : (
             <>
+              <StemSplitIcon />
               <strong>Split this song into stems</strong>
-              <p>Pick how you want it separated. You can add other split types later.</p>
+              <p>Choose a split type to separate it. You can add more split types any time.</p>
               <InlineProfilePicker
                 profiles={profiles}
                 defaultProfileKey={defaultProfileKey}
