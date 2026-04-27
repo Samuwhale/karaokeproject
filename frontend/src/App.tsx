@@ -49,6 +49,7 @@ function App() {
     tracks,
     drafts,
     queueRuns,
+    workerOnline,
     selectedTrack,
     toasts,
     dismissToast,
@@ -65,6 +66,7 @@ function App() {
     cleaningTempStorage,
     cleaningExportBundles,
     cleaningLibraryRuns,
+    resettingLibrary,
     settingKeeper,
     backfillingMetrics,
     savingMixRunId,
@@ -84,6 +86,7 @@ function App() {
     handleCleanupTempStorage,
     handleCleanupExportBundles,
     handleCleanupLibraryRuns,
+    handleResetLibrary,
     handleSetKeeper,
     handleBackfillMetrics,
     handleSaveMix,
@@ -357,6 +360,22 @@ function App() {
                   finish setup
                 </button>
               ) : null}
+              {!workerOnline ? (
+                <button
+                  type="button"
+                  className="topbar-chip topbar-chip-warn"
+                  title="Splits won't process until the worker restarts. Run `npm run dev:worker` in your terminal."
+                  onClick={() =>
+                    pushToast(
+                      'error',
+                      "Worker is offline. Run `npm run dev:worker` (or restart `npm run dev`) to resume splits.",
+                    )
+                  }
+                >
+                  <span className="topbar-dot topbar-dot-warn" />
+                  worker offline
+                </button>
+              ) : null}
               <ConnectionDot connection={connection} hasFirstSync={hasFirstSync} />
               <button
                 type="button"
@@ -486,12 +505,14 @@ function App() {
           cleaningTempStorage={cleaningTempStorage}
           cleaningExportBundles={cleaningExportBundles}
           cleaningLibraryRuns={cleaningLibraryRuns}
+          resettingLibrary={resettingLibrary}
           backfillingMetrics={backfillingMetrics}
           onClose={() => setSettingsOpen(false)}
           onSaveSettings={handleSaveSettings}
           onCleanupTempStorage={handleCleanupTempStorage}
           onCleanupExportBundles={handleCleanupExportBundles}
           onCleanupLibraryRuns={handleCleanupLibraryRuns}
+          onResetLibrary={handleResetLibrary}
           onBackfillMetrics={handleBackfillMetrics}
         />
 

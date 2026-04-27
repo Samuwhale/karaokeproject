@@ -379,8 +379,6 @@ def ensure_stem_mp3(
     return artifact
 
 
-
-
 def _upsert_mix_artifact(
     run: Run,
     *,

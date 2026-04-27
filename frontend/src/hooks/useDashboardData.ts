@@ -21,6 +21,7 @@ import {
   getTrack,
   getTracks,
   listImportDrafts,
+  resetLibrary,
   resolveLocalImport,
   resolveYouTubeImport,
   retryRun,
@@ -41,6 +42,7 @@ import type {
   Diagnostics,
   ExportBundleCleanupResponse,
   ImportDraft,
+  LibraryResetResponse,
   NonKeeperCleanupResponse,
   QueueRunEntry,
   RevealFolderInput,
@@ -60,7 +62,7 @@ const MAX_REFRESH_MS = 30000
 const DELETE_UNDO_MS = 5000
 const PURGE_UNDO_MS = 5000
 
-export type ConnectionState = 'ready' | 'syncing' | 'offline'
+type ConnectionState = 'ready' | 'syncing' | 'offline'
 
 export type Connection = {
   state: ConnectionState
@@ -147,6 +149,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
   const [tracks, setTracks] = useState<TrackSummary[]>([])
   const [drafts, setDrafts] = useState<ImportDraft[]>([])
   const [queueRuns, setQueueRuns] = useState<QueueRunEntry[]>([])
+  const [workerOnline, setWorkerOnline] = useState<boolean>(true)
 
   const [selectedTrack, setSelectedTrack] = useState<TrackDetail | null>(null)
 
@@ -162,6 +165,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
   const [cleaningTempStorage, setCleaningTempStorage] = useState(false)
   const [cleaningExportBundles, setCleaningExportBundles] = useState(false)
   const [cleaningLibraryRuns, setCleaningLibraryRuns] = useState(false)
+  const [resettingLibrary, setResettingLibrary] = useState(false)
   const [connection, setConnection] = useState<Connection>(INITIAL_CONNECTION)
   const [settingKeeper, setSettingKeeper] = useState(false)
   const [backfillingMetrics, setBackfillingMetrics] = useState(false)
@@ -274,7 +278,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     lastPollAtRef.current = Date.now()
 
     try {
-      const [nextDiagnostics, nextSettings, nextStorageOverview, nextTracks, nextDrafts, nextQueue] = await Promise.all([
+      const [nextDiagnostics, nextSettings, nextStorageOverview, nextTracks, nextDrafts, nextActiveRuns] = await Promise.all([
         getDiagnostics(),
         getSettings(),
         getStorageOverview(),
@@ -282,6 +286,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
         listImportDrafts(),
         getActiveRuns(),
       ])
+      const nextQueue = nextActiveRuns.runs
       // Detect stem creation completions/failures to surface a toast notification.
       const prevActive = prevQueueRunsRef.current.filter((e) => isActiveRunStatus(e.run.status))
       for (const entry of prevActive) {
@@ -304,6 +309,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
       setTracks(nextTracks)
       setDrafts(nextDrafts)
       setQueueRuns(nextQueue)
+      setWorkerOnline(nextActiveRuns.worker_online)
 
       await syncSelectedTrackDetail(routeTrackIdRef.current, nextQueue.length)
 
@@ -778,6 +784,23 @@ export function useDashboardData(selection: { trackId: string | null }) {
     setCleaningLibraryRuns(false)
   }
 
+  async function handleResetLibrary() {
+    setResettingLibrary(true)
+    try {
+      const result: LibraryResetResponse = await resetLibrary()
+      pushToast(
+        'success',
+        `Cleared ${result.deleted_track_count} song${result.deleted_track_count === 1 ? '' : 's'} · ${formatReclaimed(result.bytes_reclaimed)} reclaimed.`,
+      )
+      await refreshDashboard()
+    } catch (error) {
+      pushToast('error', getErrorMessage(error))
+      throw error
+    } finally {
+      setResettingLibrary(false)
+    }
+  }
+
   function handleCleanupLibraryRuns() {
     if (pendingLibraryCleanupTimerRef.current !== null) {
       clearTimer(pendingLibraryCleanupTimerRef)
@@ -814,6 +837,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     tracks: visibleTracks,
     drafts,
     queueRuns,
+    workerOnline,
     selectedTrack,
     toasts,
     dismissToast,
@@ -830,6 +854,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     cleaningTempStorage,
     cleaningExportBundles,
     cleaningLibraryRuns,
+    resettingLibrary,
     settingKeeper,
     backfillingMetrics,
     savingMixRunId,
@@ -849,6 +874,7 @@ export function useDashboardData(selection: { trackId: string | null }) {
     handleCleanupTempStorage,
     handleCleanupExportBundles,
     handleCleanupLibraryRuns,
+    handleResetLibrary,
     handleSetKeeper,
     handleBackfillMetrics,
     handleSaveMix,
@@ -857,5 +883,3 @@ export function useDashboardData(selection: { trackId: string | null }) {
     handleBatchDeleteTracks,
   }
 }
-
-export type DashboardData = ReturnType<typeof useDashboardData>

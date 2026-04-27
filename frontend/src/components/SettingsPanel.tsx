@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import { isMp3Bitrate, MP3_BITRATE_HINT, normalizeMp3Bitrate } from '../bitrate'
 import { stemSelectionLabel } from '../stems'
 import type { Settings, StorageBucket, StorageOverview } from '../types'
 import { Spinner } from './feedback/Spinner'
@@ -15,11 +16,13 @@ type SettingsPanelProps = {
   cleaningTempStorage: boolean
   cleaningExportBundles: boolean
   cleaningLibraryRuns: boolean
+  resettingLibrary: boolean
   view: 'preferences' | 'maintenance' | 'storage'
   onSave: (settings: Omit<Settings, 'stem_options' | 'quality_options'>) => Promise<void>
   onCleanupTempStorage: () => Promise<void>
   onCleanupExportBundles: () => Promise<void>
   onCleanupLibraryRuns: () => void
+  onResetLibrary: () => Promise<void>
 }
 
 type SettingsDraft = Omit<Settings, 'stem_options' | 'quality_options'>
@@ -28,8 +31,6 @@ type DraftState = {
   values: SettingsDraft
 }
 
-const BITRATE_PATTERN = /^\d{2,3}k$/
-const BITRATE_HINT = 'Use a value like 192k or 320k.'
 const STORAGE_PATH_HINT = 'Choose a concrete folder path. Blank values are not allowed.'
 
 function createDraft(settings: Settings | null): SettingsDraft {
@@ -70,11 +71,13 @@ export function SettingsPanel({
   cleaningTempStorage,
   cleaningExportBundles,
   cleaningLibraryRuns,
+  resettingLibrary,
   view,
   onSave,
   onCleanupTempStorage,
   onCleanupExportBundles,
   onCleanupLibraryRuns,
+  onResetLibrary,
 }: SettingsPanelProps) {
   const settingsKey = settings
     ? [
@@ -123,7 +126,7 @@ export function SettingsPanel({
 
   const draft = draftState.sourceKey === settingsKey ? draftState.values : createDraft(settings)
   const currentSettings = settings
-  const bitrateValid = BITRATE_PATTERN.test(draft.export_mp3_bitrate)
+  const bitrateValid = isMp3Bitrate(draft.export_mp3_bitrate)
   const storagePathsValid =
     hasText(draft.storage.uploads_directory) &&
     hasText(draft.storage.outputs_directory) &&
@@ -148,6 +151,7 @@ export function SettingsPanel({
     try {
       await onSave({
         ...draft,
+        export_mp3_bitrate: normalizeMp3Bitrate(draft.export_mp3_bitrate),
         storage: {
           ...draft.storage,
           database_path: currentSettings.storage.database_path,
@@ -192,7 +196,7 @@ export function SettingsPanel({
                 onChange={(event) => updateDraft({ ...draft, export_mp3_bitrate: event.target.value })}
               />
               {!bitrateValid ? (
-                <span className="field-error">{BITRATE_HINT}</span>
+                <span className="field-error">{MP3_BITRATE_HINT}</span>
               ) : (
                 <span className="field-hint">Used when exporting MP3 artifacts. Overridable per export.</span>
               )}
@@ -261,6 +265,22 @@ export function SettingsPanel({
                   pending={cleaningLibraryRuns}
                   disabled={(outputs?.reclaimable_bytes ?? 0) === 0}
                   onConfirm={async () => onCleanupLibraryRuns()}
+                />
+              </div>
+
+              <div className="storage-action-row storage-action-row-danger">
+                <div className="storage-action-copy">
+                  <strong>Clear all songs &amp; data</strong>
+                  <p>Deletes every imported song, output, export, and pending import. The processing model cache is kept so future splits stay fast.</p>
+                </div>
+                <ConfirmInline
+                  label={resettingLibrary ? 'Working…' : 'Clear everything'}
+                  pendingLabel="Working…"
+                  confirmLabel="Delete all songs"
+                  cancelLabel="Keep my library"
+                  prompt="Delete every song, output, and import?"
+                  pending={resettingLibrary}
+                  onConfirm={onResetLibrary}
                 />
               </div>
             </div>

@@ -193,6 +193,11 @@ class QueueRunResponse(BaseModel):
     track_artist: str | None
 
 
+class ActiveRunsResponse(BaseModel):
+    runs: list[QueueRunResponse]
+    worker_online: bool
+
+
 class BatchTrackIdsRequest(BaseModel):
     track_ids: list[str] = Field(default_factory=list)
 

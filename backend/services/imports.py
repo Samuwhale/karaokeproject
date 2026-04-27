@@ -14,11 +14,10 @@ from sqlalchemy.orm import Session
 from backend.adapters.youtube import YtDlpAdapter
 from backend.core.config import RuntimeSettings
 from backend.core.constants import SUPPORTED_IMPORT_EXTENSIONS
+from backend.core.imports import DraftDuplicateAction, DraftSourceType, DraftStatus
 from backend.db.models import (
-    DraftDuplicateAction,
-    DraftSourceType,
-    DraftStatus,
     ImportDraft,
+    RunStatus,
     Track,
 )
 from backend.schemas.imports import (
@@ -324,8 +323,9 @@ def confirm_import_drafts(
                 created += 1
 
             if queued_processing is not None:
-                create_run(track, queued_processing)
-                queued += 1
+                run = create_run(track, queued_processing)
+                if run.status == RunStatus.queued.value:
+                    queued += 1
 
             draft.status = DraftStatus.confirmed.value
             affected_tracks.append(track)

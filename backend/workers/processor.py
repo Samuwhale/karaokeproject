@@ -33,7 +33,7 @@ from backend.services.tracks import (
 
 
 class RunCancelled(Exception):
-    pass
+    """Raised internally when a running separation job is cancelled."""
 
 
 def _stage_progress_updater(
@@ -317,7 +317,7 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
         shutil.rmtree(output_directory, ignore_errors=True)
         mark_run_cancelled(run)
         session.commit()
-    except (RuntimeError, SeparationError) as error:
+    except RuntimeError as error:
         session.rollback()
         run = session.get(Run, run.id, options=[selectinload(Run.track), selectinload(Run.artifacts)])
         if run is None:

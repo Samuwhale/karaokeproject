@@ -56,7 +56,7 @@
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 18px;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   color: var(--text);
   background: transparent;
   border: 0;
@@ -527,7 +527,7 @@
   font-size: 20px;
   color: var(--text);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 @keyframes onboard-in {
@@ -714,7 +714,7 @@
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 15px;
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1010,7 +1010,7 @@
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 22px;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
   margin: 0;
 }
 
@@ -1420,7 +1420,7 @@ button.mix-top-title-copy:focus-visible {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 18px;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1465,7 +1465,7 @@ button.mix-top-title-copy:hover .mix-top-edit-icon {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 18px;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 1.2;
   background: var(--surface-2);
   border: 1px solid var(--accent);
@@ -1689,7 +1689,7 @@ button.mix-top-title-copy:hover .mix-top-edit-icon {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 15px;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2052,7 +2052,7 @@ button.stem-row-gain:focus-visible {
   font-size: 13px;
   color: var(--text);
   white-space: nowrap;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .mix-time-sep {
@@ -2072,7 +2072,7 @@ button.stem-row-gain:focus-visible {
 
 .mix-seekbar {
   flex: 1;
-  height: 6px;
+  height: 8px;
   min-width: 0;
   appearance: none;
   background: linear-gradient(
@@ -2083,12 +2083,13 @@ button.stem-row-gain:focus-visible {
   border-radius: 999px;
   cursor: pointer;
   accent-color: var(--accent);
-  transition: height 150ms ease, opacity 120ms;
+  opacity: 0.82;
+  transition: opacity 120ms;
 }
 
 .mix-seekbar:hover:not(:disabled),
 .mix-seekbar:focus-visible:not(:disabled) {
-  height: 8px;
+  opacity: 1;
 }
 
 .mix-seekbar::-webkit-slider-thumb {
@@ -2214,7 +2215,7 @@ button.stem-row-gain:focus-visible {
   font-family: var(--font-display);
   font-size: 20px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   color: var(--text);
 }
 
@@ -2244,10 +2245,13 @@ button.stem-row-gain:focus-visible {
 
 .mix-progress-fill {
   display: block;
+  width: 100%;
   height: 100%;
   background: var(--accent);
   border-radius: inherit;
-  transition: width 320ms ease;
+  transform: scaleX(var(--progress-scale, 0));
+  transform-origin: left center;
+  transition: transform 320ms ease;
   position: relative;
   overflow: hidden;
 }
@@ -2256,9 +2260,10 @@ button.stem-row-gain:focus-visible {
   content: '';
   position: absolute;
   top: 0;
-  left: -70%;
+  left: 0;
   width: 60%;
   height: 100%;
+  transform: translateX(-120%);
   background: linear-gradient(
     90deg,
     transparent,
@@ -2269,8 +2274,8 @@ button.stem-row-gain:focus-visible {
 }
 
 @keyframes progress-shimmer {
-  0% { left: -60%; }
-  100% { left: 140%; }
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(240%); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2318,12 +2323,6 @@ button.stem-row-gain:focus-visible {
   right: 0;
 }
 
-.popover-center {
-  left: 50%;
-  transform: translateX(-50%);
-  animation: popover-in-center 120ms ease-out;
-}
-
 .popover-wide {
   width: clamp(360px, 92vw, 480px);
 }
@@ -2332,13 +2331,6 @@ button.stem-row-gain:focus-visible {
   from {
     opacity: 0;
     transform: translateY(-4px);
-  }
-}
-
-@keyframes popover-in-center {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-4px);
   }
 }
 
@@ -2461,12 +2453,6 @@ button.stem-row-gain:focus-visible {
   align-items: center;
   gap: 8px;
   padding: 10px 4px 0;
-}
-
-.popover-empty {
-  font-size: 13px;
-  color: var(--text-muted);
-  padding: 0 4px;
 }
 
 .popover-backdrop {
@@ -2643,39 +2629,6 @@ button.stem-row-gain:focus-visible {
   font-size: var(--t-xs);
   color: var(--text-muted);
   padding: 0 4px 4px;
-}
-
-/* Rename inline form inside overflow menu */
-
-.rename-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 4px;
-}
-
-.rename-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.rename-form input {
-  padding: 8px 10px;
-  background: var(--surface-2);
-  border: 0;
-  border-radius: var(--radius-xs);
-  font-size: 14px;
-  color: var(--text);
-}
-
-.rename-form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 4px;
 }
 
 /* Import panel -------------------------------------------------------------- */
@@ -2968,11 +2921,6 @@ button.stem-row-gain:focus-visible {
 .mix-blocked-icon-bar-4 { animation-delay: 20ms; }
 .mix-blocked-icon-bar-5 { animation-delay: 60ms; }
 
-.mix-blocked-hint {
-  font-size: var(--t-sm);
-  color: var(--text-muted);
-}
-
 .mix-blocked-actions {
   display: flex;
   gap: 10px;
@@ -3050,7 +2998,7 @@ button.stem-row-gain:focus-visible {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 18px;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
   color: var(--text);
 }
 

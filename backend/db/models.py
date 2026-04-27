@@ -8,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.core.imports import DraftStatus
 from backend.db.session import Base
 
 
@@ -122,23 +123,6 @@ class RunArtifact(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=datetime.utcnow)
 
     run: Mapped[Run] = relationship(back_populates="artifacts")
-
-
-class DraftSourceType(StrEnum):
-    youtube = "youtube"
-    local = "local"
-
-
-class DraftStatus(StrEnum):
-    pending = "pending"
-    confirmed = "confirmed"
-    discarded = "discarded"
-
-
-class DraftDuplicateAction(StrEnum):
-    create_new = "create-new"
-    reuse_existing = "reuse-existing"
-    skip = "skip"
 
 
 class ImportDraft(TimestampMixin, Base):

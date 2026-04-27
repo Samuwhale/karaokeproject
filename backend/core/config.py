@@ -6,7 +6,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class RuntimeSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="STEMSTUDIO_", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="STEMSTUDIO_",
+        case_sensitive=False,
+    )
 
     api_host: str = "127.0.0.1"
     api_port: int = 8000
@@ -29,14 +33,19 @@ class RuntimeSettings(BaseSettings):
     def ensure_directories(self) -> None:
         for directory in (
             self.data_root,
-            self.logs_dir,
             self.database_path.parent,
+            self.uploads_dir,
+            self.output_dir,
+            self.exports_dir,
+            self.temp_dir,
+            self.logs_dir,
+            self.model_cache_dir,
         ):
-            directory.mkdir(parents=True, exist_ok=True)
+            directory.expanduser().mkdir(parents=True, exist_ok=True)
 
     @property
     def database_url(self) -> str:
-        return f"sqlite:///{self.database_path.resolve()}"
+        return f"sqlite:///{self.database_path.expanduser().resolve()}"
 
 
 @lru_cache

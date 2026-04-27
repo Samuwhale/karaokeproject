@@ -8,7 +8,7 @@ export type QualityOption = {
   label: string
 }
 
-export type RunProcessingConfig = {
+type RunProcessingConfig = {
   stems: string[]
   quality: StemQuality
   label: string
@@ -40,7 +40,7 @@ export type Settings = {
   quality_options: QualityOption[]
 }
 
-export type StorageBucketKey =
+type StorageBucketKey =
   | 'database'
   | 'uploads'
   | 'outputs'
@@ -61,7 +61,7 @@ export type StorageOverview = {
   total_bytes: number
 }
 
-export type BinaryStatus = {
+type BinaryStatus = {
   name: string
   required: boolean
   available: boolean
@@ -93,7 +93,7 @@ export type RunSummary = {
   dismissed_at: string | null
 }
 
-export type ArtifactMetrics = {
+type ArtifactMetrics = {
   duration_seconds: number | null
   sample_rate: number | null
   channels: number | null
@@ -120,7 +120,7 @@ export type RunMixStemEntry = {
   muted: boolean
 }
 
-export type RunMixState = {
+type RunMixState = {
   stems: RunMixStemEntry[]
   is_default: boolean
 }
@@ -177,8 +177,8 @@ export type ExistingTrackDuplicate = {
   source_filename: string
 }
 
-export type DraftSourceType = 'youtube' | 'local'
-export type DraftStatus = 'pending' | 'confirmed' | 'discarded'
+type DraftSourceType = 'youtube' | 'local'
+type DraftStatus = 'pending' | 'confirmed' | 'discarded'
 export type DraftDuplicateAction = 'create-new' | 'reuse-existing' | 'skip'
 
 export type ImportDraft = {
@@ -253,6 +253,11 @@ export type QueueRunEntry = {
   track_artist: string | null
 }
 
+export type ActiveRunsResponse = {
+  runs: QueueRunEntry[]
+  worker_online: boolean
+}
+
 export type BatchTrackIdsInput = {
   track_ids: string[]
 }
@@ -280,10 +285,16 @@ export type NonKeeperCleanupResponse = {
   bytes_reclaimed: number
 }
 
+export type LibraryResetResponse = {
+  deleted_track_count: number
+  deleted_draft_count: number
+  bytes_reclaimed: number
+}
+
 export type ExportPackagingMode = 'auto' | 'flat' | 'per-song-folders'
 export type ExportDeliveryKind = 'direct-file' | 'flat-zip' | 'folder-zip'
-export type StaticExportArtifactKind = 'source' | 'metadata' | 'mix-wav' | 'mix-mp3'
-export type StemExportArtifactKind = `stem-wav:${string}` | `stem-mp3:${string}`
+type StaticExportArtifactKind = 'source' | 'metadata' | 'mix-wav' | 'mix-mp3'
+type StemExportArtifactKind = `stem-wav:${string}` | `stem-mp3:${string}`
 export type ExportArtifactKind = StaticExportArtifactKind | StemExportArtifactKind
 
 export type ExportStemOption = {
@@ -309,7 +320,7 @@ export type ExportBundleInput = {
   bitrate: string
 }
 
-export type ExportBundleSkip = {
+type ExportBundleSkip = {
   track_id: string
   track_title: string
   reason: string
@@ -333,7 +344,7 @@ export type ExportPlanInput = {
   bitrate: string
 }
 
-export type ExportPlanArtifact = {
+type ExportPlanArtifact = {
   kind: ExportArtifactKind
   present: boolean
   size_bytes: number | null
@@ -358,7 +369,7 @@ export type ExportPlanResponse = {
   skipped_track_count: number
 }
 
-export type RevealFolderKind = 'exports' | 'outputs' | 'track-outputs' | 'bundle'
+type RevealFolderKind = 'exports' | 'outputs' | 'track-outputs' | 'bundle'
 
 export type RevealFolderInput = {
   kind: RevealFolderKind

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { discardRejection } from '../../async'
 
-export type MixerStemInput = {
+type MixerStemInput = {
   artifact_id: string
   url: string
   gain_db: number

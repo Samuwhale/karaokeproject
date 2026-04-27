@@ -12,10 +12,11 @@ import type {
   ExportStemsInput,
   ExportStemsResponse,
   ImportDraft,
+  LibraryResetResponse,
   NonKeeperCleanupResponse,
   RevealFolderInput,
   RevealFolderResponse,
-  QueueRunEntry,
+  ActiveRunsResponse,
   ResolveLocalImportResponse,
   ResolveYouTubeImportResponse,
   RunDetail,
@@ -212,6 +213,12 @@ export function flushPendingLibraryCleanup() {
   postKeepalive('/api/storage/cleanup/non-keeper-runs')
 }
 
+export function resetLibrary() {
+  return fetchApi<LibraryResetResponse>('/api/storage/reset', {
+    method: 'POST',
+  })
+}
+
 // --- Tracks ---
 
 export function getTracks() {
@@ -249,7 +256,7 @@ export function updateRunMix(trackId: string, runId: string, stems: RunMixStemEn
 }
 
 export function getActiveRuns() {
-  return fetchApi<QueueRunEntry[]>('/api/runs/active')
+  return fetchApi<ActiveRunsResponse>('/api/runs/active')
 }
 
 // --- Keeper / cleanup ---

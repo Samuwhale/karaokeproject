@@ -40,3 +40,9 @@ class NonKeeperCleanupResponse(BaseModel):
     skipped_track_count: int
     deleted_run_count: int
     bytes_reclaimed: int
+
+
+class LibraryResetResponse(BaseModel):
+    deleted_track_count: int
+    deleted_draft_count: int
+    bytes_reclaimed: int

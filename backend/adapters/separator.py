@@ -12,7 +12,7 @@ from backend.core.stems import detect_stem_name
 
 
 class SeparationError(RuntimeError):
-    pass
+    """Raised when stem separation cannot produce usable output."""
 
 
 @dataclass(frozen=True)

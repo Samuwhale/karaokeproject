@@ -460,6 +460,7 @@ def create_run(track: Track, processing: ProcessingConfig) -> Run:
             (
                 run
                 for run in track.runs
+                if run not in session.deleted
                 if run.status == RunStatus.completed.value
                 and resolve_run_processing(run).quality == processing.quality
                 and required_generated_stems.issubset(generated_stem_names(run))

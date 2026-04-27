@@ -20,6 +20,7 @@ from backend.schemas.tracks import (
     RunProcessingConfigResponse,
     StemOptionResponse,
 )
+from backend.schemas.validation import normalize_mp3_bitrate
 
 DEFAULT_MP3_BITRATE = "320k"
 
@@ -52,8 +53,10 @@ class ProcessingConfig:
 
 
 def normalize_export_bitrate(value: str | None, fallback: str = DEFAULT_MP3_BITRATE) -> str:
-    normalized = (value or "").strip()
-    return normalized or fallback
+    try:
+        return normalize_mp3_bitrate(value)
+    except ValueError:
+        return fallback
 
 
 def normalize_stem_selection(stems: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:

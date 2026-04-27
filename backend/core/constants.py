@@ -5,15 +5,22 @@ SUPPORTED_IMPORT_EXTENSIONS = {
     ".aac",
     ".aif",
     ".aiff",
+    ".alac",
+    ".avi",
     ".flac",
     ".m4a",
+    ".m4v",
     ".mkv",
     ".mov",
     ".mp3",
     ".mp4",
+    ".mpeg",
+    ".mpg",
     ".ogg",
+    ".opus",
     ".wav",
     ".webm",
+    ".wma",
 }
 
 STEM_QUALITY_KEYS = ("fast", "balanced")

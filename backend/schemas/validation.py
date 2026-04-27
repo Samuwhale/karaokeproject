@@ -1,3 +1,18 @@
+import re
+
+
+MP3_BITRATE_PATTERN = re.compile(r"^\d{2,3}k$")
+
+
+def normalize_mp3_bitrate(value: str | None, *, label: str = "MP3 bitrate") -> str:
+    cleaned = (value or "").strip().lower()
+    if not cleaned:
+        raise ValueError(f"{label} cannot be blank.")
+    if not MP3_BITRATE_PATTERN.match(cleaned):
+        raise ValueError(f"{label} must look like 192k or 320k.")
+    return cleaned
+
+
 def normalize_unique_string_list(values: list[str], *, label: str) -> list[str]:
     normalized: list[str] = []
     seen: set[str] = set()
@@ -27,7 +42,6 @@ def normalize_string_mapping(
     value_label: str,
 ) -> dict[str, str]:
     normalized: dict[str, str] = {}
-    duplicates: list[str] = []
 
     for raw_key, raw_value in values.items():
         key = raw_key.strip()
@@ -38,14 +52,6 @@ def normalize_string_mapping(
         if not value:
             raise ValueError(f"{value_label} cannot be blank.")
 
-        if key in normalized:
-            if key not in duplicates:
-                duplicates.append(key)
-            continue
-
         normalized[key] = value
-
-    if duplicates:
-        raise ValueError(f"Duplicate {key_label.lower()} were provided: {', '.join(duplicates)}")
 
     return normalized

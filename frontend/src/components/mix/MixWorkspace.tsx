@@ -847,7 +847,9 @@ function MixWorkspaceContent({
                   {selectedRun.status !== 'queued' ? (
                     <span
                       className="mix-progress-fill"
-                      style={{ width: `${Math.max(0, Math.min(1, selectedRun.progress)) * 100}%` }}
+                      style={{
+                        '--progress-scale': String(Math.max(0, Math.min(1, selectedRun.progress))),
+                      } as React.CSSProperties}
                     />
                   ) : null}
                 </div>

@@ -5,6 +5,7 @@ from backend.api.dependencies import get_db_session, get_settings_dependency
 from backend.core.config import RuntimeSettings
 from backend.schemas.storage import (
     ExportBundleCleanupResponse,
+    LibraryResetResponse,
     NonKeeperCleanupResponse,
     StorageOverviewResponse,
     TempCleanupResponse,
@@ -15,6 +16,7 @@ from backend.services.storage import (
     cleanup_non_keeper_runs_library,
     cleanup_temp_storage,
     collect_storage_overview,
+    reset_library,
     resolve_storage_paths,
 )
 
@@ -55,3 +57,11 @@ def cleanup_non_keeper_runs_endpoint(
     runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
 ) -> NonKeeperCleanupResponse:
     return cleanup_non_keeper_runs_library(session, runtime_settings)
+
+
+@router.post("/storage/reset", response_model=LibraryResetResponse)
+def reset_library_endpoint(
+    session: Session = Depends(get_db_session),
+    runtime_settings: RuntimeSettings = Depends(get_settings_dependency),
+) -> LibraryResetResponse:
+    return reset_library(session, runtime_settings)

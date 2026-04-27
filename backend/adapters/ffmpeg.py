@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from backend.core.config import RuntimeSettings
 
 
 class FfmpegCommandError(RuntimeError):
-    pass
+    """Raised when an ffmpeg or ffprobe command exits unsuccessfully."""
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,24 @@ class AudioMetadata:
 
 _INTEGRATED_LOUDNESS_RE = re.compile(r"Integrated loudness:.*?I:\s*(-?\d+(?:\.\d+)?)\s*LUFS", re.DOTALL)
 _TRUE_PEAK_RE = re.compile(r"True peak:.*?Peak:\s*(-?\d+(?:\.\d+)?)\s*dBFS", re.DOTALL)
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 class FfmpegAdapter:
@@ -65,9 +84,9 @@ class FfmpegAdapter:
         sample_rate_raw = audio_stream.get("sample_rate")
         channels_raw = audio_stream.get("channels")
         return AudioMetadata(
-            duration_seconds=float(duration_raw) if duration_raw else None,
-            sample_rate=int(sample_rate_raw) if sample_rate_raw else None,
-            channels=int(channels_raw) if channels_raw else None,
+            duration_seconds=_optional_float(duration_raw),
+            sample_rate=_optional_int(sample_rate_raw),
+            channels=_optional_int(channels_raw),
         )
 
     def normalize(self, source_path: Path, destination_path: Path) -> None:
@@ -104,6 +123,34 @@ class FfmpegAdapter:
                 str(destination_path),
             ]
         )
+
+    def copy_with_metadata(
+        self,
+        source_path: Path,
+        destination_path: Path,
+        metadata: Mapping[str, str | None],
+    ) -> None:
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        command = [
+            self.ffmpeg_binary,
+            "-y",
+            "-i",
+            str(source_path),
+            "-map",
+            "0",
+            "-c",
+            "copy",
+            "-map_metadata",
+            "-1",
+        ]
+        for key, value in metadata.items():
+            cleaned = value.strip() if value else ""
+            if cleaned:
+                command.extend(["-metadata", f"{key}={cleaned}"])
+        if destination_path.suffix.lower() == ".mp3":
+            command.extend(["-id3v2_version", "3"])
+        command.append(str(destination_path))
+        self._run(command)
 
     def measure_loudness(self, source_path: Path) -> tuple[float | None, float | None]:
         completed = subprocess.run(

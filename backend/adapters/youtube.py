@@ -4,13 +4,14 @@ import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from backend.core.binaries import resolve_binary
 from backend.core.config import RuntimeSettings
 
 
 class YouTubeImportError(RuntimeError):
-    pass
+    """Raised when yt-dlp cannot resolve or download a YouTube source."""
 
 
 @dataclass(frozen=True)
@@ -109,12 +110,15 @@ class YtDlpAdapter:
             return None
         return next((line for line in completed.stdout.splitlines() if line.strip()), None)
 
-    def _run_json(self, command: list[str]) -> dict:
+    def _run_json(self, command: list[str]) -> dict[str, Any]:
         completed = self._run(command)
         try:
-            return json.loads(completed.stdout)
+            payload = json.loads(completed.stdout)
         except json.JSONDecodeError as error:
             raise YouTubeImportError("yt-dlp returned unreadable metadata for the provided URL.") from error
+        if not isinstance(payload, dict):
+            raise YouTubeImportError("yt-dlp returned metadata in an unexpected format.")
+        return payload
 
     def _run(self, command: list[str]) -> subprocess.CompletedProcess[str]:
         try:
@@ -135,7 +139,7 @@ class YtDlpAdapter:
     def _canonical_video_url(video_id: str) -> str:
         return f"https://www.youtube.com/watch?v={video_id}"
 
-    def _resolve_item(self, payload: dict) -> ResolvedYouTubeItem:
+    def _resolve_item(self, payload: dict[str, Any]) -> ResolvedYouTubeItem:
         video_id = str(payload.get("id") or "").strip()
         title = str(payload.get("title") or "").strip()
         if not video_id or not title:
@@ -145,7 +149,10 @@ class YtDlpAdapter:
         source_url = canonical_source_url
         artist = payload.get("artist") or payload.get("uploader")
         duration_raw = payload.get("duration")
-        duration_seconds = float(duration_raw) if duration_raw else None
+        try:
+            duration_seconds = float(duration_raw) if duration_raw else None
+        except (TypeError, ValueError):
+            duration_seconds = None
 
         return ResolvedYouTubeItem(
             video_id=video_id,

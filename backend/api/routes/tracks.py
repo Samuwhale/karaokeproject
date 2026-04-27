@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.api.dependencies import get_db_session, get_settings_dependency
 from backend.core.config import RuntimeSettings
+from backend.core.worker_health import is_worker_alive
 from backend.db.models import ACTIVE_RUN_STATUSES, Run, RunStatus, Track
 from backend.schemas.tracks import (
+    ActiveRunsResponse,
     BackfillMetricsResponse,
     BatchDeleteResponse,
     BatchTrackIdsRequest,
@@ -19,7 +22,6 @@ from backend.schemas.tracks import (
     TrackSummaryResponse,
     UpdateTrackRequest,
 )
-from sqlalchemy import select
 from backend.services.metrics import backfill_artifact_metrics
 from backend.services.processing import build_processing_from_request
 from backend.services.settings import get_or_create_settings
@@ -183,8 +185,11 @@ def set_track_keeper(
     return serialize_track_detail(track)
 
 
-@router.get("/runs/active", response_model=list[QueueRunResponse])
-def list_active_runs(session: Session = Depends(get_db_session)) -> list[QueueRunResponse]:
+@router.get("/runs/active", response_model=ActiveRunsResponse)
+def list_active_runs(
+    session: Session = Depends(get_db_session),
+    settings: RuntimeSettings = Depends(get_settings_dependency),
+) -> ActiveRunsResponse:
     terminal_statuses = [RunStatus.failed.value, RunStatus.cancelled.value]
 
     active_statement = (
@@ -214,7 +219,7 @@ def list_active_runs(session: Session = Depends(get_db_session)) -> list[QueueRu
                 track_artist=track.artist if track else None,
             )
         )
-    return entries
+    return ActiveRunsResponse(runs=entries, worker_online=is_worker_alive(settings))
 
 
 @router.post("/tracks/batch/delete", response_model=BatchDeleteResponse)

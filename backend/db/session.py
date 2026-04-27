@@ -9,7 +9,7 @@ from backend.core.config import get_runtime_settings
 
 
 class Base(DeclarativeBase):
-    pass
+    """Base class for SQLAlchemy models."""
 
 
 runtime_settings = get_runtime_settings()
@@ -34,6 +34,7 @@ _COLUMN_ADDITIONS: tuple[tuple[str, str, str], ...] = (
     ("app_settings", "temp_max_age_hours", "INTEGER NULL"),
     ("app_settings", "export_bundle_max_age_days", "INTEGER NULL"),
     ("app_settings", "default_stem_selection", "JSON NULL"),
+    ("app_settings", "export_mp3_bitrate", "VARCHAR(32) NOT NULL DEFAULT '320k'"),
 )
 
 
@@ -89,9 +90,8 @@ def _clear_path_cleanups_after_rollback(session: Session) -> None:
 @event.listens_for(SessionLocal, "after_soft_rollback")
 def _clear_path_cleanups_after_soft_rollback(
     session: Session,
-    previous_transaction: object,
+    _previous_transaction: object,
 ) -> None:
-    del previous_transaction
     _clear_scheduled_path_cleanups(session)
 
 

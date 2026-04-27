@@ -1,8 +1,8 @@
 from datetime import datetime
-from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
 
+from backend.core.imports import DraftDuplicateAction, DraftSourceType, DraftStatus
 from backend.schemas.tracks import (
     QualityOptionResponse,
     RunProcessingConfigRequest,
@@ -11,23 +11,6 @@ from backend.schemas.tracks import (
     TrackSummaryResponse,
 )
 from backend.schemas.validation import normalize_unique_string_list
-
-
-class DraftSourceType(StrEnum):
-    youtube = "youtube"
-    local = "local"
-
-
-class DraftStatus(StrEnum):
-    pending = "pending"
-    confirmed = "confirmed"
-    discarded = "discarded"
-
-
-class DraftDuplicateAction(StrEnum):
-    create_new = "create-new"
-    reuse_existing = "reuse-existing"
-    skip = "skip"
 
 
 class ExistingTrackDuplicateResponse(BaseModel):

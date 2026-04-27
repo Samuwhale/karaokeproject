@@ -91,8 +91,9 @@ def _backfill_settings(settings: AppSettings, runtime_settings: RuntimeSettings)
 
 
 def serialize_settings(settings: AppSettings, runtime_settings: RuntimeSettings) -> SettingsResponse:
+    default_selection = settings_default_selection(settings)
     storage = StorageSettingsResponse(
-        database_path=str(runtime_settings.database_path.resolve()),
+        database_path=str(runtime_settings.database_path.expanduser().resolve()),
         uploads_directory=settings.uploads_directory or "",
         outputs_directory=settings.outputs_directory,
         exports_directory=settings.exports_directory or "",
@@ -107,8 +108,8 @@ def serialize_settings(settings: AppSettings, runtime_settings: RuntimeSettings)
         ),
         default_stem_selection=serialize_processing_config(
             build_processing_config(
-                tuple(settings_default_selection(settings)["stems"]),
-                settings_default_selection(settings)["quality"],
+                tuple(default_selection["stems"]),
+                default_selection["quality"],
             )
         ),
         export_mp3_bitrate=normalize_export_bitrate(settings.export_mp3_bitrate),

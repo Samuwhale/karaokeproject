@@ -1,11 +1,7 @@
-import re
-
 from pydantic import BaseModel, field_validator
 
 from backend.schemas.tracks import QualityOptionResponse, RunProcessingConfigRequest, RunProcessingConfigResponse, StemOptionResponse
-
-
-_BITRATE_PATTERN = re.compile(r"^\d{2,3}k$")
+from backend.schemas.validation import normalize_mp3_bitrate
 
 
 def _require_non_empty_path(value: str, *, field_label: str) -> str:
@@ -73,7 +69,4 @@ class SettingsUpdateRequest(BaseModel):
     @field_validator("export_mp3_bitrate", mode="after")
     @classmethod
     def validate_export_mp3_bitrate(cls, value: str) -> str:
-        cleaned = value.strip().lower()
-        if not _BITRATE_PATTERN.match(cleaned):
-            raise ValueError("Export MP3 bitrate must look like 192k or 320k.")
-        return cleaned
+        return normalize_mp3_bitrate(value, label="Export MP3 bitrate")

@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 
 import { discardRejection } from '../../async'
 import { createExportBundle, listExportStems, planExportBundle } from '../../api'
+import { isMp3Bitrate, MP3_BITRATE_HINT, normalizeMp3Bitrate } from '../../bitrate'
 import type {
   ExportArtifactKind,
   ExportBundleResponse,
@@ -27,9 +28,6 @@ type ExportBuilderProps = {
   footerAction?: React.ReactNode
   variant?: 'full' | 'compact'
 }
-
-const BITRATE_PATTERN = /^\d{2,3}k$/
-const BITRATE_HINT = 'Use a value like 192k or 320k.'
 
 function buildArtifactList(
   includeMix: boolean,
@@ -156,11 +154,12 @@ export function ExportBuilder({
     () => buildArtifactList(includeMix, selectedStems, includeSource, stemOptions, mixFmt, stemFmt),
     [includeMix, selectedStems, includeSource, stemOptions, mixFmt, stemFmt],
   )
-  const bitrateValid = BITRATE_PATTERN.test(bitrate)
+  const normalizedBitrate = normalizeMp3Bitrate(bitrate)
+  const bitrateValid = isMp3Bitrate(bitrate)
   const mp3Requested = (includeMix && mixFmt === 'mp3') || (hasSelectedStems && stemFmt === 'mp3')
   const planKey = useMemo(() => {
-    return `${selectedTrackIdsKey}|${runIdsKey}|${artifactList.slice().sort().join(',')}|${effectivePackaging}|${bitrate}`
-  }, [selectedTrackIdsKey, runIdsKey, artifactList, effectivePackaging, bitrate])
+    return `${selectedTrackIdsKey}|${runIdsKey}|${artifactList.slice().sort().join(',')}|${effectivePackaging}|${normalizedBitrate}`
+  }, [selectedTrackIdsKey, runIdsKey, artifactList, effectivePackaging, normalizedBitrate])
   const canPlan = !!selectedTrackIds.length && !!artifactList.length && (!mp3Requested || bitrateValid)
   const plan = canPlan && plannedResponse?.key === planKey ? plannedResponse.plan : null
   const planError = canPlan && plannedResponse?.key === planKey ? plannedResponse.error : null
@@ -176,7 +175,7 @@ export function ExportBuilder({
           run_ids: resolvedRunIds,
           artifacts: artifactList,
           packaging: effectivePackaging,
-          bitrate,
+          bitrate: normalizedBitrate,
         })
         if (!cancelled) {
           setPlannedResponse({ key: planKey, plan: response, error: null })
@@ -196,7 +195,7 @@ export function ExportBuilder({
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [artifactList, bitrate, canPlan, effectivePackaging, planKey, resolvedRunIds, result, selectedTrackIds])
+  }, [artifactList, canPlan, effectivePackaging, normalizedBitrate, planKey, resolvedRunIds, result, selectedTrackIds])
 
   async function handleExport() {
     if (!artifactList.length) return
@@ -208,7 +207,7 @@ export function ExportBuilder({
         run_ids: resolvedRunIds,
         artifacts: artifactList,
         packaging: effectivePackaging,
-        bitrate,
+        bitrate: normalizedBitrate,
       })
       setResult(response)
     } catch (error) {
@@ -225,7 +224,7 @@ export function ExportBuilder({
   const blockingReason = !selectedTrackIds.length
     ? 'Choose at least one track to export.'
     : mp3Requested && !bitrateValid
-      ? BITRATE_HINT
+      ? MP3_BITRATE_HINT
     : !artifactList.length
       ? 'Pick at least one thing to include.'
       : planError
@@ -336,7 +335,7 @@ export function ExportBuilder({
             aria-invalid={!bitrateValid}
             onChange={(event) => setBitrate(event.target.value)}
           />
-          {!bitrateValid ? <span className="field-error">{BITRATE_HINT}</span> : null}
+          {!bitrateValid ? <span className="field-error">{MP3_BITRATE_HINT}</span> : null}
         </label>
       ) : null}
 

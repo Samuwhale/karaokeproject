@@ -19,7 +19,7 @@ import type {
   UpdateImportDraftInput,
 } from '../../types'
 
-export type ImportPanelProps = {
+type ImportPanelProps = {
   open: boolean
   drafts: ImportDraft[]
   stemOptions: StemOption[]

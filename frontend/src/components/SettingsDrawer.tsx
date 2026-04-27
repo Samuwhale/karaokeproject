@@ -15,12 +15,14 @@ type SettingsDrawerProps = {
   cleaningTempStorage: boolean
   cleaningExportBundles: boolean
   cleaningLibraryRuns: boolean
+  resettingLibrary: boolean
   backfillingMetrics: boolean
   onClose: () => void
   onSaveSettings: (settings: Omit<Settings, 'stem_options' | 'quality_options'>) => Promise<void>
   onCleanupTempStorage: () => Promise<void>
   onCleanupExportBundles: () => Promise<void>
   onCleanupLibraryRuns: () => void
+  onResetLibrary: () => Promise<void>
   onBackfillMetrics: () => Promise<void>
 }
 
@@ -52,12 +54,14 @@ function SettingsDrawerContent({
   cleaningTempStorage,
   cleaningExportBundles,
   cleaningLibraryRuns,
+  resettingLibrary,
   backfillingMetrics,
   onClose,
   onSaveSettings,
   onCleanupTempStorage,
   onCleanupExportBundles,
   onCleanupLibraryRuns,
+  onResetLibrary,
   onBackfillMetrics,
   initialView,
 }: SettingsDrawerContentProps) {
@@ -135,11 +139,13 @@ function SettingsDrawerContent({
             cleaningTempStorage={cleaningTempStorage}
             cleaningExportBundles={cleaningExportBundles}
             cleaningLibraryRuns={cleaningLibraryRuns}
+            resettingLibrary={resettingLibrary}
             view={view}
             onSave={onSaveSettings}
             onCleanupTempStorage={onCleanupTempStorage}
             onCleanupExportBundles={onCleanupExportBundles}
             onCleanupLibraryRuns={onCleanupLibraryRuns}
+            onResetLibrary={onResetLibrary}
           />
         </div>
       </aside>

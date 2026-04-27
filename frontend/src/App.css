@@ -390,16 +390,6 @@ button.topbar-chip:focus-visible {
   margin-bottom: var(--space-md);
 }
 
-.section-head-copy {
-  display: grid;
-  gap: 4px;
-}
-
-.section-head-copy p {
-  font-size: var(--t-xs);
-  color: var(--text-muted);
-}
-
 .section-head h2, .section-head h3 {
   margin: 0;
   font-size: var(--t-md);
@@ -646,10 +636,6 @@ code {
   margin-bottom: var(--space-xs);
 }
 
-.run-history-head .subsection-head {
-  margin-bottom: 0;
-}
-
 .processing-grid {
   display: grid;
   gap: var(--space-sm);
@@ -796,6 +782,15 @@ code {
   font-size: var(--t-xs);
   color: var(--text-muted);
   line-height: 1.5;
+}
+
+.storage-action-row-danger {
+  border-color: color-mix(in oklch, var(--err) 30%, var(--border-soft));
+  background: color-mix(in oklch, var(--err) 7%, var(--surface-sunk));
+}
+
+.storage-action-row-danger .storage-action-copy strong {
+  color: var(--err);
 }
 
 /* -------- Global drop overlay --------------------------------------- */
@@ -1040,19 +1035,19 @@ code {
 /* -------- Responsive ------------------------------------------------ */
 
 @media (max-width: 960px) {
-  
 
-  
 
-  
 
-  
+
+
+
+
 
   .processing-grid {
     grid-template-columns: 1fr;
   }
 
-  
+
 
   .drawer {
     grid-template-columns: 0 1fr;
@@ -1074,23 +1069,6 @@ code {
     min-height: 36px;
     padding: 0 var(--space-sm);
   }
-}
-
-/* ----- Queue ----- */
-
-.queue-row-actions .button-primary, .queue-row-actions .button-secondary {
-  white-space: nowrap;
-}
-
-/* ----- Import inline error --------------------------------------------- */
-
-.import-error {
-  padding: var(--space-sm) var(--space-md);
-  font-size: var(--t-sm);
-  color: color-mix(in oklch, var(--err) 85%, var(--text));
-  background: color-mix(in oklch, var(--err) 7%, var(--surface));
-  border: 1px solid color-mix(in oklch, var(--err) 35%, var(--border-soft));
-  border-radius: var(--radius-sm);
 }
 
 /* ----- Export manifest ------------------------------------------------- */
@@ -1183,14 +1161,6 @@ code {
   outline: 1px solid var(--accent);
   outline-offset: 2px;
   text-decoration: none;
-}
-
-/* ----- Export modal ----- */
-
-.export-stem-chip.active {
-  background: color-mix(in oklch, var(--accent) 14%, var(--surface));
-  border-color: color-mix(in oklch, var(--accent) 55%, var(--border));
-  color: var(--text);
 }
 
 /* ----- Export result panel ----- */

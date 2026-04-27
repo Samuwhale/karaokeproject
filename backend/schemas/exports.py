@@ -7,7 +7,7 @@ from backend.core.stems import (
     EXPORT_STEM_WAV_PREFIX,
     STEM_NAME_PATTERN,
 )
-from backend.schemas.validation import normalize_string_mapping, normalize_unique_string_list
+from backend.schemas.validation import normalize_mp3_bitrate, normalize_string_mapping, normalize_unique_string_list
 
 
 STATIC_ARTIFACT_KINDS: frozenset[str] = frozenset({
@@ -45,14 +45,7 @@ class ExportDeliveryKind(StrEnum):
     folder_zip = "folder-zip"
 
 
-def _validate_bitrate(value: str) -> str:
-    cleaned = value.strip()
-    if not cleaned:
-        raise ValueError("bitrate must be a value like '192k' or '320k'.")
-    return cleaned
-
-
-class ExportBundleRequest(BaseModel):
+class ExportRequestBase(BaseModel):
     track_ids: list[str] = Field(min_length=1)
     run_ids: dict[str, str] = Field(default_factory=dict)
     artifacts: list[str] = Field(min_length=1)
@@ -82,7 +75,11 @@ class ExportBundleRequest(BaseModel):
     @field_validator("bitrate")
     @classmethod
     def _validate_bitrate_field(cls, value: str) -> str:
-        return _validate_bitrate(value)
+        return normalize_mp3_bitrate(value, label="bitrate")
+
+
+class ExportBundleRequest(ExportRequestBase):
+    """Request body for creating an export download."""
 
 
 class ExportBundleSkip(BaseModel):
@@ -101,37 +98,8 @@ class ExportBundleResponse(BaseModel):
     skipped: list[ExportBundleSkip] = Field(default_factory=list)
 
 
-class ExportPlanRequest(BaseModel):
-    track_ids: list[str] = Field(min_length=1)
-    run_ids: dict[str, str] = Field(default_factory=dict)
-    artifacts: list[str] = Field(min_length=1)
-    packaging: ExportPackagingMode = ExportPackagingMode.auto
-    bitrate: str = "320k"
-
-    @field_validator("artifacts")
-    @classmethod
-    def _validate_artifacts(cls, value: list[str]) -> list[str]:
-        validated = [validate_export_artifact_kind(item) for item in value]
-        return normalize_unique_string_list(validated, label="Artifact kinds")
-
-    @field_validator("track_ids")
-    @classmethod
-    def _validate_track_ids(cls, value: list[str]) -> list[str]:
-        return normalize_unique_string_list(value, label="Track ids")
-
-    @field_validator("run_ids")
-    @classmethod
-    def _validate_run_ids(cls, value: dict[str, str]) -> dict[str, str]:
-        return normalize_string_mapping(
-            value,
-            key_label="Run override track ids",
-            value_label="Run ids",
-        )
-
-    @field_validator("bitrate")
-    @classmethod
-    def _validate_bitrate_field(cls, value: str) -> str:
-        return _validate_bitrate(value)
+class ExportPlanRequest(ExportRequestBase):
+    """Request body for previewing an export download."""
 
 
 class ExportPlanArtifact(BaseModel):

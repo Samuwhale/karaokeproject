@@ -1,5 +1,6 @@
 const IMPORTABLE_MEDIA_EXTENSIONS = new Set([
   '.aac',
+  '.aif',
   '.aiff',
   '.alac',
   '.avi',

@@ -8,9 +8,10 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from backend.core.config import RuntimeSettings
-from backend.db.models import ACTIVE_RUN_STATUSES, AppSettings, Track
+from backend.db.models import ACTIVE_RUN_STATUSES, AppSettings, ImportDraft, Track
 from backend.schemas.storage import (
     ExportBundleCleanupResponse,
+    LibraryResetResponse,
     NonKeeperCleanupResponse,
     StorageBucketKey,
     StorageBucketResponse,
@@ -92,12 +93,18 @@ def entry_count(path: Path) -> int:
     return sum(1 for _ in path.rglob("*"))
 
 
+def _is_gitkeep(path: Path) -> bool:
+    return path.name == ".gitkeep"
+
+
 def _iter_export_download_entries(paths: StoragePaths) -> list[Path]:
     if not paths.exports_dir.is_dir():
         return []
 
     entries: list[Path] = []
     for child in sorted(paths.exports_dir.iterdir()):
+        if _is_gitkeep(child):
+            continue
         if child == paths.export_bundles_dir:
             if child.is_dir():
                 entries.extend(
@@ -141,6 +148,8 @@ def _iter_orphaned_output_entries(
     live_output_dirs = _live_output_directories(session)
     orphans: list[Path] = []
     for track_dir in sorted(paths.outputs_dir.iterdir()):
+        if _is_gitkeep(track_dir):
+            continue
         if not track_dir.is_dir():
             orphans.append(track_dir)
             continue
@@ -199,6 +208,8 @@ def cleanup_temp_storage(paths: StoragePaths, *, older_than: timedelta | None = 
         return TempCleanupResponse(deleted_entry_count=0, bytes_reclaimed=0)
 
     for child in list(paths.temp_dir.iterdir()):
+        if _is_gitkeep(child):
+            continue
         if cutoff is not None:
             try:
                 modified_at = datetime.utcfromtimestamp(child.stat().st_mtime)
@@ -338,6 +349,48 @@ def collect_storage_overview(
     ]
     total_bytes = sum(item.total_bytes for item in items)
     return StorageOverviewResponse(items=items, total_bytes=total_bytes)
+
+
+def _wipe_directory_contents(directory: Path) -> int:
+    if not directory.is_dir():
+        return 0
+    reclaimed = 0
+    for child in list(directory.iterdir()):
+        if _is_gitkeep(child):
+            continue
+        _, child_reclaimed = _delete_path(child)
+        reclaimed += child_reclaimed
+    return reclaimed
+
+
+def reset_library(
+    session: Session,
+    runtime_settings: RuntimeSettings,
+) -> LibraryResetResponse:
+    from backend.services.settings import get_or_create_settings
+
+    tracks = list_tracks(session)
+    settings = get_or_create_settings(session, runtime_settings)
+    paths = resolve_storage_paths(runtime_settings, settings)
+
+    deleted_track_count = len(tracks)
+    deleted_draft_count = session.query(ImportDraft).delete()
+    for track in tracks:
+        session.delete(track)
+    session.commit()
+
+    reclaimed = 0
+    reclaimed += _wipe_directory_contents(paths.uploads_dir)
+    reclaimed += _wipe_directory_contents(paths.outputs_dir)
+    reclaimed += _wipe_directory_contents(paths.exports_dir)
+    reclaimed += _wipe_directory_contents(paths.temp_dir)
+    paths.ensure_directories()
+
+    return LibraryResetResponse(
+        deleted_track_count=deleted_track_count,
+        deleted_draft_count=deleted_draft_count,
+        bytes_reclaimed=reclaimed,
+    )
 
 
 def cleanup_non_keeper_runs_library(

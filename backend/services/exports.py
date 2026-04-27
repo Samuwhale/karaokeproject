@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
+from backend.adapters.ffmpeg import FfmpegAdapter
 from backend.core.config import RuntimeSettings
 from backend.core.stems import (
     parse_export_stem_kind,
@@ -51,6 +52,16 @@ _STATIC_RUN_ARTIFACT_KIND = {
 
 _MIX_KINDS = frozenset({"mix-wav", "mix-mp3"})
 _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
+_TAGGABLE_AUDIO_SUFFIXES = frozenset({
+    ".flac",
+    ".m4a",
+    ".mp3",
+    ".mp4",
+    ".ogg",
+    ".opus",
+    ".wav",
+    ".webm",
+})
 
 
 def _mix_format(kind: str) -> str:
@@ -61,6 +72,7 @@ def _mix_format(kind: str) -> str:
 class _ResolvedFile:
     filename: str
     path: Path
+    metadata: dict[str, str | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -132,12 +144,18 @@ class _ResolvedArtifact:
     missing_reason: str | None
 
 
-def _track_export_label(track: Track) -> str:
+def _track_title(track: Track) -> str:
     title = track.title.strip() or Path(track.source_filename).stem.strip() or "Untitled Track"
-    artist = (track.artist or "").strip()
-    if artist:
-        return f"{artist} - {title}"
     return title
+
+
+def _track_artist(track: Track) -> str | None:
+    artist = (track.artist or "").strip()
+    return artist or None
+
+
+def _track_export_label(track: Track) -> str:
+    return _track_title(track)
 
 
 def _artifact_export_label(kind: str, *, stem_name: str | None = None) -> str:
@@ -150,6 +168,46 @@ def _artifact_export_label(kind: str, *, stem_name: str | None = None) -> str:
     if stem_name is not None:
         return stem_display_label(stem_name)
     return "Export"
+
+
+def _track_metadata_value(track: Track, key: str) -> str | None:
+    metadata = track.metadata_json or {}
+    value = metadata.get(key)
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _audio_export_metadata(
+    track: Track,
+    kind: str,
+    *,
+    stem_name: str | None = None,
+    output_label: str | None = None,
+) -> dict[str, str | None] | None:
+    if kind == "metadata":
+        return None
+
+    artist = _track_artist(track)
+    artifact_label = _artifact_export_label(kind, stem_name=stem_name)
+    title = _track_title(track)
+    if kind != "source":
+        title = f"{title} - {artifact_label}"
+
+    comments = [artifact_label]
+    if output_label and kind != "source":
+        comments.append(output_label)
+    source_url = _track_metadata_value(track, "source_url")
+    if source_url:
+        comments.append(source_url)
+
+    return {
+        "title": title,
+        "artist": artist,
+        "album_artist": artist,
+        "comment": " | ".join(comments),
+    }
 
 
 def _output_export_label(run: Run | None) -> str | None:
@@ -199,6 +257,7 @@ def _resolve_artifact(
             _ResolvedFile(
                 filename=filename,
                 path=source_path,
+                metadata=_audio_export_metadata(track, kind),
             ),
             filename,
             True,
@@ -251,6 +310,7 @@ def _resolve_artifact(
         _ResolvedFile(
             filename=filename,
             path=artifact_path,
+            metadata=_audio_export_metadata(track, kind, output_label=output_label),
         ),
         filename,
         True,
@@ -293,6 +353,12 @@ def _resolve_stem_artifact(
             _ResolvedFile(
                 filename=filename,
                 path=artifact_path,
+                metadata=_audio_export_metadata(
+                    track,
+                    kind,
+                    stem_name=stem_name,
+                    output_label=output_label,
+                ),
             ),
             filename,
             True,
@@ -328,6 +394,12 @@ def _resolve_stem_artifact(
             _ResolvedFile(
                 filename=filename,
                 path=mp3_path,
+                metadata=_audio_export_metadata(
+                    track,
+                    kind,
+                    stem_name=stem_name,
+                    output_label=output_label,
+                ),
             ),
             filename,
             True,
@@ -386,6 +458,7 @@ def _resolve_mix_artifact(
         _ResolvedFile(
             filename=filename,
             path=existing_path,
+            metadata=_audio_export_metadata(track, kind, output_label=output_label),
         ),
         filename,
         True,
@@ -564,30 +637,86 @@ def _ensure_unique_label(label: str, seen: set[str]) -> str:
         index += 1
 
 
-def _write_direct_file(output_path: Path, resolved: _ResolvedFile) -> None:
+def _should_write_audio_metadata(resolved: _ResolvedFile) -> bool:
+    if resolved.metadata is None:
+        return False
+    suffix = Path(resolved.filename).suffix.lower() or resolved.path.suffix.lower()
+    return suffix in _TAGGABLE_AUDIO_SUFFIXES
+
+
+def _write_export_file(output_path: Path, resolved: _ResolvedFile, ffmpeg: FfmpegAdapter) -> None:
+    if _should_write_audio_metadata(resolved):
+        ffmpeg.copy_with_metadata(resolved.path, output_path, resolved.metadata or {})
+        return
     shutil.copy2(resolved.path, output_path)
 
 
-def _write_flat_zip(output_path: Path, entries: list[_TrackExportEntry]) -> None:
-    with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        seen: set[str] = set()
-        for entry in entries:
-            for resolved in entry.files:
-                zf.write(resolved.path, arcname=_ensure_unique_filename(resolved.filename, seen))
+def _write_direct_file(output_path: Path, resolved: _ResolvedFile, ffmpeg: FfmpegAdapter) -> None:
+    _write_export_file(output_path, resolved, ffmpeg)
 
 
-def _write_folder_zip(output_path: Path, entries: list[_TrackExportEntry]) -> None:
+def _staged_export_path(staging_dir: Path, resolved: _ResolvedFile) -> Path:
+    suffix = Path(resolved.filename).suffix or resolved.path.suffix
+    return staging_dir / f"{uuid4().hex}{suffix}"
+
+
+def _zip_resolved_file(
+    zf: zipfile.ZipFile,
+    resolved: _ResolvedFile,
+    *,
+    arcname: str,
+    staging_dir: Path,
+    ffmpeg: FfmpegAdapter,
+) -> None:
+    if not _should_write_audio_metadata(resolved):
+        zf.write(resolved.path, arcname=arcname)
+        return
+
+    staged_path = _staged_export_path(staging_dir, resolved)
+    _write_export_file(staged_path, resolved, ffmpeg)
+    zf.write(staged_path, arcname=arcname)
+
+
+def _write_flat_zip(output_path: Path, entries: list[_TrackExportEntry], ffmpeg: FfmpegAdapter) -> None:
+    staging_dir = output_path.parent / "staging"
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        seen_folders: set[str] = set()
-        for entry in entries:
-            folder_name = _ensure_unique_label(
-                _clean_filename_component(entry.track_label, fallback="Track"),
-                seen_folders,
-            )
-            seen_files: set[str] = set()
-            for resolved in entry.files:
-                filename = _ensure_unique_filename(resolved.filename, seen_files)
-                zf.write(resolved.path, arcname=f"{folder_name}/{filename}")
+        try:
+            seen: set[str] = set()
+            for entry in entries:
+                for resolved in entry.files:
+                    _zip_resolved_file(
+                        zf,
+                        resolved,
+                        arcname=_ensure_unique_filename(resolved.filename, seen),
+                        staging_dir=staging_dir,
+                        ffmpeg=ffmpeg,
+                    )
+        finally:
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+
+def _write_folder_zip(output_path: Path, entries: list[_TrackExportEntry], ffmpeg: FfmpegAdapter) -> None:
+    staging_dir = output_path.parent / "staging"
+    with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        try:
+            seen_folders: set[str] = set()
+            for entry in entries:
+                folder_name = _ensure_unique_label(
+                    _clean_filename_component(entry.track_label, fallback="Track"),
+                    seen_folders,
+                )
+                seen_files: set[str] = set()
+                for resolved in entry.files:
+                    filename = _ensure_unique_filename(resolved.filename, seen_files)
+                    _zip_resolved_file(
+                        zf,
+                        resolved,
+                        arcname=f"{folder_name}/{filename}",
+                        staging_dir=staging_dir,
+                        ffmpeg=ffmpeg,
+                    )
+        finally:
+            shutil.rmtree(staging_dir, ignore_errors=True)
 
 
 def build_export_bundle(
@@ -660,13 +789,14 @@ def build_export_bundle(
 
     planned = _plan_delivery(entries, requested=payload.artifacts, packaging=payload.packaging)
     output_path = _prepare_job_output(bundle_root, job_id, planned.filename)
+    ffmpeg = FfmpegAdapter(runtime_settings)
     try:
         if planned.delivery == ExportDeliveryKind.direct_file:
-            _write_direct_file(output_path, entries[0].files[0])
+            _write_direct_file(output_path, entries[0].files[0], ffmpeg)
         elif planned.delivery == ExportDeliveryKind.flat_zip:
-            _write_flat_zip(output_path, entries)
+            _write_flat_zip(output_path, entries, ffmpeg)
         else:
-            _write_folder_zip(output_path, entries)
+            _write_folder_zip(output_path, entries, ffmpeg)
     except Exception:
         _discard_job_output(output_path)
         raise

@@ -1,15 +1,19 @@
 {
   "name": "stemstudio",
   "private": true,
+  "license": "AGPL-3.0-only",
   "workspaces": [
     "frontend"
   ],
   "scripts": {
-    "dev": "concurrently -n api,worker,frontend -c cyan,green,yellow \"./scripts/run-python.sh -m uvicorn backend.api.main:app --reload --host 127.0.0.1 --port 8000\" \"./scripts/run-python.sh -m backend.workers.runner\" \"npm run dev --workspace frontend -- --host 127.0.0.1 --port 5173\"",
+    "setup:python": "./scripts/setup-python.sh",
+    "setup:processing": ".venv/bin/python -m pip install -e '.[processing]'",
+    "dev": "concurrently -n api,worker,frontend -c cyan,green,yellow --restart-tries -1 --restart-after 2000 \"./scripts/run-python.sh -m uvicorn backend.api.main:app --reload --host 127.0.0.1 --port 8000\" \"./scripts/run-python.sh -m backend.workers.runner\" \"npm run dev --workspace frontend -- --host 127.0.0.1 --port 5173\"",
     "dev:api": "./scripts/run-python.sh -m uvicorn backend.api.main:app --reload --host 127.0.0.1 --port 8000",
     "dev:worker": "./scripts/run-python.sh -m backend.workers.runner",
     "dev:frontend": "npm run dev --workspace frontend -- --host 127.0.0.1 --port 5173",
     "build": "npm run build --workspace frontend",
+    "check": "npm run typecheck && npm run build",
     "lint": "npm run lint:frontend",
     "lint:frontend": "npm run lint --workspace frontend",
     "typecheck": "npm run typecheck:frontend",
