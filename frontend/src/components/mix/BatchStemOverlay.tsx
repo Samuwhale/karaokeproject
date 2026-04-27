@@ -70,7 +70,7 @@ function BatchStemOverlayContent({
   const eligibleIds = eligibleRows.map((row) => row.track.id)
 
   async function handleConfirm() {
-    if (!eligibleIds.length) return
+    if (!eligibleIds.length || selection.stems.length === 0) return
     await onConfirm(eligibleIds, selection)
   }
 
@@ -132,7 +132,7 @@ function BatchStemOverlayContent({
                 <button
                   type="button"
                   className="button-primary"
-                  disabled={busy || eligibleRows.length === 0}
+                  disabled={busy || eligibleRows.length === 0 || selection.stems.length === 0}
                   onClick={() => discardRejection(handleConfirm)}
                 >
                   {busy ? (

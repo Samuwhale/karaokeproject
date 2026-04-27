@@ -29,6 +29,8 @@ DEFAULT_MP3_BITRATE = "320k"
 class ProcessingStepConfig:
     key: str
     model_filename: str
+    output_stems: tuple[str, ...]
+    required_stems: tuple[str, ...]
     source_stem: str | None = None
 
 
@@ -49,6 +51,16 @@ class ProcessingConfig:
             "generated_stems": list(self.generated_stems),
             "quality": self.quality,
             "pipeline_key": self.pipeline_key,
+            "steps": [
+                {
+                    "key": step.key,
+                    "model_filename": step.model_filename,
+                    "output_stems": list(step.output_stems),
+                    "required_stems": list(step.required_stems),
+                    "source_stem": step.source_stem,
+                }
+                for step in self.steps
+            ],
         }
 
 
@@ -123,6 +135,8 @@ def build_processing_config(stems: tuple[str, ...], quality: str) -> ProcessingC
             ProcessingStepConfig(
                 key=step.key,
                 model_filename=step.model_filename,
+                output_stems=step.output_stems,
+                required_stems=step.required_stems,
                 source_stem=step.source_stem,
             )
             for step in pipeline.steps

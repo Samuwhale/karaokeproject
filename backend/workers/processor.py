@@ -36,6 +36,36 @@ class RunCancelled(Exception):
     """Raised internally when a running separation job is cancelled."""
 
 
+def _merge_step_stems(
+    *,
+    step_key: str,
+    allowed_stems: tuple[str, ...],
+    required_stems: tuple[str, ...],
+    separated_stems: dict[str, Path],
+    raw_stems: dict[str, Path],
+) -> None:
+    allowed = set(allowed_stems)
+    accepted = {
+        name: path
+        for name, path in separated_stems.items()
+        if name in allowed
+    }
+    missing = [stem for stem in required_stems if stem not in accepted]
+    if missing:
+        produced = ", ".join(sorted(separated_stems)) or "none"
+        expected = ", ".join(missing)
+        raise SeparationError(
+            f"Model step '{step_key}' did not produce required stem output: {expected}. "
+            f"Detected outputs: {produced}."
+        )
+
+    for name, path in accepted.items():
+        previous = raw_stems.get(name)
+        if previous is not None and previous != path:
+            previous.unlink(missing_ok=True)
+        raw_stems[name] = path
+
+
 def _stage_progress_updater(
     session: Session,
     run: Run,
@@ -196,11 +226,13 @@ def process_run(session: Session, runtime_settings: RuntimeSettings, run: Run) -
             if not separation.stems:
                 raise SeparationError("Separation produced no stems.")
 
-            for name, path in separation.stems.items():
-                previous = raw_stems.get(name)
-                if previous is not None and previous != path:
-                    previous.unlink(missing_ok=True)
-                raw_stems[name] = path
+            _merge_step_stems(
+                step_key=step.key,
+                allowed_stems=step.output_stems,
+                required_stems=step.required_stems,
+                separated_stems=separation.stems,
+                raw_stems=raw_stems,
+            )
 
         if not raw_stems:
             raise SeparationError("Separation finished without any usable stems.")

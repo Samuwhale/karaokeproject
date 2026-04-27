@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 
 STEM_KIND_PREFIX = "stem:"
@@ -32,8 +33,8 @@ CANONICAL_STEMS: tuple[StemRole, ...] = (
     # audio-separator's UVR-BVE model emits filenames containing "(Lead Vocals)"
     # and "(Backing Vocals)" — spaces are preserved, not underscored — so the
     # space-forms below are load-bearing for the vocal-detail route. The
-    # longer aliases (with spaces) must beat plain "vocals" during the
-    # longest-match sort in _ALIAS_LOOKUP.
+    # longer aliases (with spaces) must beat plain "vocals" during filename
+    # token matching.
     StemRole("lead_vocals", "Lead vocals", ("lead vocals", "lead_vocals", "lead-vocals", "main vocals", "main_vocals", "leadvocals"), 2),
     StemRole("backing_vocals", "Backing vocals", ("backing vocals", "backing_vocals", "backing-vocals", "backup vocals", "backup_vocals", "backingvocals"), 3),
     StemRole("drums", "Drums", ("drums", "drum"), 4),
@@ -45,28 +46,45 @@ CANONICAL_STEMS: tuple[StemRole, ...] = (
 
 
 _ROLE_BY_NAME: dict[str, StemRole] = {role.name: role for role in CANONICAL_STEMS}
+_PARENTHETICAL_RE = re.compile(r"[\[(]([^\])]+)[\])]")
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
 
-# Alias lookup: longest alias first so "instrumental" beats "other" when both
-# substrings appear, and "no_vocals" beats "vocals" inside a single token.
-_ALIAS_LOOKUP: tuple[tuple[str, StemRole], ...] = tuple(
-    sorted(
-        ((alias, role) for role in CANONICAL_STEMS for alias in role.aliases),
-        key=lambda pair: len(pair[0]),
-        reverse=True,
-    )
-)
 
+def _normalize_alias(value: str) -> str:
+    return " ".join(_TOKEN_RE.findall(value.lower()))
+
+
+_ROLE_BY_ALIAS: dict[str, StemRole] = {
+    _normalize_alias(alias): role
+    for role in CANONICAL_STEMS
+    for alias in role.aliases
+}
+
+_MAX_ALIAS_WORDS = max(len(alias.split()) for alias in _ROLE_BY_ALIAS)
 
 def detect_stem_name(filename: str, *, fallback_index: int) -> str:
     """Pick a canonical stem name for a separator output file.
 
-    Matches aliases against the filename stem (longest alias wins). Unknown
-    stems fall back to a stable `stem-NN` slug so they still flow through.
+    Separator output names include the source title, the stem role, and often
+    the model name. Match explicit role markers first, then scan filename
+    tokens from right to left so source titles like "Instrumental Version" do
+    not override a later "(Vocals)" output marker. Unknown stems fall back to a
+    stable `stem-NN` slug so they still flow through.
     """
-    lower = filename.lower()
-    for alias, role in _ALIAS_LOOKUP:
-        if alias in lower:
+    stem = Path(filename).stem
+    for marker in reversed(_PARENTHETICAL_RE.findall(stem)):
+        role = _ROLE_BY_ALIAS.get(_normalize_alias(marker))
+        if role is not None:
             return role.name
+
+    tokens = _TOKEN_RE.findall(stem.lower())
+    for end in range(len(tokens), 0, -1):
+        min_start = max(0, end - _MAX_ALIAS_WORDS)
+        for start in range(min_start, end):
+            role = _ROLE_BY_ALIAS.get(" ".join(tokens[start:end]))
+            if role is not None:
+                return role.name
+
     return f"stem-{fallback_index:02d}"
 
 

@@ -51,15 +51,11 @@ class QualityOptionDefinition:
 
 
 @dataclass(frozen=True)
-class FollowupDefinition:
-    input_stem: str
-    model_filename: str
-
-
-@dataclass(frozen=True)
 class PipelineStepDefinition:
     key: str
     model_filename: str
+    output_stems: tuple[str, ...]
+    required_stems: tuple[str, ...]
     source_stem: str | None = None
 
 
@@ -103,11 +99,18 @@ def _vocal_model_for_quality(quality: str) -> str:
     return _VOCAL_BALANCED_MODEL
 
 
+def _ordered_requested_stems(requested: set[str], candidates: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(stem for stem in candidates if stem in requested)
+
+
 def build_pipeline_definition(
     *,
     requested_stems: tuple[str, ...],
     quality: str,
 ) -> PipelineDefinition:
+    if quality not in STEM_QUALITY_KEYS:
+        raise ValueError(f"Unknown quality '{quality}'.")
+
     requested = set(requested_stems)
     selected_band_stems = requested & _BAND_STEMS
     if "instrumental" in requested and selected_band_stems:
@@ -128,15 +131,22 @@ def build_pipeline_definition(
             PipelineStepDefinition(
                 key="band-stems",
                 model_filename=_FULL_STEMS_MODEL,
+                output_stems=_FULL_STEMS,
+                required_stems=_ordered_requested_stems(requested, _FULL_STEMS),
             )
         )
         generated.update(_FULL_STEMS)
 
     if wants_vocal_route:
+        required_vocal_stems = set(_ordered_requested_stems(requested, _VOCAL_STEMS))
+        if wants_vocal_detail:
+            required_vocal_stems.add("vocals")
         steps.append(
             PipelineStepDefinition(
                 key="vocal-instrumental",
                 model_filename=_vocal_model_for_quality(quality),
+                output_stems=_VOCAL_STEMS,
+                required_stems=_ordered_requested_stems(required_vocal_stems, _VOCAL_STEMS),
             )
         )
         generated.update(_VOCAL_STEMS)
@@ -146,6 +156,8 @@ def build_pipeline_definition(
             PipelineStepDefinition(
                 key="vocal-detail",
                 model_filename=_VOCAL_DETAIL_MODEL,
+                output_stems=_VOCAL_DETAIL_STEMS,
+                required_stems=_ordered_requested_stems(requested, _VOCAL_DETAIL_STEMS),
                 source_stem="vocals",
             )
         )

@@ -127,6 +127,7 @@ export function SettingsPanel({
   const draft = draftState.sourceKey === settingsKey ? draftState.values : createDraft(settings)
   const currentSettings = settings
   const bitrateValid = isMp3Bitrate(draft.export_mp3_bitrate)
+  const defaultStemSelectionValid = draft.default_stem_selection.stems.length > 0
   const storagePathsValid =
     hasText(draft.storage.uploads_directory) &&
     hasText(draft.storage.outputs_directory) &&
@@ -147,6 +148,7 @@ export function SettingsPanel({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!bitrateValid) return
+    if (!defaultStemSelectionValid) return
     if (view === 'storage' && !storagePathsValid) return
     try {
       await onSave({
@@ -205,7 +207,7 @@ export function SettingsPanel({
 
           <div className="import-footer">
             <span>{savedAt ? <span className="field-saved">Saved.</span> : null}</span>
-            <button type="submit" className="button-primary" disabled={saving || !bitrateValid}>
+            <button type="submit" className="button-primary" disabled={saving || !bitrateValid || !defaultStemSelectionValid}>
               {saving ? <><Spinner /> Saving…</> : 'Save Preferences'}
             </button>
           </div>

@@ -25,6 +25,7 @@ export function StemSelectionPicker({
   function toggleStem(name: string) {
     const next = new Set(selected)
     if (next.has(name)) {
+      if (next.size === 1) return
       next.delete(name)
     } else {
       next.add(name)
